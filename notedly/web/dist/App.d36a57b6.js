@@ -31730,7 +31730,14768 @@ if ("development" === 'production') {
 } else {
   module.exports = require('./cjs/react-dom.development.js');
 }
-},{"./cjs/react-dom.development.js":"../node_modules/react-dom/cjs/react-dom.development.js"}],"../node_modules/stylis/stylis.min.js":[function(require,module,exports) {
+},{"./cjs/react-dom.development.js":"../node_modules/react-dom/cjs/react-dom.development.js"}],"../node_modules/zen-observable/lib/Observable.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.Observable = void 0;
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } }
+
+function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); return Constructor; }
+
+// === Symbol Support ===
+var hasSymbols = function () {
+  return typeof Symbol === 'function';
+};
+
+var hasSymbol = function (name) {
+  return hasSymbols() && Boolean(Symbol[name]);
+};
+
+var getSymbol = function (name) {
+  return hasSymbol(name) ? Symbol[name] : '@@' + name;
+};
+
+if (hasSymbols() && !hasSymbol('observable')) {
+  Symbol.observable = Symbol('observable');
+}
+
+var SymbolIterator = getSymbol('iterator');
+var SymbolObservable = getSymbol('observable');
+var SymbolSpecies = getSymbol('species'); // === Abstract Operations ===
+
+function getMethod(obj, key) {
+  var value = obj[key];
+  if (value == null) return undefined;
+  if (typeof value !== 'function') throw new TypeError(value + ' is not a function');
+  return value;
+}
+
+function getSpecies(obj) {
+  var ctor = obj.constructor;
+
+  if (ctor !== undefined) {
+    ctor = ctor[SymbolSpecies];
+
+    if (ctor === null) {
+      ctor = undefined;
+    }
+  }
+
+  return ctor !== undefined ? ctor : Observable;
+}
+
+function isObservable(x) {
+  return x instanceof Observable; // SPEC: Brand check
+}
+
+function hostReportError(e) {
+  if (hostReportError.log) {
+    hostReportError.log(e);
+  } else {
+    setTimeout(function () {
+      throw e;
+    });
+  }
+}
+
+function enqueue(fn) {
+  Promise.resolve().then(function () {
+    try {
+      fn();
+    } catch (e) {
+      hostReportError(e);
+    }
+  });
+}
+
+function cleanupSubscription(subscription) {
+  var cleanup = subscription._cleanup;
+  if (cleanup === undefined) return;
+  subscription._cleanup = undefined;
+
+  if (!cleanup) {
+    return;
+  }
+
+  try {
+    if (typeof cleanup === 'function') {
+      cleanup();
+    } else {
+      var unsubscribe = getMethod(cleanup, 'unsubscribe');
+
+      if (unsubscribe) {
+        unsubscribe.call(cleanup);
+      }
+    }
+  } catch (e) {
+    hostReportError(e);
+  }
+}
+
+function closeSubscription(subscription) {
+  subscription._observer = undefined;
+  subscription._queue = undefined;
+  subscription._state = 'closed';
+}
+
+function flushSubscription(subscription) {
+  var queue = subscription._queue;
+
+  if (!queue) {
+    return;
+  }
+
+  subscription._queue = undefined;
+  subscription._state = 'ready';
+
+  for (var i = 0; i < queue.length; ++i) {
+    notifySubscription(subscription, queue[i].type, queue[i].value);
+    if (subscription._state === 'closed') break;
+  }
+}
+
+function notifySubscription(subscription, type, value) {
+  subscription._state = 'running';
+  var observer = subscription._observer;
+
+  try {
+    var m = getMethod(observer, type);
+
+    switch (type) {
+      case 'next':
+        if (m) m.call(observer, value);
+        break;
+
+      case 'error':
+        closeSubscription(subscription);
+        if (m) m.call(observer, value);else throw value;
+        break;
+
+      case 'complete':
+        closeSubscription(subscription);
+        if (m) m.call(observer);
+        break;
+    }
+  } catch (e) {
+    hostReportError(e);
+  }
+
+  if (subscription._state === 'closed') cleanupSubscription(subscription);else if (subscription._state === 'running') subscription._state = 'ready';
+}
+
+function onNotify(subscription, type, value) {
+  if (subscription._state === 'closed') return;
+
+  if (subscription._state === 'buffering') {
+    subscription._queue.push({
+      type: type,
+      value: value
+    });
+
+    return;
+  }
+
+  if (subscription._state !== 'ready') {
+    subscription._state = 'buffering';
+    subscription._queue = [{
+      type: type,
+      value: value
+    }];
+    enqueue(function () {
+      return flushSubscription(subscription);
+    });
+    return;
+  }
+
+  notifySubscription(subscription, type, value);
+}
+
+var Subscription =
+/*#__PURE__*/
+function () {
+  function Subscription(observer, subscriber) {
+    _classCallCheck(this, Subscription);
+
+    // ASSERT: observer is an object
+    // ASSERT: subscriber is callable
+    this._cleanup = undefined;
+    this._observer = observer;
+    this._queue = undefined;
+    this._state = 'initializing';
+    var subscriptionObserver = new SubscriptionObserver(this);
+
+    try {
+      this._cleanup = subscriber.call(undefined, subscriptionObserver);
+    } catch (e) {
+      subscriptionObserver.error(e);
+    }
+
+    if (this._state === 'initializing') this._state = 'ready';
+  }
+
+  _createClass(Subscription, [{
+    key: "unsubscribe",
+    value: function unsubscribe() {
+      if (this._state !== 'closed') {
+        closeSubscription(this);
+        cleanupSubscription(this);
+      }
+    }
+  }, {
+    key: "closed",
+    get: function () {
+      return this._state === 'closed';
+    }
+  }]);
+
+  return Subscription;
+}();
+
+var SubscriptionObserver =
+/*#__PURE__*/
+function () {
+  function SubscriptionObserver(subscription) {
+    _classCallCheck(this, SubscriptionObserver);
+
+    this._subscription = subscription;
+  }
+
+  _createClass(SubscriptionObserver, [{
+    key: "next",
+    value: function next(value) {
+      onNotify(this._subscription, 'next', value);
+    }
+  }, {
+    key: "error",
+    value: function error(value) {
+      onNotify(this._subscription, 'error', value);
+    }
+  }, {
+    key: "complete",
+    value: function complete() {
+      onNotify(this._subscription, 'complete');
+    }
+  }, {
+    key: "closed",
+    get: function () {
+      return this._subscription._state === 'closed';
+    }
+  }]);
+
+  return SubscriptionObserver;
+}();
+
+var Observable =
+/*#__PURE__*/
+function () {
+  function Observable(subscriber) {
+    _classCallCheck(this, Observable);
+
+    if (!(this instanceof Observable)) throw new TypeError('Observable cannot be called as a function');
+    if (typeof subscriber !== 'function') throw new TypeError('Observable initializer must be a function');
+    this._subscriber = subscriber;
+  }
+
+  _createClass(Observable, [{
+    key: "subscribe",
+    value: function subscribe(observer) {
+      if (typeof observer !== 'object' || observer === null) {
+        observer = {
+          next: observer,
+          error: arguments[1],
+          complete: arguments[2]
+        };
+      }
+
+      return new Subscription(observer, this._subscriber);
+    }
+  }, {
+    key: "forEach",
+    value: function forEach(fn) {
+      var _this = this;
+
+      return new Promise(function (resolve, reject) {
+        if (typeof fn !== 'function') {
+          reject(new TypeError(fn + ' is not a function'));
+          return;
+        }
+
+        function done() {
+          subscription.unsubscribe();
+          resolve();
+        }
+
+        var subscription = _this.subscribe({
+          next: function (value) {
+            try {
+              fn(value, done);
+            } catch (e) {
+              reject(e);
+              subscription.unsubscribe();
+            }
+          },
+          error: reject,
+          complete: resolve
+        });
+      });
+    }
+  }, {
+    key: "map",
+    value: function map(fn) {
+      var _this2 = this;
+
+      if (typeof fn !== 'function') throw new TypeError(fn + ' is not a function');
+      var C = getSpecies(this);
+      return new C(function (observer) {
+        return _this2.subscribe({
+          next: function (value) {
+            try {
+              value = fn(value);
+            } catch (e) {
+              return observer.error(e);
+            }
+
+            observer.next(value);
+          },
+          error: function (e) {
+            observer.error(e);
+          },
+          complete: function () {
+            observer.complete();
+          }
+        });
+      });
+    }
+  }, {
+    key: "filter",
+    value: function filter(fn) {
+      var _this3 = this;
+
+      if (typeof fn !== 'function') throw new TypeError(fn + ' is not a function');
+      var C = getSpecies(this);
+      return new C(function (observer) {
+        return _this3.subscribe({
+          next: function (value) {
+            try {
+              if (!fn(value)) return;
+            } catch (e) {
+              return observer.error(e);
+            }
+
+            observer.next(value);
+          },
+          error: function (e) {
+            observer.error(e);
+          },
+          complete: function () {
+            observer.complete();
+          }
+        });
+      });
+    }
+  }, {
+    key: "reduce",
+    value: function reduce(fn) {
+      var _this4 = this;
+
+      if (typeof fn !== 'function') throw new TypeError(fn + ' is not a function');
+      var C = getSpecies(this);
+      var hasSeed = arguments.length > 1;
+      var hasValue = false;
+      var seed = arguments[1];
+      var acc = seed;
+      return new C(function (observer) {
+        return _this4.subscribe({
+          next: function (value) {
+            var first = !hasValue;
+            hasValue = true;
+
+            if (!first || hasSeed) {
+              try {
+                acc = fn(acc, value);
+              } catch (e) {
+                return observer.error(e);
+              }
+            } else {
+              acc = value;
+            }
+          },
+          error: function (e) {
+            observer.error(e);
+          },
+          complete: function () {
+            if (!hasValue && !hasSeed) return observer.error(new TypeError('Cannot reduce an empty sequence'));
+            observer.next(acc);
+            observer.complete();
+          }
+        });
+      });
+    }
+  }, {
+    key: "concat",
+    value: function concat() {
+      var _this5 = this;
+
+      for (var _len = arguments.length, sources = new Array(_len), _key = 0; _key < _len; _key++) {
+        sources[_key] = arguments[_key];
+      }
+
+      var C = getSpecies(this);
+      return new C(function (observer) {
+        var subscription;
+        var index = 0;
+
+        function startNext(next) {
+          subscription = next.subscribe({
+            next: function (v) {
+              observer.next(v);
+            },
+            error: function (e) {
+              observer.error(e);
+            },
+            complete: function () {
+              if (index === sources.length) {
+                subscription = undefined;
+                observer.complete();
+              } else {
+                startNext(C.from(sources[index++]));
+              }
+            }
+          });
+        }
+
+        startNext(_this5);
+        return function () {
+          if (subscription) {
+            subscription.unsubscribe();
+            subscription = undefined;
+          }
+        };
+      });
+    }
+  }, {
+    key: "flatMap",
+    value: function flatMap(fn) {
+      var _this6 = this;
+
+      if (typeof fn !== 'function') throw new TypeError(fn + ' is not a function');
+      var C = getSpecies(this);
+      return new C(function (observer) {
+        var subscriptions = [];
+
+        var outer = _this6.subscribe({
+          next: function (value) {
+            if (fn) {
+              try {
+                value = fn(value);
+              } catch (e) {
+                return observer.error(e);
+              }
+            }
+
+            var inner = C.from(value).subscribe({
+              next: function (value) {
+                observer.next(value);
+              },
+              error: function (e) {
+                observer.error(e);
+              },
+              complete: function () {
+                var i = subscriptions.indexOf(inner);
+                if (i >= 0) subscriptions.splice(i, 1);
+                completeIfDone();
+              }
+            });
+            subscriptions.push(inner);
+          },
+          error: function (e) {
+            observer.error(e);
+          },
+          complete: function () {
+            completeIfDone();
+          }
+        });
+
+        function completeIfDone() {
+          if (outer.closed && subscriptions.length === 0) observer.complete();
+        }
+
+        return function () {
+          subscriptions.forEach(function (s) {
+            return s.unsubscribe();
+          });
+          outer.unsubscribe();
+        };
+      });
+    }
+  }, {
+    key: SymbolObservable,
+    value: function () {
+      return this;
+    }
+  }], [{
+    key: "from",
+    value: function from(x) {
+      var C = typeof this === 'function' ? this : Observable;
+      if (x == null) throw new TypeError(x + ' is not an object');
+      var method = getMethod(x, SymbolObservable);
+
+      if (method) {
+        var observable = method.call(x);
+        if (Object(observable) !== observable) throw new TypeError(observable + ' is not an object');
+        if (isObservable(observable) && observable.constructor === C) return observable;
+        return new C(function (observer) {
+          return observable.subscribe(observer);
+        });
+      }
+
+      if (hasSymbol('iterator')) {
+        method = getMethod(x, SymbolIterator);
+
+        if (method) {
+          return new C(function (observer) {
+            enqueue(function () {
+              if (observer.closed) return;
+              var _iteratorNormalCompletion = true;
+              var _didIteratorError = false;
+              var _iteratorError = undefined;
+
+              try {
+                for (var _iterator = method.call(x)[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+                  var _item = _step.value;
+                  observer.next(_item);
+                  if (observer.closed) return;
+                }
+              } catch (err) {
+                _didIteratorError = true;
+                _iteratorError = err;
+              } finally {
+                try {
+                  if (!_iteratorNormalCompletion && _iterator.return != null) {
+                    _iterator.return();
+                  }
+                } finally {
+                  if (_didIteratorError) {
+                    throw _iteratorError;
+                  }
+                }
+              }
+
+              observer.complete();
+            });
+          });
+        }
+      }
+
+      if (Array.isArray(x)) {
+        return new C(function (observer) {
+          enqueue(function () {
+            if (observer.closed) return;
+
+            for (var i = 0; i < x.length; ++i) {
+              observer.next(x[i]);
+              if (observer.closed) return;
+            }
+
+            observer.complete();
+          });
+        });
+      }
+
+      throw new TypeError(x + ' is not observable');
+    }
+  }, {
+    key: "of",
+    value: function of() {
+      for (var _len2 = arguments.length, items = new Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+        items[_key2] = arguments[_key2];
+      }
+
+      var C = typeof this === 'function' ? this : Observable;
+      return new C(function (observer) {
+        enqueue(function () {
+          if (observer.closed) return;
+
+          for (var i = 0; i < items.length; ++i) {
+            observer.next(items[i]);
+            if (observer.closed) return;
+          }
+
+          observer.complete();
+        });
+      });
+    }
+  }, {
+    key: SymbolSpecies,
+    get: function () {
+      return this;
+    }
+  }]);
+
+  return Observable;
+}();
+
+exports.Observable = Observable;
+
+if (hasSymbols()) {
+  Object.defineProperty(Observable, Symbol('extensions'), {
+    value: {
+      symbol: SymbolObservable,
+      hostReportError: hostReportError
+    },
+    configurable: true
+  });
+}
+},{}],"../node_modules/zen-observable/index.js":[function(require,module,exports) {
+module.exports = require('./lib/Observable.js').Observable;
+
+},{"./lib/Observable.js":"../node_modules/zen-observable/lib/Observable.js"}],"../node_modules/tslib/tslib.es6.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.__extends = __extends;
+exports.__rest = __rest;
+exports.__decorate = __decorate;
+exports.__param = __param;
+exports.__metadata = __metadata;
+exports.__awaiter = __awaiter;
+exports.__generator = __generator;
+exports.__exportStar = __exportStar;
+exports.__values = __values;
+exports.__read = __read;
+exports.__spread = __spread;
+exports.__spreadArrays = __spreadArrays;
+exports.__await = __await;
+exports.__asyncGenerator = __asyncGenerator;
+exports.__asyncDelegator = __asyncDelegator;
+exports.__asyncValues = __asyncValues;
+exports.__makeTemplateObject = __makeTemplateObject;
+exports.__importStar = __importStar;
+exports.__importDefault = __importDefault;
+exports.__assign = void 0;
+
+/*! *****************************************************************************
+Copyright (c) Microsoft Corporation. All rights reserved.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at http://www.apache.org/licenses/LICENSE-2.0
+
+THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
+See the Apache Version 2.0 License for specific language governing permissions
+and limitations under the License.
+***************************************************************************** */
+
+/* global Reflect, Promise */
+var extendStatics = function (d, b) {
+  extendStatics = Object.setPrototypeOf || {
+    __proto__: []
+  } instanceof Array && function (d, b) {
+    d.__proto__ = b;
+  } || function (d, b) {
+    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+  };
+
+  return extendStatics(d, b);
+};
+
+function __extends(d, b) {
+  extendStatics(d, b);
+
+  function __() {
+    this.constructor = d;
+  }
+
+  d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+}
+
+var __assign = function () {
+  exports.__assign = __assign = Object.assign || function __assign(t) {
+    for (var s, i = 1, n = arguments.length; i < n; i++) {
+      s = arguments[i];
+
+      for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
+    }
+
+    return t;
+  };
+
+  return __assign.apply(this, arguments);
+};
+
+exports.__assign = __assign;
+
+function __rest(s, e) {
+  var t = {};
+
+  for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0) t[p] = s[p];
+
+  if (s != null && typeof Object.getOwnPropertySymbols === "function") for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+    if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i])) t[p[i]] = s[p[i]];
+  }
+  return t;
+}
+
+function __decorate(decorators, target, key, desc) {
+  var c = arguments.length,
+      r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc,
+      d;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+  return c > 3 && r && Object.defineProperty(target, key, r), r;
+}
+
+function __param(paramIndex, decorator) {
+  return function (target, key) {
+    decorator(target, key, paramIndex);
+  };
+}
+
+function __metadata(metadataKey, metadataValue) {
+  if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(metadataKey, metadataValue);
+}
+
+function __awaiter(thisArg, _arguments, P, generator) {
+  return new (P || (P = Promise))(function (resolve, reject) {
+    function fulfilled(value) {
+      try {
+        step(generator.next(value));
+      } catch (e) {
+        reject(e);
+      }
+    }
+
+    function rejected(value) {
+      try {
+        step(generator["throw"](value));
+      } catch (e) {
+        reject(e);
+      }
+    }
+
+    function step(result) {
+      result.done ? resolve(result.value) : new P(function (resolve) {
+        resolve(result.value);
+      }).then(fulfilled, rejected);
+    }
+
+    step((generator = generator.apply(thisArg, _arguments || [])).next());
+  });
+}
+
+function __generator(thisArg, body) {
+  var _ = {
+    label: 0,
+    sent: function () {
+      if (t[0] & 1) throw t[1];
+      return t[1];
+    },
+    trys: [],
+    ops: []
+  },
+      f,
+      y,
+      t,
+      g;
+  return g = {
+    next: verb(0),
+    "throw": verb(1),
+    "return": verb(2)
+  }, typeof Symbol === "function" && (g[Symbol.iterator] = function () {
+    return this;
+  }), g;
+
+  function verb(n) {
+    return function (v) {
+      return step([n, v]);
+    };
+  }
+
+  function step(op) {
+    if (f) throw new TypeError("Generator is already executing.");
+
+    while (_) try {
+      if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+      if (y = 0, t) op = [op[0] & 2, t.value];
+
+      switch (op[0]) {
+        case 0:
+        case 1:
+          t = op;
+          break;
+
+        case 4:
+          _.label++;
+          return {
+            value: op[1],
+            done: false
+          };
+
+        case 5:
+          _.label++;
+          y = op[1];
+          op = [0];
+          continue;
+
+        case 7:
+          op = _.ops.pop();
+
+          _.trys.pop();
+
+          continue;
+
+        default:
+          if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) {
+            _ = 0;
+            continue;
+          }
+
+          if (op[0] === 3 && (!t || op[1] > t[0] && op[1] < t[3])) {
+            _.label = op[1];
+            break;
+          }
+
+          if (op[0] === 6 && _.label < t[1]) {
+            _.label = t[1];
+            t = op;
+            break;
+          }
+
+          if (t && _.label < t[2]) {
+            _.label = t[2];
+
+            _.ops.push(op);
+
+            break;
+          }
+
+          if (t[2]) _.ops.pop();
+
+          _.trys.pop();
+
+          continue;
+      }
+
+      op = body.call(thisArg, _);
+    } catch (e) {
+      op = [6, e];
+      y = 0;
+    } finally {
+      f = t = 0;
+    }
+
+    if (op[0] & 5) throw op[1];
+    return {
+      value: op[0] ? op[1] : void 0,
+      done: true
+    };
+  }
+}
+
+function __exportStar(m, exports) {
+  for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
+}
+
+function __values(o) {
+  var m = typeof Symbol === "function" && o[Symbol.iterator],
+      i = 0;
+  if (m) return m.call(o);
+  return {
+    next: function () {
+      if (o && i >= o.length) o = void 0;
+      return {
+        value: o && o[i++],
+        done: !o
+      };
+    }
+  };
+}
+
+function __read(o, n) {
+  var m = typeof Symbol === "function" && o[Symbol.iterator];
+  if (!m) return o;
+  var i = m.call(o),
+      r,
+      ar = [],
+      e;
+
+  try {
+    while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+  } catch (error) {
+    e = {
+      error: error
+    };
+  } finally {
+    try {
+      if (r && !r.done && (m = i["return"])) m.call(i);
+    } finally {
+      if (e) throw e.error;
+    }
+  }
+
+  return ar;
+}
+
+function __spread() {
+  for (var ar = [], i = 0; i < arguments.length; i++) ar = ar.concat(__read(arguments[i]));
+
+  return ar;
+}
+
+function __spreadArrays() {
+  for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+
+  for (var r = Array(s), k = 0, i = 0; i < il; i++) for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++) r[k] = a[j];
+
+  return r;
+}
+
+;
+
+function __await(v) {
+  return this instanceof __await ? (this.v = v, this) : new __await(v);
+}
+
+function __asyncGenerator(thisArg, _arguments, generator) {
+  if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+  var g = generator.apply(thisArg, _arguments || []),
+      i,
+      q = [];
+  return i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () {
+    return this;
+  }, i;
+
+  function verb(n) {
+    if (g[n]) i[n] = function (v) {
+      return new Promise(function (a, b) {
+        q.push([n, v, a, b]) > 1 || resume(n, v);
+      });
+    };
+  }
+
+  function resume(n, v) {
+    try {
+      step(g[n](v));
+    } catch (e) {
+      settle(q[0][3], e);
+    }
+  }
+
+  function step(r) {
+    r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r);
+  }
+
+  function fulfill(value) {
+    resume("next", value);
+  }
+
+  function reject(value) {
+    resume("throw", value);
+  }
+
+  function settle(f, v) {
+    if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]);
+  }
+}
+
+function __asyncDelegator(o) {
+  var i, p;
+  return i = {}, verb("next"), verb("throw", function (e) {
+    throw e;
+  }), verb("return"), i[Symbol.iterator] = function () {
+    return this;
+  }, i;
+
+  function verb(n, f) {
+    i[n] = o[n] ? function (v) {
+      return (p = !p) ? {
+        value: __await(o[n](v)),
+        done: n === "return"
+      } : f ? f(v) : v;
+    } : f;
+  }
+}
+
+function __asyncValues(o) {
+  if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+  var m = o[Symbol.asyncIterator],
+      i;
+  return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () {
+    return this;
+  }, i);
+
+  function verb(n) {
+    i[n] = o[n] && function (v) {
+      return new Promise(function (resolve, reject) {
+        v = o[n](v), settle(resolve, reject, v.done, v.value);
+      });
+    };
+  }
+
+  function settle(resolve, reject, d, v) {
+    Promise.resolve(v).then(function (v) {
+      resolve({
+        value: v,
+        done: d
+      });
+    }, reject);
+  }
+}
+
+function __makeTemplateObject(cooked, raw) {
+  if (Object.defineProperty) {
+    Object.defineProperty(cooked, "raw", {
+      value: raw
+    });
+  } else {
+    cooked.raw = raw;
+  }
+
+  return cooked;
+}
+
+;
+
+function __importStar(mod) {
+  if (mod && mod.__esModule) return mod;
+  var result = {};
+  if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+  result.default = mod;
+  return result;
+}
+
+function __importDefault(mod) {
+  return mod && mod.__esModule ? mod : {
+    default: mod
+  };
+}
+},{}],"../node_modules/process/browser.js":[function(require,module,exports) {
+
+// shim for using process in browser
+var process = module.exports = {}; // cached from whatever global is present so that test runners that stub it
+// don't break things.  But we need to wrap it in a try catch in case it is
+// wrapped in strict mode code which doesn't define any globals.  It's inside a
+// function because try/catches deoptimize in certain engines.
+
+var cachedSetTimeout;
+var cachedClearTimeout;
+
+function defaultSetTimout() {
+  throw new Error('setTimeout has not been defined');
+}
+
+function defaultClearTimeout() {
+  throw new Error('clearTimeout has not been defined');
+}
+
+(function () {
+  try {
+    if (typeof setTimeout === 'function') {
+      cachedSetTimeout = setTimeout;
+    } else {
+      cachedSetTimeout = defaultSetTimout;
+    }
+  } catch (e) {
+    cachedSetTimeout = defaultSetTimout;
+  }
+
+  try {
+    if (typeof clearTimeout === 'function') {
+      cachedClearTimeout = clearTimeout;
+    } else {
+      cachedClearTimeout = defaultClearTimeout;
+    }
+  } catch (e) {
+    cachedClearTimeout = defaultClearTimeout;
+  }
+})();
+
+function runTimeout(fun) {
+  if (cachedSetTimeout === setTimeout) {
+    //normal enviroments in sane situations
+    return setTimeout(fun, 0);
+  } // if setTimeout wasn't available but was latter defined
+
+
+  if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
+    cachedSetTimeout = setTimeout;
+    return setTimeout(fun, 0);
+  }
+
+  try {
+    // when when somebody has screwed with setTimeout but no I.E. maddness
+    return cachedSetTimeout(fun, 0);
+  } catch (e) {
+    try {
+      // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
+      return cachedSetTimeout.call(null, fun, 0);
+    } catch (e) {
+      // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
+      return cachedSetTimeout.call(this, fun, 0);
+    }
+  }
+}
+
+function runClearTimeout(marker) {
+  if (cachedClearTimeout === clearTimeout) {
+    //normal enviroments in sane situations
+    return clearTimeout(marker);
+  } // if clearTimeout wasn't available but was latter defined
+
+
+  if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
+    cachedClearTimeout = clearTimeout;
+    return clearTimeout(marker);
+  }
+
+  try {
+    // when when somebody has screwed with setTimeout but no I.E. maddness
+    return cachedClearTimeout(marker);
+  } catch (e) {
+    try {
+      // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
+      return cachedClearTimeout.call(null, marker);
+    } catch (e) {
+      // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
+      // Some versions of I.E. have different rules for clearTimeout vs setTimeout
+      return cachedClearTimeout.call(this, marker);
+    }
+  }
+}
+
+var queue = [];
+var draining = false;
+var currentQueue;
+var queueIndex = -1;
+
+function cleanUpNextTick() {
+  if (!draining || !currentQueue) {
+    return;
+  }
+
+  draining = false;
+
+  if (currentQueue.length) {
+    queue = currentQueue.concat(queue);
+  } else {
+    queueIndex = -1;
+  }
+
+  if (queue.length) {
+    drainQueue();
+  }
+}
+
+function drainQueue() {
+  if (draining) {
+    return;
+  }
+
+  var timeout = runTimeout(cleanUpNextTick);
+  draining = true;
+  var len = queue.length;
+
+  while (len) {
+    currentQueue = queue;
+    queue = [];
+
+    while (++queueIndex < len) {
+      if (currentQueue) {
+        currentQueue[queueIndex].run();
+      }
+    }
+
+    queueIndex = -1;
+    len = queue.length;
+  }
+
+  currentQueue = null;
+  draining = false;
+  runClearTimeout(timeout);
+}
+
+process.nextTick = function (fun) {
+  var args = new Array(arguments.length - 1);
+
+  if (arguments.length > 1) {
+    for (var i = 1; i < arguments.length; i++) {
+      args[i - 1] = arguments[i];
+    }
+  }
+
+  queue.push(new Item(fun, args));
+
+  if (queue.length === 1 && !draining) {
+    runTimeout(drainQueue);
+  }
+}; // v8 likes predictible objects
+
+
+function Item(fun, array) {
+  this.fun = fun;
+  this.array = array;
+}
+
+Item.prototype.run = function () {
+  this.fun.apply(null, this.array);
+};
+
+process.title = 'browser';
+process.env = {};
+process.argv = [];
+process.version = ''; // empty string to avoid regexp issues
+
+process.versions = {};
+
+function noop() {}
+
+process.on = noop;
+process.addListener = noop;
+process.once = noop;
+process.off = noop;
+process.removeListener = noop;
+process.removeAllListeners = noop;
+process.emit = noop;
+process.prependListener = noop;
+process.prependOnceListener = noop;
+
+process.listeners = function (name) {
+  return [];
+};
+
+process.binding = function (name) {
+  throw new Error('process.binding is not supported');
+};
+
+process.cwd = function () {
+  return '/';
+};
+
+process.chdir = function (dir) {
+  throw new Error('process.chdir is not supported');
+};
+
+process.umask = function () {
+  return 0;
+};
+},{}],"../node_modules/ts-invariant/lib/invariant.esm.js":[function(require,module,exports) {
+var process = require("process");
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.invariant = invariant;
+exports.process = exports.InvariantError = exports.default = void 0;
+
+var _tslib = require("tslib");
+
+var genericMessage = "Invariant Violation";
+var _a = Object.setPrototypeOf,
+    setPrototypeOf = _a === void 0 ? function (obj, proto) {
+  obj.__proto__ = proto;
+  return obj;
+} : _a;
+
+var InvariantError =
+/** @class */
+function (_super) {
+  (0, _tslib.__extends)(InvariantError, _super);
+
+  function InvariantError(message) {
+    if (message === void 0) {
+      message = genericMessage;
+    }
+
+    var _this = _super.call(this, typeof message === "number" ? genericMessage + ": " + message + " (see https://github.com/apollographql/invariant-packages)" : message) || this;
+
+    _this.framesToPop = 1;
+    _this.name = genericMessage;
+    setPrototypeOf(_this, InvariantError.prototype);
+    return _this;
+  }
+
+  return InvariantError;
+}(Error);
+
+exports.InvariantError = InvariantError;
+
+function invariant(condition, message) {
+  if (!condition) {
+    throw new InvariantError(message);
+  }
+}
+
+function wrapConsoleMethod(method) {
+  return function () {
+    return console[method].apply(console, arguments);
+  };
+}
+
+(function (invariant) {
+  invariant.warn = wrapConsoleMethod("warn");
+  invariant.error = wrapConsoleMethod("error");
+})(invariant || (exports.invariant = invariant = {})); // Code that uses ts-invariant with rollup-plugin-invariant may want to
+// import this process stub to avoid errors evaluating process.env.NODE_ENV.
+// However, because most ESM-to-CJS compilers will rewrite the process import
+// as tsInvariant.process, which prevents proper replacement by minifiers, we
+// also attempt to define the stub globally when it is not already defined.
+
+
+var processStub = {
+  env: {}
+};
+exports.process = processStub;
+
+if (typeof process === "object") {
+  exports.process = processStub = process;
+} else try {
+  // Using Function to evaluate this assignment in global scope also escapes
+  // the strict mode of the current module, thereby allowing the assignment.
+  // Inspired by https://github.com/facebook/regenerator/pull/369.
+  Function("stub", "process = stub")(processStub);
+} catch (atLeastWeTried) {// The assignment can fail if a Content Security Policy heavy-handedly
+  // forbids Function usage. In those environments, developers should take
+  // extra care to replace process.env.NODE_ENV in their production builds,
+  // or define an appropriate global.process polyfill.
+}
+
+var invariant$1 = invariant;
+var _default = invariant$1;
+exports.default = _default;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","process":"../node_modules/process/browser.js"}],"../node_modules/fast-json-stable-stringify/index.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = function (data, opts) {
+    if (!opts) opts = {};
+    if (typeof opts === 'function') opts = { cmp: opts };
+    var cycles = (typeof opts.cycles === 'boolean') ? opts.cycles : false;
+
+    var cmp = opts.cmp && (function (f) {
+        return function (node) {
+            return function (a, b) {
+                var aobj = { key: a, value: node[a] };
+                var bobj = { key: b, value: node[b] };
+                return f(aobj, bobj);
+            };
+        };
+    })(opts.cmp);
+
+    var seen = [];
+    return (function stringify (node) {
+        if (node && node.toJSON && typeof node.toJSON === 'function') {
+            node = node.toJSON();
+        }
+
+        if (node === undefined) return;
+        if (typeof node == 'number') return isFinite(node) ? '' + node : 'null';
+        if (typeof node !== 'object') return JSON.stringify(node);
+
+        var i, out;
+        if (Array.isArray(node)) {
+            out = '[';
+            for (i = 0; i < node.length; i++) {
+                if (i) out += ',';
+                out += stringify(node[i]) || 'null';
+            }
+            return out + ']';
+        }
+
+        if (node === null) return 'null';
+
+        if (seen.indexOf(node) !== -1) {
+            if (cycles) return JSON.stringify('__cycle__');
+            throw new TypeError('Converting circular structure to JSON');
+        }
+
+        var seenIndex = seen.push(node) - 1;
+        var keys = Object.keys(node).sort(cmp && cmp(node));
+        out = '';
+        for (i = 0; i < keys.length; i++) {
+            var key = keys[i];
+            var value = stringify(node[key]);
+
+            if (!value) continue;
+            if (out) out += ',';
+            out += JSON.stringify(key) + ':' + value;
+        }
+        seen.splice(seenIndex, 1);
+        return '{' + out + '}';
+    })(data);
+};
+
+},{}],"../node_modules/@apollo/client/utilities/graphql/fragments.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.createFragmentMap = createFragmentMap;
+exports.getFragmentFromSelection = getFragmentFromSelection;
+exports.getFragmentQueryDocument = getFragmentQueryDocument;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+function getFragmentQueryDocument(document, fragmentName) {
+  var actualFragmentName = fragmentName;
+  var fragments = [];
+  document.definitions.forEach(function (definition) {
+    if (definition.kind === 'OperationDefinition') {
+      throw "development" === "production" ? new _tsInvariant.InvariantError(46) : new _tsInvariant.InvariantError("Found a " + definition.operation + " operation" + (definition.name ? " named '" + definition.name.value + "'" : '') + ". " + 'No operations are allowed when using a fragment as a query. Only fragments are allowed.');
+    }
+
+    if (definition.kind === 'FragmentDefinition') {
+      fragments.push(definition);
+    }
+  });
+
+  if (typeof actualFragmentName === 'undefined') {
+    "development" === "production" ? (0, _tsInvariant.invariant)(fragments.length === 1, 47) : (0, _tsInvariant.invariant)(fragments.length === 1, "Found " + fragments.length + " fragments. `fragmentName` must be provided when there is not exactly 1 fragment.");
+    actualFragmentName = fragments[0].name.value;
+  }
+
+  var query = (0, _tslib.__assign)((0, _tslib.__assign)({}, document), {
+    definitions: (0, _tslib.__spreadArrays)([{
+      kind: 'OperationDefinition',
+      operation: 'query',
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [{
+          kind: 'FragmentSpread',
+          name: {
+            kind: 'Name',
+            value: actualFragmentName
+          }
+        }]
+      }
+    }], document.definitions)
+  });
+  return query;
+}
+
+function createFragmentMap(fragments) {
+  if (fragments === void 0) {
+    fragments = [];
+  }
+
+  var symTable = {};
+  fragments.forEach(function (fragment) {
+    symTable[fragment.name.value] = fragment;
+  });
+  return symTable;
+}
+
+function getFragmentFromSelection(selection, fragmentMap) {
+  switch (selection.kind) {
+    case 'InlineFragment':
+      return selection;
+
+    case 'FragmentSpread':
+      {
+        var fragment = fragmentMap && fragmentMap[selection.name.value];
+        "development" === "production" ? (0, _tsInvariant.invariant)(fragment, 48) : (0, _tsInvariant.invariant)(fragment, "No fragment named " + selection.name.value + ".");
+        return fragment;
+      }
+
+    default:
+      return null;
+  }
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js"}],"../node_modules/@apollo/client/utilities/graphql/storeUtils.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.argumentsObjectFromField = argumentsObjectFromField;
+exports.getStoreKeyName = getStoreKeyName;
+exports.getTypenameFromResult = getTypenameFromResult;
+exports.isField = isField;
+exports.isInlineFragment = isInlineFragment;
+exports.isReference = isReference;
+exports.makeReference = makeReference;
+exports.resultKeyNameFromField = resultKeyNameFromField;
+exports.storeKeyNameFromField = storeKeyNameFromField;
+exports.valueToObjectRepresentation = valueToObjectRepresentation;
+
+var _tsInvariant = require("ts-invariant");
+
+var _fastJsonStableStringify = _interopRequireDefault(require("fast-json-stable-stringify"));
+
+var _fragments = require("./fragments.js");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function makeReference(id) {
+  return {
+    __ref: String(id)
+  };
+}
+
+function isReference(obj) {
+  return obj && typeof obj === 'object' && typeof obj.__ref === 'string';
+}
+
+function isStringValue(value) {
+  return value.kind === 'StringValue';
+}
+
+function isBooleanValue(value) {
+  return value.kind === 'BooleanValue';
+}
+
+function isIntValue(value) {
+  return value.kind === 'IntValue';
+}
+
+function isFloatValue(value) {
+  return value.kind === 'FloatValue';
+}
+
+function isVariable(value) {
+  return value.kind === 'Variable';
+}
+
+function isObjectValue(value) {
+  return value.kind === 'ObjectValue';
+}
+
+function isListValue(value) {
+  return value.kind === 'ListValue';
+}
+
+function isEnumValue(value) {
+  return value.kind === 'EnumValue';
+}
+
+function isNullValue(value) {
+  return value.kind === 'NullValue';
+}
+
+function valueToObjectRepresentation(argObj, name, value, variables) {
+  if (isIntValue(value) || isFloatValue(value)) {
+    argObj[name.value] = Number(value.value);
+  } else if (isBooleanValue(value) || isStringValue(value)) {
+    argObj[name.value] = value.value;
+  } else if (isObjectValue(value)) {
+    var nestedArgObj_1 = {};
+    value.fields.map(function (obj) {
+      return valueToObjectRepresentation(nestedArgObj_1, obj.name, obj.value, variables);
+    });
+    argObj[name.value] = nestedArgObj_1;
+  } else if (isVariable(value)) {
+    var variableValue = (variables || {})[value.name.value];
+    argObj[name.value] = variableValue;
+  } else if (isListValue(value)) {
+    argObj[name.value] = value.values.map(function (listValue) {
+      var nestedArgArrayObj = {};
+      valueToObjectRepresentation(nestedArgArrayObj, name, listValue, variables);
+      return nestedArgArrayObj[name.value];
+    });
+  } else if (isEnumValue(value)) {
+    argObj[name.value] = value.value;
+  } else if (isNullValue(value)) {
+    argObj[name.value] = null;
+  } else {
+    throw "development" === "production" ? new _tsInvariant.InvariantError(37) : new _tsInvariant.InvariantError("The inline argument \"" + name.value + "\" of kind \"" + value.kind + "\"" + 'is not supported. Use variables instead of inline arguments to ' + 'overcome this limitation.');
+  }
+}
+
+function storeKeyNameFromField(field, variables) {
+  var directivesObj = null;
+
+  if (field.directives) {
+    directivesObj = {};
+    field.directives.forEach(function (directive) {
+      directivesObj[directive.name.value] = {};
+
+      if (directive.arguments) {
+        directive.arguments.forEach(function (_a) {
+          var name = _a.name,
+              value = _a.value;
+          return valueToObjectRepresentation(directivesObj[directive.name.value], name, value, variables);
+        });
+      }
+    });
+  }
+
+  var argObj = null;
+
+  if (field.arguments && field.arguments.length) {
+    argObj = {};
+    field.arguments.forEach(function (_a) {
+      var name = _a.name,
+          value = _a.value;
+      return valueToObjectRepresentation(argObj, name, value, variables);
+    });
+  }
+
+  return getStoreKeyName(field.name.value, argObj, directivesObj);
+}
+
+var KNOWN_DIRECTIVES = ['connection', 'include', 'skip', 'client', 'rest', 'export'];
+
+function getStoreKeyName(fieldName, args, directives) {
+  if (directives && directives['connection'] && directives['connection']['key']) {
+    if (directives['connection']['filter'] && directives['connection']['filter'].length > 0) {
+      var filterKeys = directives['connection']['filter'] ? directives['connection']['filter'] : [];
+      filterKeys.sort();
+      var queryArgs_1 = args;
+      var filteredArgs_1 = {};
+      filterKeys.forEach(function (key) {
+        filteredArgs_1[key] = queryArgs_1[key];
+      });
+      return directives['connection']['key'] + "(" + JSON.stringify(filteredArgs_1) + ")";
+    } else {
+      return directives['connection']['key'];
+    }
+  }
+
+  var completeFieldName = fieldName;
+
+  if (args) {
+    var stringifiedArgs = (0, _fastJsonStableStringify.default)(args);
+    completeFieldName += "(" + stringifiedArgs + ")";
+  }
+
+  if (directives) {
+    Object.keys(directives).forEach(function (key) {
+      if (KNOWN_DIRECTIVES.indexOf(key) !== -1) return;
+
+      if (directives[key] && Object.keys(directives[key]).length) {
+        completeFieldName += "@" + key + "(" + JSON.stringify(directives[key]) + ")";
+      } else {
+        completeFieldName += "@" + key;
+      }
+    });
+  }
+
+  return completeFieldName;
+}
+
+function argumentsObjectFromField(field, variables) {
+  if (field.arguments && field.arguments.length) {
+    var argObj_1 = {};
+    field.arguments.forEach(function (_a) {
+      var name = _a.name,
+          value = _a.value;
+      return valueToObjectRepresentation(argObj_1, name, value, variables);
+    });
+    return argObj_1;
+  }
+
+  return null;
+}
+
+function resultKeyNameFromField(field) {
+  return field.alias ? field.alias.value : field.name.value;
+}
+
+function getTypenameFromResult(result, selectionSet, fragmentMap) {
+  if (typeof result.__typename === 'string') {
+    return result.__typename;
+  }
+
+  for (var _i = 0, _a = selectionSet.selections; _i < _a.length; _i++) {
+    var selection = _a[_i];
+
+    if (isField(selection)) {
+      if (selection.name.value === '__typename') {
+        return result[resultKeyNameFromField(selection)];
+      }
+    } else {
+      var typename = getTypenameFromResult(result, (0, _fragments.getFragmentFromSelection)(selection, fragmentMap).selectionSet, fragmentMap);
+
+      if (typeof typename === 'string') {
+        return typename;
+      }
+    }
+  }
+}
+
+function isField(selection) {
+  return selection.kind === 'Field';
+}
+
+function isInlineFragment(selection) {
+  return selection.kind === 'InlineFragment';
+}
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","fast-json-stable-stringify":"../node_modules/fast-json-stable-stringify/index.js","./fragments.js":"../node_modules/@apollo/client/utilities/graphql/fragments.js"}],"../node_modules/@apollo/client/utilities/common/assign.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.assign = assign;
+
+function assign(target) {
+  var sources = [];
+
+  for (var _i = 1; _i < arguments.length; _i++) {
+    sources[_i - 1] = arguments[_i];
+  }
+
+  sources.forEach(function (source) {
+    if (typeof source === 'undefined' || source === null) {
+      return;
+    }
+
+    Object.keys(source).forEach(function (key) {
+      target[key] = source[key];
+    });
+  });
+  return target;
+}
+},{}],"../node_modules/@apollo/client/utilities/graphql/getFromAST.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.checkDocument = checkDocument;
+exports.getDefaultValues = getDefaultValues;
+exports.getFragmentDefinition = getFragmentDefinition;
+exports.getFragmentDefinitions = getFragmentDefinitions;
+exports.getMainDefinition = getMainDefinition;
+exports.getOperationDefinition = getOperationDefinition;
+exports.getOperationName = getOperationName;
+exports.getQueryDefinition = getQueryDefinition;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+var _assign = require("../common/assign.js");
+
+var _storeUtils = require("./storeUtils.js");
+
+function checkDocument(doc) {
+  "development" === "production" ? (0, _tsInvariant.invariant)(doc && doc.kind === 'Document', 15) : (0, _tsInvariant.invariant)(doc && doc.kind === 'Document', "Expecting a parsed GraphQL document. Perhaps you need to wrap the query string in a \"gql\" tag? http://docs.apollostack.com/apollo-client/core.html#gql");
+  var operations = doc.definitions.filter(function (d) {
+    return d.kind !== 'FragmentDefinition';
+  }).map(function (definition) {
+    if (definition.kind !== 'OperationDefinition') {
+      throw "development" === "production" ? new _tsInvariant.InvariantError(16) : new _tsInvariant.InvariantError("Schema type definitions not allowed in queries. Found: \"" + definition.kind + "\"");
+    }
+
+    return definition;
+  });
+  "development" === "production" ? (0, _tsInvariant.invariant)(operations.length <= 1, 17) : (0, _tsInvariant.invariant)(operations.length <= 1, "Ambiguous GraphQL document: contains " + operations.length + " operations");
+  return doc;
+}
+
+function getOperationDefinition(doc) {
+  checkDocument(doc);
+  return doc.definitions.filter(function (definition) {
+    return definition.kind === 'OperationDefinition';
+  })[0];
+}
+
+function getOperationName(doc) {
+  return doc.definitions.filter(function (definition) {
+    return definition.kind === 'OperationDefinition' && definition.name;
+  }).map(function (x) {
+    return x.name.value;
+  })[0] || null;
+}
+
+function getFragmentDefinitions(doc) {
+  return doc.definitions.filter(function (definition) {
+    return definition.kind === 'FragmentDefinition';
+  });
+}
+
+function getQueryDefinition(doc) {
+  var queryDef = getOperationDefinition(doc);
+  "development" === "production" ? (0, _tsInvariant.invariant)(queryDef && queryDef.operation === 'query', 18) : (0, _tsInvariant.invariant)(queryDef && queryDef.operation === 'query', 'Must contain a query definition.');
+  return queryDef;
+}
+
+function getFragmentDefinition(doc) {
+  "development" === "production" ? (0, _tsInvariant.invariant)(doc.kind === 'Document', 19) : (0, _tsInvariant.invariant)(doc.kind === 'Document', "Expecting a parsed GraphQL document. Perhaps you need to wrap the query string in a \"gql\" tag? http://docs.apollostack.com/apollo-client/core.html#gql");
+  "development" === "production" ? (0, _tsInvariant.invariant)(doc.definitions.length <= 1, 20) : (0, _tsInvariant.invariant)(doc.definitions.length <= 1, 'Fragment must have exactly one definition.');
+  var fragmentDef = doc.definitions[0];
+  "development" === "production" ? (0, _tsInvariant.invariant)(fragmentDef.kind === 'FragmentDefinition', 21) : (0, _tsInvariant.invariant)(fragmentDef.kind === 'FragmentDefinition', 'Must be a fragment definition.');
+  return fragmentDef;
+}
+
+function getMainDefinition(queryDoc) {
+  checkDocument(queryDoc);
+  var fragmentDefinition;
+
+  for (var _i = 0, _a = queryDoc.definitions; _i < _a.length; _i++) {
+    var definition = _a[_i];
+
+    if (definition.kind === 'OperationDefinition') {
+      var operation = definition.operation;
+
+      if (operation === 'query' || operation === 'mutation' || operation === 'subscription') {
+        return definition;
+      }
+    }
+
+    if (definition.kind === 'FragmentDefinition' && !fragmentDefinition) {
+      fragmentDefinition = definition;
+    }
+  }
+
+  if (fragmentDefinition) {
+    return fragmentDefinition;
+  }
+
+  throw "development" === "production" ? new _tsInvariant.InvariantError(22) : new _tsInvariant.InvariantError('Expected a parsed GraphQL query with a query, mutation, subscription, or a fragment.');
+}
+
+function getDefaultValues(definition) {
+  if (definition && definition.variableDefinitions && definition.variableDefinitions.length) {
+    var defaultValues = definition.variableDefinitions.filter(function (_a) {
+      var defaultValue = _a.defaultValue;
+      return defaultValue;
+    }).map(function (_a) {
+      var variable = _a.variable,
+          defaultValue = _a.defaultValue;
+      var defaultValueObj = {};
+      (0, _storeUtils.valueToObjectRepresentation)(defaultValueObj, variable.name, defaultValue);
+      return defaultValueObj;
+    });
+    return _assign.assign.apply(void 0, (0, _tslib.__spreadArrays)([{}], defaultValues));
+  }
+
+  return {};
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","../common/assign.js":"../node_modules/@apollo/client/utilities/common/assign.js","./storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js"}],"../node_modules/symbol-observable/es/ponyfill.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = symbolObservablePonyfill;
+
+function symbolObservablePonyfill(root) {
+  var result;
+  var Symbol = root.Symbol;
+
+  if (typeof Symbol === 'function') {
+    if (Symbol.observable) {
+      result = Symbol.observable;
+    } else {
+      result = Symbol('observable');
+      Symbol.observable = result;
+    }
+  } else {
+    result = '@@observable';
+  }
+
+  return result;
+}
+
+;
+},{}],"../node_modules/symbol-observable/es/index.js":[function(require,module,exports) {
+var global = arguments[3];
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _ponyfill = _interopRequireDefault(require("./ponyfill.js"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+/* global window */
+var root;
+
+if (typeof self !== 'undefined') {
+  root = self;
+} else if (typeof window !== 'undefined') {
+  root = window;
+} else if (typeof global !== 'undefined') {
+  root = global;
+} else if (typeof module !== 'undefined') {
+  root = module;
+} else {
+  root = Function('return this')();
+}
+
+var result = (0, _ponyfill.default)(root);
+var _default = result;
+exports.default = _default;
+},{"./ponyfill.js":"../node_modules/symbol-observable/es/ponyfill.js"}],"../node_modules/@apollo/client/link/utils/validateOperation.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.validateOperation = validateOperation;
+
+var _tsInvariant = require("ts-invariant");
+
+function validateOperation(operation) {
+  var OPERATION_FIELDS = ['query', 'operationName', 'variables', 'extensions', 'context'];
+
+  for (var _i = 0, _a = Object.keys(operation); _i < _a.length; _i++) {
+    var key = _a[_i];
+
+    if (OPERATION_FIELDS.indexOf(key) < 0) {
+      throw "development" === "production" ? new _tsInvariant.InvariantError(36) : new _tsInvariant.InvariantError("illegal argument: " + key);
+    }
+  }
+
+  return operation;
+}
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js"}],"../node_modules/@apollo/client/link/utils/createOperation.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.createOperation = createOperation;
+
+var _tslib = require("tslib");
+
+function createOperation(starting, operation) {
+  var context = (0, _tslib.__assign)({}, starting);
+
+  var setContext = function (next) {
+    if (typeof next === 'function') {
+      context = (0, _tslib.__assign)((0, _tslib.__assign)({}, context), next(context));
+    } else {
+      context = (0, _tslib.__assign)((0, _tslib.__assign)({}, context), next);
+    }
+  };
+
+  var getContext = function () {
+    return (0, _tslib.__assign)({}, context);
+  };
+
+  Object.defineProperty(operation, 'setContext', {
+    enumerable: false,
+    value: setContext
+  });
+  Object.defineProperty(operation, 'getContext', {
+    enumerable: false,
+    value: getContext
+  });
+  return operation;
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js"}],"../node_modules/@apollo/client/link/utils/transformOperation.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.transformOperation = transformOperation;
+
+var _getFromAST = require("../../utilities/graphql/getFromAST.js");
+
+function transformOperation(operation) {
+  var transformedOperation = {
+    variables: operation.variables || {},
+    extensions: operation.extensions || {},
+    operationName: operation.operationName,
+    query: operation.query
+  };
+
+  if (!transformedOperation.operationName) {
+    transformedOperation.operationName = typeof transformedOperation.query !== 'string' ? (0, _getFromAST.getOperationName)(transformedOperation.query) : '';
+  }
+
+  return transformedOperation;
+}
+},{"../../utilities/graphql/getFromAST.js":"../node_modules/@apollo/client/utilities/graphql/getFromAST.js"}],"../node_modules/@apollo/client/link/core/ApolloLink.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.ApolloLink = void 0;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+var _zenObservable = _interopRequireDefault(require("zen-observable"));
+
+require("symbol-observable");
+
+var _validateOperation = require("../utils/validateOperation.js");
+
+var _createOperation = require("../utils/createOperation.js");
+
+var _transformOperation = require("../utils/transformOperation.js");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function passthrough(op, forward) {
+  return forward ? forward(op) : _zenObservable.default.of();
+}
+
+function toLink(handler) {
+  return typeof handler === 'function' ? new ApolloLink(handler) : handler;
+}
+
+function isTerminating(link) {
+  return link.request.length <= 1;
+}
+
+var LinkError = function (_super) {
+  (0, _tslib.__extends)(LinkError, _super);
+
+  function LinkError(message, link) {
+    var _this = _super.call(this, message) || this;
+
+    _this.link = link;
+    return _this;
+  }
+
+  return LinkError;
+}(Error);
+
+var ApolloLink = function () {
+  function ApolloLink(request) {
+    if (request) this.request = request;
+  }
+
+  ApolloLink.empty = function () {
+    return new ApolloLink(function () {
+      return _zenObservable.default.of();
+    });
+  };
+
+  ApolloLink.from = function (links) {
+    if (links.length === 0) return ApolloLink.empty();
+    return links.map(toLink).reduce(function (x, y) {
+      return x.concat(y);
+    });
+  };
+
+  ApolloLink.split = function (test, left, right) {
+    var leftLink = toLink(left);
+    var rightLink = toLink(right || new ApolloLink(passthrough));
+
+    if (isTerminating(leftLink) && isTerminating(rightLink)) {
+      return new ApolloLink(function (operation) {
+        return test(operation) ? leftLink.request(operation) || _zenObservable.default.of() : rightLink.request(operation) || _zenObservable.default.of();
+      });
+    } else {
+      return new ApolloLink(function (operation, forward) {
+        return test(operation) ? leftLink.request(operation, forward) || _zenObservable.default.of() : rightLink.request(operation, forward) || _zenObservable.default.of();
+      });
+    }
+  };
+
+  ApolloLink.execute = function (link, operation) {
+    return link.request((0, _createOperation.createOperation)(operation.context, (0, _transformOperation.transformOperation)((0, _validateOperation.validateOperation)(operation)))) || _zenObservable.default.of();
+  };
+
+  ApolloLink.concat = function (first, second) {
+    var firstLink = toLink(first);
+
+    if (isTerminating(firstLink)) {
+      "development" === "production" || _tsInvariant.invariant.warn(new LinkError("You are calling concat on a terminating link, which will have no effect", firstLink));
+      return firstLink;
+    }
+
+    var nextLink = toLink(second);
+
+    if (isTerminating(nextLink)) {
+      return new ApolloLink(function (operation) {
+        return firstLink.request(operation, function (op) {
+          return nextLink.request(op) || _zenObservable.default.of();
+        }) || _zenObservable.default.of();
+      });
+    } else {
+      return new ApolloLink(function (operation, forward) {
+        return firstLink.request(operation, function (op) {
+          return nextLink.request(op, forward) || _zenObservable.default.of();
+        }) || _zenObservable.default.of();
+      });
+    }
+  };
+
+  ApolloLink.prototype.split = function (test, left, right) {
+    return this.concat(ApolloLink.split(test, left, right || new ApolloLink(passthrough)));
+  };
+
+  ApolloLink.prototype.concat = function (next) {
+    return ApolloLink.concat(this, next);
+  };
+
+  ApolloLink.prototype.request = function (operation, forward) {
+    throw "development" === "production" ? new _tsInvariant.InvariantError(12) : new _tsInvariant.InvariantError('request is not implemented');
+  };
+
+  ApolloLink.prototype.onError = function (reason) {
+    throw reason;
+  };
+
+  ApolloLink.prototype.setOnError = function (fn) {
+    this.onError = fn;
+    return this;
+  };
+
+  return ApolloLink;
+}();
+
+exports.ApolloLink = ApolloLink;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","zen-observable":"../node_modules/zen-observable/index.js","symbol-observable":"../node_modules/symbol-observable/es/index.js","../utils/validateOperation.js":"../node_modules/@apollo/client/link/utils/validateOperation.js","../utils/createOperation.js":"../node_modules/@apollo/client/link/utils/createOperation.js","../utils/transformOperation.js":"../node_modules/@apollo/client/link/utils/transformOperation.js"}],"../node_modules/@apollo/client/link/core/execute.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.execute = void 0;
+
+var _ApolloLink = require("./ApolloLink.js");
+
+var execute = _ApolloLink.ApolloLink.execute;
+exports.execute = execute;
+},{"./ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js"}],"../node_modules/@apollo/client/utilities/common/arrays.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.isNonEmptyArray = isNonEmptyArray;
+
+function isNonEmptyArray(value) {
+  return Array.isArray(value) && value.length > 0;
+}
+},{}],"../node_modules/@apollo/client/errors/ApolloError.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.isApolloError = isApolloError;
+exports.ApolloError = void 0;
+
+var _tslib = require("tslib");
+
+var _arrays = require("../utilities/common/arrays.js");
+
+function isApolloError(err) {
+  return err.hasOwnProperty('graphQLErrors');
+}
+
+var generateErrorMessage = function (err) {
+  var message = '';
+
+  if ((0, _arrays.isNonEmptyArray)(err.graphQLErrors)) {
+    err.graphQLErrors.forEach(function (graphQLError) {
+      var errorMessage = graphQLError ? graphQLError.message : 'Error message not found.';
+      message += "GraphQL error: " + errorMessage + "\n";
+    });
+  }
+
+  if (err.networkError) {
+    message += 'Network error: ' + err.networkError.message + '\n';
+  }
+
+  message = message.replace(/\n$/, '');
+  return message;
+};
+
+var ApolloError = function (_super) {
+  (0, _tslib.__extends)(ApolloError, _super);
+
+  function ApolloError(_a) {
+    var graphQLErrors = _a.graphQLErrors,
+        networkError = _a.networkError,
+        errorMessage = _a.errorMessage,
+        extraInfo = _a.extraInfo;
+
+    var _this = _super.call(this, errorMessage) || this;
+
+    _this.graphQLErrors = graphQLErrors || [];
+    _this.networkError = networkError || null;
+
+    if (!errorMessage) {
+      _this.message = generateErrorMessage(_this);
+    } else {
+      _this.message = errorMessage;
+    }
+
+    _this.extraInfo = extraInfo;
+    _this.__proto__ = ApolloError.prototype;
+    return _this;
+  }
+
+  return ApolloError;
+}(Error);
+
+exports.ApolloError = ApolloError;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","../utilities/common/arrays.js":"../node_modules/@apollo/client/utilities/common/arrays.js"}],"../node_modules/@apollo/client/core/networkStatus.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.isNetworkRequestInFlight = isNetworkRequestInFlight;
+exports.NetworkStatus = void 0;
+var NetworkStatus;
+exports.NetworkStatus = NetworkStatus;
+
+(function (NetworkStatus) {
+  NetworkStatus[NetworkStatus["loading"] = 1] = "loading";
+  NetworkStatus[NetworkStatus["setVariables"] = 2] = "setVariables";
+  NetworkStatus[NetworkStatus["fetchMore"] = 3] = "fetchMore";
+  NetworkStatus[NetworkStatus["refetch"] = 4] = "refetch";
+  NetworkStatus[NetworkStatus["poll"] = 6] = "poll";
+  NetworkStatus[NetworkStatus["ready"] = 7] = "ready";
+  NetworkStatus[NetworkStatus["error"] = 8] = "error";
+})(NetworkStatus || (exports.NetworkStatus = NetworkStatus = {}));
+
+function isNetworkRequestInFlight(networkStatus) {
+  return networkStatus < 7;
+}
+},{}],"../node_modules/@apollo/client/core/types.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.FetchType = void 0;
+var FetchType;
+exports.FetchType = FetchType;
+
+(function (FetchType) {
+  FetchType[FetchType["normal"] = 1] = "normal";
+  FetchType[FetchType["refetch"] = 2] = "refetch";
+  FetchType[FetchType["poll"] = 3] = "poll";
+})(FetchType || (exports.FetchType = FetchType = {}));
+},{}],"../node_modules/@apollo/client/utilities/common/errorHandling.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.graphQLResultHasError = graphQLResultHasError;
+exports.tryFunctionOrLogError = tryFunctionOrLogError;
+
+function tryFunctionOrLogError(f) {
+  try {
+    return f();
+  } catch (e) {
+    if (console.error) {
+      console.error(e);
+    }
+  }
+}
+
+function graphQLResultHasError(result) {
+  return result.errors && result.errors.length;
+}
+},{}],"../node_modules/@wry/equality/lib/equality.esm.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.equal = equal;
+exports.default = void 0;
+var _a = Object.prototype,
+    toString = _a.toString,
+    hasOwnProperty = _a.hasOwnProperty;
+var previousComparisons = new Map();
+/**
+ * Performs a deep equality check on two JavaScript values, tolerating cycles.
+ */
+
+function equal(a, b) {
+  try {
+    return check(a, b);
+  } finally {
+    previousComparisons.clear();
+  }
+}
+
+function check(a, b) {
+  // If the two values are strictly equal, our job is easy.
+  if (a === b) {
+    return true;
+  } // Object.prototype.toString returns a representation of the runtime type of
+  // the given value that is considerably more precise than typeof.
+
+
+  var aTag = toString.call(a);
+  var bTag = toString.call(b); // If the runtime types of a and b are different, they could maybe be equal
+  // under some interpretation of equality, but for simplicity and performance
+  // we just return false instead.
+
+  if (aTag !== bTag) {
+    return false;
+  }
+
+  switch (aTag) {
+    case '[object Array]':
+      // Arrays are a lot like other objects, but we can cheaply compare their
+      // lengths as a short-cut before comparing their elements.
+      if (a.length !== b.length) return false;
+    // Fall through to object case...
+
+    case '[object Object]':
+      {
+        if (previouslyCompared(a, b)) return true;
+        var aKeys = Object.keys(a);
+        var bKeys = Object.keys(b); // If `a` and `b` have a different number of enumerable keys, they
+        // must be different.
+
+        var keyCount = aKeys.length;
+        if (keyCount !== bKeys.length) return false; // Now make sure they have the same keys.
+
+        for (var k = 0; k < keyCount; ++k) {
+          if (!hasOwnProperty.call(b, aKeys[k])) {
+            return false;
+          }
+        } // Finally, check deep equality of all child properties.
+
+
+        for (var k = 0; k < keyCount; ++k) {
+          var key = aKeys[k];
+
+          if (!check(a[key], b[key])) {
+            return false;
+          }
+        }
+
+        return true;
+      }
+
+    case '[object Error]':
+      return a.name === b.name && a.message === b.message;
+
+    case '[object Number]':
+      // Handle NaN, which is !== itself.
+      if (a !== a) return b !== b;
+    // Fall through to shared +a === +b case...
+
+    case '[object Boolean]':
+    case '[object Date]':
+      return +a === +b;
+
+    case '[object RegExp]':
+    case '[object String]':
+      return a == "" + b;
+
+    case '[object Map]':
+    case '[object Set]':
+      {
+        if (a.size !== b.size) return false;
+        if (previouslyCompared(a, b)) return true;
+        var aIterator = a.entries();
+        var isMap = aTag === '[object Map]';
+
+        while (true) {
+          var info = aIterator.next();
+          if (info.done) break; // If a instanceof Set, aValue === aKey.
+
+          var _a = info.value,
+              aKey = _a[0],
+              aValue = _a[1]; // So this works the same way for both Set and Map.
+
+          if (!b.has(aKey)) {
+            return false;
+          } // However, we care about deep equality of values only when dealing
+          // with Map structures.
+
+
+          if (isMap && !check(aValue, b.get(aKey))) {
+            return false;
+          }
+        }
+
+        return true;
+      }
+  } // Otherwise the values are not equal.
+
+
+  return false;
+}
+
+function previouslyCompared(a, b) {
+  // Though cyclic references can make an object graph appear infinite from the
+  // perspective of a depth-first traversal, the graph still contains a finite
+  // number of distinct object references. We use the previousComparisons cache
+  // to avoid comparing the same pair of object references more than once, which
+  // guarantees termination (even if we end up comparing every object in one
+  // graph to every object in the other graph, which is extremely unlikely),
+  // while still allowing weird isomorphic structures (like rings with different
+  // lengths) a chance to pass the equality test.
+  var bSet = previousComparisons.get(a);
+
+  if (bSet) {
+    // Return true here because we can be sure false will be returned somewhere
+    // else if the objects are not equivalent.
+    if (bSet.has(b)) return true;
+  } else {
+    previousComparisons.set(a, bSet = new Set());
+  }
+
+  bSet.add(b);
+  return false;
+}
+
+var _default = equal;
+exports.default = _default;
+},{}],"../node_modules/@apollo/client/utilities/common/cloneDeep.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.cloneDeep = cloneDeep;
+var toString = Object.prototype.toString;
+
+function cloneDeep(value) {
+  return cloneDeepHelper(value);
+}
+
+function cloneDeepHelper(val, seen) {
+  switch (toString.call(val)) {
+    case "[object Array]":
+      {
+        seen = seen || new Map();
+        if (seen.has(val)) return seen.get(val);
+        var copy_1 = val.slice(0);
+        seen.set(val, copy_1);
+        copy_1.forEach(function (child, i) {
+          copy_1[i] = cloneDeepHelper(child, seen);
+        });
+        return copy_1;
+      }
+
+    case "[object Object]":
+      {
+        seen = seen || new Map();
+        if (seen.has(val)) return seen.get(val);
+        var copy_2 = Object.create(Object.getPrototypeOf(val));
+        seen.set(val, copy_2);
+        Object.keys(val).forEach(function (key) {
+          copy_2[key] = cloneDeepHelper(val[key], seen);
+        });
+        return copy_2;
+      }
+
+    default:
+      return val;
+  }
+}
+},{}],"../node_modules/@apollo/client/core/ObservableQuery.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.hasError = exports.ObservableQuery = void 0;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+var _zenObservable = _interopRequireDefault(require("zen-observable"));
+
+require("symbol-observable");
+
+var _getFromAST = require("../utilities/graphql/getFromAST.js");
+
+var _errorHandling = require("../utilities/common/errorHandling.js");
+
+var _arrays = require("../utilities/common/arrays.js");
+
+var _ApolloError = require("../errors/ApolloError.js");
+
+var _equality = require("@wry/equality");
+
+var _networkStatus = require("./networkStatus.js");
+
+var _cloneDeep = require("../utilities/common/cloneDeep.js");
+
+var _types = require("./types.js");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var hasError = function (storeValue, policy) {
+  if (policy === void 0) {
+    policy = 'none';
+  }
+
+  return storeValue && (storeValue.networkError || policy === 'none' && (0, _arrays.isNonEmptyArray)(storeValue.graphQLErrors));
+};
+
+exports.hasError = hasError;
+
+var ObservableQuery = function (_super) {
+  (0, _tslib.__extends)(ObservableQuery, _super);
+
+  function ObservableQuery(_a) {
+    var queryManager = _a.queryManager,
+        options = _a.options,
+        _b = _a.shouldSubscribe,
+        shouldSubscribe = _b === void 0 ? true : _b;
+
+    var _this = _super.call(this, function (observer) {
+      return _this.onSubscribe(observer);
+    }) || this;
+
+    _this.observers = new Set();
+    _this.subscriptions = new Set();
+    _this.isTornDown = false;
+    _this.options = options;
+    _this.variables = options.variables || {};
+    _this.queryId = queryManager.generateQueryId();
+    _this.shouldSubscribe = shouldSubscribe;
+    var opDef = (0, _getFromAST.getOperationDefinition)(options.query);
+    _this.queryName = opDef && opDef.name && opDef.name.value;
+    _this.queryManager = queryManager;
+    return _this;
+  }
+
+  ObservableQuery.prototype.result = function () {
+    var _this = this;
+
+    return new Promise(function (resolve, reject) {
+      var observer = {
+        next: function (result) {
+          resolve(result);
+
+          _this.observers.delete(observer);
+
+          if (!_this.observers.size) {
+            _this.queryManager.removeQuery(_this.queryId);
+          }
+
+          setTimeout(function () {
+            subscription.unsubscribe();
+          }, 0);
+        },
+        error: reject
+      };
+
+      var subscription = _this.subscribe(observer);
+    });
+  };
+
+  ObservableQuery.prototype.getCurrentResult = function () {
+    var _a = this,
+        lastResult = _a.lastResult,
+        lastError = _a.lastError,
+        fetchPolicy = _a.options.fetchPolicy;
+
+    var isNetworkFetchPolicy = fetchPolicy === 'network-only' || fetchPolicy === 'no-cache';
+    var networkStatus = lastError ? _networkStatus.NetworkStatus.error : lastResult ? lastResult.networkStatus : isNetworkFetchPolicy ? _networkStatus.NetworkStatus.loading : _networkStatus.NetworkStatus.ready;
+    var result = {
+      data: !lastError && lastResult && lastResult.data || void 0,
+      error: lastError,
+      loading: (0, _networkStatus.isNetworkRequestInFlight)(networkStatus),
+      networkStatus: networkStatus,
+      stale: lastResult ? lastResult.stale : false
+    };
+
+    if (this.isTornDown) {
+      return result;
+    }
+
+    var _b = this.queryManager.getCurrentQueryResult(this),
+        data = _b.data,
+        partial = _b.partial;
+
+    Object.assign(result, {
+      data: data,
+      partial: partial
+    });
+    var queryStoreValue = this.queryManager.queryStore.get(this.queryId);
+
+    if (queryStoreValue) {
+      var networkStatus_1 = queryStoreValue.networkStatus;
+
+      if (hasError(queryStoreValue, this.options.errorPolicy)) {
+        return Object.assign(result, {
+          data: void 0,
+          networkStatus: networkStatus_1,
+          error: new _ApolloError.ApolloError({
+            graphQLErrors: queryStoreValue.graphQLErrors,
+            networkError: queryStoreValue.networkError
+          })
+        });
+      }
+
+      if (queryStoreValue.variables) {
+        this.variables = this.options.variables = (0, _tslib.__assign)((0, _tslib.__assign)({}, this.options.variables), queryStoreValue.variables);
+      }
+
+      Object.assign(result, {
+        loading: (0, _networkStatus.isNetworkRequestInFlight)(networkStatus_1),
+        networkStatus: networkStatus_1
+      });
+
+      if (queryStoreValue.graphQLErrors && this.options.errorPolicy === 'all') {
+        result.errors = queryStoreValue.graphQLErrors;
+      }
+    }
+
+    if (!partial) {
+      result.stale = false;
+      this.updateLastResult(result);
+    }
+
+    return result;
+  };
+
+  ObservableQuery.prototype.isDifferentFromLastResult = function (newResult) {
+    var snapshot = this.lastResultSnapshot;
+    return !(snapshot && newResult && snapshot.networkStatus === newResult.networkStatus && snapshot.stale === newResult.stale && (0, _equality.equal)(snapshot.data, newResult.data));
+  };
+
+  ObservableQuery.prototype.getLastResult = function () {
+    return this.lastResult;
+  };
+
+  ObservableQuery.prototype.getLastError = function () {
+    return this.lastError;
+  };
+
+  ObservableQuery.prototype.resetLastResults = function () {
+    delete this.lastResult;
+    delete this.lastResultSnapshot;
+    delete this.lastError;
+    this.isTornDown = false;
+  };
+
+  ObservableQuery.prototype.resetQueryStoreErrors = function () {
+    var queryStore = this.queryManager.queryStore.get(this.queryId);
+
+    if (queryStore) {
+      queryStore.networkError = null;
+      queryStore.graphQLErrors = [];
+    }
+  };
+
+  ObservableQuery.prototype.refetch = function (variables) {
+    var fetchPolicy = this.options.fetchPolicy;
+
+    if (fetchPolicy === 'cache-only') {
+      return Promise.reject("development" === "production" ? new _tsInvariant.InvariantError(3) : new _tsInvariant.InvariantError('cache-only fetchPolicy option should not be used together with query refetch.'));
+    }
+
+    if (fetchPolicy !== 'no-cache' && fetchPolicy !== 'cache-and-network') {
+      fetchPolicy = 'network-only';
+    }
+
+    if (!(0, _equality.equal)(this.variables, variables)) {
+      this.variables = (0, _tslib.__assign)((0, _tslib.__assign)({}, this.variables), variables);
+    }
+
+    if (!(0, _equality.equal)(this.options.variables, this.variables)) {
+      this.options.variables = (0, _tslib.__assign)((0, _tslib.__assign)({}, this.options.variables), this.variables);
+    }
+
+    return this.queryManager.fetchQuery(this.queryId, (0, _tslib.__assign)((0, _tslib.__assign)({}, this.options), {
+      fetchPolicy: fetchPolicy
+    }), _types.FetchType.refetch);
+  };
+
+  ObservableQuery.prototype.fetchMore = function (fetchMoreOptions) {
+    var _this = this;
+
+    var combinedOptions = (0, _tslib.__assign)((0, _tslib.__assign)({}, fetchMoreOptions.query ? fetchMoreOptions : (0, _tslib.__assign)((0, _tslib.__assign)((0, _tslib.__assign)({}, this.options), fetchMoreOptions), {
+      variables: (0, _tslib.__assign)((0, _tslib.__assign)({}, this.variables), fetchMoreOptions.variables)
+    })), {
+      fetchPolicy: 'network-only'
+    });
+    var qid = this.queryManager.generateQueryId();
+    return this.queryManager.fetchQuery(qid, combinedOptions, _types.FetchType.normal, this.queryId).then(function (fetchMoreResult) {
+      _this.updateQuery(function (previousResult) {
+        var data = fetchMoreResult.data;
+        var updateQuery = fetchMoreOptions.updateQuery;
+        return updateQuery ? updateQuery(previousResult, {
+          fetchMoreResult: data,
+          variables: combinedOptions.variables
+        }) : data;
+      });
+
+      _this.queryManager.stopQuery(qid);
+
+      return fetchMoreResult;
+    }, function (error) {
+      _this.queryManager.stopQuery(qid);
+
+      throw error;
+    });
+  };
+
+  ObservableQuery.prototype.subscribeToMore = function (options) {
+    var _this = this;
+
+    var subscription = this.queryManager.startGraphQLSubscription({
+      query: options.document,
+      variables: options.variables
+    }).subscribe({
+      next: function (subscriptionData) {
+        var updateQuery = options.updateQuery;
+
+        if (updateQuery) {
+          _this.updateQuery(function (previous, _a) {
+            var variables = _a.variables;
+            return updateQuery(previous, {
+              subscriptionData: subscriptionData,
+              variables: variables
+            });
+          });
+        }
+      },
+      error: function (err) {
+        if (options.onError) {
+          options.onError(err);
+          return;
+        }
+
+        "development" === "production" || _tsInvariant.invariant.error('Unhandled GraphQL subscription error', err);
+      }
+    });
+    this.subscriptions.add(subscription);
+    return function () {
+      if (_this.subscriptions.delete(subscription)) {
+        subscription.unsubscribe();
+      }
+    };
+  };
+
+  ObservableQuery.prototype.setOptions = function (opts) {
+    var oldFetchPolicy = this.options.fetchPolicy;
+    this.options = (0, _tslib.__assign)((0, _tslib.__assign)({}, this.options), opts);
+
+    if (opts.pollInterval) {
+      this.startPolling(opts.pollInterval);
+    } else if (opts.pollInterval === 0) {
+      this.stopPolling();
+    }
+
+    var fetchPolicy = opts.fetchPolicy;
+    return this.setVariables(this.options.variables, oldFetchPolicy !== fetchPolicy && (oldFetchPolicy === 'cache-only' || oldFetchPolicy === 'standby' || fetchPolicy === 'network-only'), opts.fetchResults);
+  };
+
+  ObservableQuery.prototype.setVariables = function (variables, tryFetch, fetchResults) {
+    if (tryFetch === void 0) {
+      tryFetch = false;
+    }
+
+    if (fetchResults === void 0) {
+      fetchResults = true;
+    }
+
+    this.isTornDown = false;
+    variables = variables || this.variables;
+
+    if (!tryFetch && (0, _equality.equal)(variables, this.variables)) {
+      return this.observers.size && fetchResults ? this.result() : Promise.resolve();
+    }
+
+    this.variables = this.options.variables = variables;
+
+    if (!this.observers.size) {
+      return Promise.resolve();
+    }
+
+    return this.queryManager.fetchQuery(this.queryId, this.options);
+  };
+
+  ObservableQuery.prototype.updateQuery = function (mapFn) {
+    var queryManager = this.queryManager;
+
+    var _a = queryManager.getQueryWithPreviousResult(this.queryId),
+        previousResult = _a.previousResult,
+        variables = _a.variables,
+        document = _a.document;
+
+    var newResult = (0, _errorHandling.tryFunctionOrLogError)(function () {
+      return mapFn(previousResult, {
+        variables: variables
+      });
+    });
+
+    if (newResult) {
+      queryManager.cache.write({
+        query: document,
+        result: newResult,
+        dataId: 'ROOT_QUERY',
+        variables: variables
+      });
+      queryManager.broadcastQueries();
+    }
+  };
+
+  ObservableQuery.prototype.stopPolling = function () {
+    this.queryManager.stopPollingQuery(this.queryId);
+    this.options.pollInterval = undefined;
+  };
+
+  ObservableQuery.prototype.startPolling = function (pollInterval) {
+    assertNotCacheFirstOrOnly(this);
+    this.options.pollInterval = pollInterval;
+    this.queryManager.startPollingQuery(this.options, this.queryId);
+  };
+
+  ObservableQuery.prototype.updateLastResult = function (newResult) {
+    var previousResult = this.lastResult;
+    this.lastResult = newResult;
+    this.lastResultSnapshot = this.queryManager.assumeImmutableResults ? newResult : (0, _cloneDeep.cloneDeep)(newResult);
+
+    if (!(0, _arrays.isNonEmptyArray)(newResult.errors)) {
+      delete this.lastError;
+    }
+
+    return previousResult;
+  };
+
+  ObservableQuery.prototype.onSubscribe = function (observer) {
+    var _this = this;
+
+    try {
+      var subObserver = observer._subscription._observer;
+
+      if (subObserver && !subObserver.error) {
+        subObserver.error = defaultSubscriptionObserverErrorCallback;
+      }
+    } catch (_a) {}
+
+    var first = !this.observers.size;
+    this.observers.add(observer);
+    if (observer.next && this.lastResult) observer.next(this.lastResult);
+    if (observer.error && this.lastError) observer.error(this.lastError);
+
+    if (first) {
+      this.setUpQuery();
+    }
+
+    return function () {
+      if (_this.observers.delete(observer) && !_this.observers.size) {
+        _this.tearDownQuery();
+      }
+    };
+  };
+
+  ObservableQuery.prototype.setUpQuery = function () {
+    var _this = this;
+
+    var _a = this,
+        queryManager = _a.queryManager,
+        queryId = _a.queryId;
+
+    if (this.shouldSubscribe) {
+      queryManager.addObservableQuery(queryId, this);
+    }
+
+    if (this.options.pollInterval) {
+      assertNotCacheFirstOrOnly(this);
+      queryManager.startPollingQuery(this.options, queryId);
+    }
+
+    var onError = function (error) {
+      _this.updateLastResult((0, _tslib.__assign)((0, _tslib.__assign)({}, _this.lastResult), {
+        errors: error.graphQLErrors,
+        networkStatus: _networkStatus.NetworkStatus.error,
+        loading: false
+      }));
+
+      iterateObserversSafely(_this.observers, 'error', _this.lastError = error);
+    };
+
+    queryManager.observeQuery(queryId, this.options, {
+      next: function (result) {
+        if (_this.lastError || _this.isDifferentFromLastResult(result)) {
+          var previousResult_1 = _this.updateLastResult(result);
+
+          var _a = _this.options,
+              query_1 = _a.query,
+              variables = _a.variables,
+              fetchPolicy_1 = _a.fetchPolicy;
+
+          if (queryManager.transform(query_1).hasClientExports) {
+            queryManager.getLocalState().addExportedVariables(query_1, variables).then(function (variables) {
+              var previousVariables = _this.variables;
+              _this.variables = _this.options.variables = variables;
+
+              if (!result.loading && previousResult_1 && fetchPolicy_1 !== 'cache-only' && queryManager.transform(query_1).serverQuery && !(0, _equality.equal)(previousVariables, variables)) {
+                _this.refetch();
+              } else {
+                iterateObserversSafely(_this.observers, 'next', result);
+              }
+            });
+          } else {
+            iterateObserversSafely(_this.observers, 'next', result);
+          }
+        }
+      },
+      error: onError
+    }).catch(onError);
+  };
+
+  ObservableQuery.prototype.tearDownQuery = function () {
+    var queryManager = this.queryManager;
+    this.isTornDown = true;
+    queryManager.stopPollingQuery(this.queryId);
+    this.subscriptions.forEach(function (sub) {
+      return sub.unsubscribe();
+    });
+    this.subscriptions.clear();
+    queryManager.removeObservableQuery(this.queryId);
+    queryManager.stopQuery(this.queryId);
+    this.observers.clear();
+  };
+
+  return ObservableQuery;
+}(_zenObservable.default);
+
+exports.ObservableQuery = ObservableQuery;
+
+function defaultSubscriptionObserverErrorCallback(error) {
+  "development" === "production" || _tsInvariant.invariant.error('Unhandled error', error.message, error.stack);
+}
+
+function iterateObserversSafely(observers, method, argument) {
+  var observersWithMethod = [];
+  observers.forEach(function (obs) {
+    return obs[method] && observersWithMethod.push(obs);
+  });
+  observersWithMethod.forEach(function (obs) {
+    return obs[method](argument);
+  });
+}
+
+function assertNotCacheFirstOrOnly(obsQuery) {
+  var fetchPolicy = obsQuery.options.fetchPolicy;
+  "development" === "production" ? (0, _tsInvariant.invariant)(fetchPolicy !== 'cache-first' && fetchPolicy !== 'cache-only', 4) : (0, _tsInvariant.invariant)(fetchPolicy !== 'cache-first' && fetchPolicy !== 'cache-only', 'Queries that specify the cache-first and cache-only fetchPolicies cannot also be polling queries.');
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","zen-observable":"../node_modules/zen-observable/index.js","symbol-observable":"../node_modules/symbol-observable/es/index.js","../utilities/graphql/getFromAST.js":"../node_modules/@apollo/client/utilities/graphql/getFromAST.js","../utilities/common/errorHandling.js":"../node_modules/@apollo/client/utilities/common/errorHandling.js","../utilities/common/arrays.js":"../node_modules/@apollo/client/utilities/common/arrays.js","../errors/ApolloError.js":"../node_modules/@apollo/client/errors/ApolloError.js","@wry/equality":"../node_modules/@wry/equality/lib/equality.esm.js","./networkStatus.js":"../node_modules/@apollo/client/core/networkStatus.js","../utilities/common/cloneDeep.js":"../node_modules/@apollo/client/utilities/common/cloneDeep.js","./types.js":"../node_modules/@apollo/client/core/types.js"}],"../node_modules/@apollo/client/link/http/serializeFetchParameter.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.serializeFetchParameter = void 0;
+
+var _tsInvariant = require("ts-invariant");
+
+var serializeFetchParameter = function (p, label) {
+  var serialized;
+
+  try {
+    serialized = JSON.stringify(p);
+  } catch (e) {
+    var parseError = "development" === "production" ? new _tsInvariant.InvariantError(13) : new _tsInvariant.InvariantError("Network request failed. " + label + " is not serializable: " + e.message);
+    parseError.parseError = e;
+    throw parseError;
+  }
+
+  return serialized;
+};
+
+exports.serializeFetchParameter = serializeFetchParameter;
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js"}],"../node_modules/@apollo/client/link/http/selectURI.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.selectURI = void 0;
+
+var selectURI = function (operation, fallbackURI) {
+  var context = operation.getContext();
+  var contextURI = context.uri;
+
+  if (contextURI) {
+    return contextURI;
+  } else if (typeof fallbackURI === 'function') {
+    return fallbackURI(operation);
+  } else {
+    return fallbackURI || '/graphql';
+  }
+};
+
+exports.selectURI = selectURI;
+},{}],"../node_modules/@apollo/client/link/utils/throwServerError.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.throwServerError = void 0;
+
+var throwServerError = function (response, result, message) {
+  var error = new Error(message);
+  error.name = 'ServerError';
+  error.response = response;
+  error.statusCode = response.status;
+  error.result = result;
+  throw error;
+};
+
+exports.throwServerError = throwServerError;
+},{}],"../node_modules/@apollo/client/link/http/parseAndCheckHttpResponse.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.parseAndCheckHttpResponse = parseAndCheckHttpResponse;
+
+var _throwServerError = require("../utils/throwServerError.js");
+
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+
+function parseAndCheckHttpResponse(operations) {
+  return function (response) {
+    return response.text().then(function (bodyText) {
+      try {
+        return JSON.parse(bodyText);
+      } catch (err) {
+        var parseError = err;
+        parseError.name = 'ServerParseError';
+        parseError.response = response;
+        parseError.statusCode = response.status;
+        parseError.bodyText = bodyText;
+        throw parseError;
+      }
+    }).then(function (result) {
+      if (response.status >= 300) {
+        (0, _throwServerError.throwServerError)(response, result, "Response not successful: Received status code " + response.status);
+      }
+
+      if (!Array.isArray(result) && !hasOwnProperty.call(result, 'data') && !hasOwnProperty.call(result, 'errors')) {
+        (0, _throwServerError.throwServerError)(response, result, "Server response was missing for query '" + (Array.isArray(operations) ? operations.map(function (op) {
+          return op.operationName;
+        }) : operations.operationName) + "'.");
+      }
+
+      return result;
+    });
+  };
+}
+},{"../utils/throwServerError.js":"../node_modules/@apollo/client/link/utils/throwServerError.js"}],"../node_modules/@apollo/client/link/http/checkFetcher.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.checkFetcher = void 0;
+
+var _tsInvariant = require("ts-invariant");
+
+var checkFetcher = function (fetcher) {
+  if (!fetcher && typeof fetch === 'undefined') {
+    var library = 'unfetch';
+    if (typeof window === 'undefined') library = 'node-fetch';
+    throw "development" === "production" ? new _tsInvariant.InvariantError(14) : new _tsInvariant.InvariantError('"fetch" has not been found globally and no fetcher has been ' + 'configured. To fix this, install a fetch package ' + ("(like https://www.npmjs.com/package/" + library + "), instantiate the ") + 'fetcher, and pass it into your `HttpLink` constructor. For example:' + '\n\n' + ("import fetch from '" + library + "';\n") + "import { ApolloClient, HttpLink } from '@apollo/client';\n" + 'const client = new ApolloClient({\n' + "  link: new HttpLink({ uri: '/graphq', fetch })\n" + '});');
+  }
+};
+
+exports.checkFetcher = checkFetcher;
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js"}],"../node_modules/graphql/jsutils/nodejsCustomInspectSymbol.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var nodejsCustomInspectSymbol = typeof Symbol === 'function' && typeof Symbol.for === 'function' ? Symbol.for('nodejs.util.inspect.custom') : undefined;
+var _default = nodejsCustomInspectSymbol;
+exports.default = _default;
+},{}],"../node_modules/graphql/jsutils/inspect.js":[function(require,module,exports) {
+"use strict";
+
+function _typeof2(obj) { if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") { _typeof2 = function (obj) { return typeof obj; }; } else { _typeof2 = function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; } return _typeof2(obj); }
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = inspect;
+
+var _nodejsCustomInspectSymbol = _interopRequireDefault(require("./nodejsCustomInspectSymbol"));
+
+function _interopRequireDefault(obj) {
+  return obj && obj.__esModule ? obj : {
+    default: obj
+  };
+}
+
+function _typeof(obj) {
+  if (typeof Symbol === "function" && _typeof2(Symbol.iterator) === "symbol") {
+    _typeof = function _typeof(obj) {
+      return _typeof2(obj);
+    };
+  } else {
+    _typeof = function _typeof(obj) {
+      return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : _typeof2(obj);
+    };
+  }
+
+  return _typeof(obj);
+}
+
+var MAX_ARRAY_LENGTH = 10;
+var MAX_RECURSIVE_DEPTH = 2;
+/**
+ * Used to print values in error messages.
+ */
+
+function inspect(value) {
+  return formatValue(value, []);
+}
+
+function formatValue(value, seenValues) {
+  switch (_typeof(value)) {
+    case 'string':
+      return JSON.stringify(value);
+
+    case 'function':
+      return value.name ? "[function ".concat(value.name, "]") : '[function]';
+
+    case 'object':
+      if (value === null) {
+        return 'null';
+      }
+
+      return formatObjectValue(value, seenValues);
+
+    default:
+      return String(value);
+  }
+}
+
+function formatObjectValue(value, previouslySeenValues) {
+  if (previouslySeenValues.indexOf(value) !== -1) {
+    return '[Circular]';
+  }
+
+  var seenValues = [].concat(previouslySeenValues, [value]);
+  var customInspectFn = getCustomFn(value);
+
+  if (customInspectFn !== undefined) {
+    // $FlowFixMe(>=0.90.0)
+    var customValue = customInspectFn.call(value); // check for infinite recursion
+
+    if (customValue !== value) {
+      return typeof customValue === 'string' ? customValue : formatValue(customValue, seenValues);
+    }
+  } else if (Array.isArray(value)) {
+    return formatArray(value, seenValues);
+  }
+
+  return formatObject(value, seenValues);
+}
+
+function formatObject(object, seenValues) {
+  var keys = Object.keys(object);
+
+  if (keys.length === 0) {
+    return '{}';
+  }
+
+  if (seenValues.length > MAX_RECURSIVE_DEPTH) {
+    return '[' + getObjectTag(object) + ']';
+  }
+
+  var properties = keys.map(function (key) {
+    var value = formatValue(object[key], seenValues);
+    return key + ': ' + value;
+  });
+  return '{ ' + properties.join(', ') + ' }';
+}
+
+function formatArray(array, seenValues) {
+  if (array.length === 0) {
+    return '[]';
+  }
+
+  if (seenValues.length > MAX_RECURSIVE_DEPTH) {
+    return '[Array]';
+  }
+
+  var len = Math.min(MAX_ARRAY_LENGTH, array.length);
+  var remaining = array.length - len;
+  var items = [];
+
+  for (var i = 0; i < len; ++i) {
+    items.push(formatValue(array[i], seenValues));
+  }
+
+  if (remaining === 1) {
+    items.push('... 1 more item');
+  } else if (remaining > 1) {
+    items.push("... ".concat(remaining, " more items"));
+  }
+
+  return '[' + items.join(', ') + ']';
+}
+
+function getCustomFn(object) {
+  var customInspectFn = object[String(_nodejsCustomInspectSymbol.default)];
+
+  if (typeof customInspectFn === 'function') {
+    return customInspectFn;
+  }
+
+  if (typeof object.inspect === 'function') {
+    return object.inspect;
+  }
+}
+
+function getObjectTag(object) {
+  var tag = Object.prototype.toString.call(object).replace(/^\[object /, '').replace(/]$/, '');
+
+  if (tag === 'Object' && typeof object.constructor === 'function') {
+    var name = object.constructor.name;
+
+    if (typeof name === 'string' && name !== '') {
+      return name;
+    }
+  }
+
+  return tag;
+}
+},{"./nodejsCustomInspectSymbol":"../node_modules/graphql/jsutils/nodejsCustomInspectSymbol.js"}],"../node_modules/graphql/language/visitor.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.visit = visit;
+exports.visitInParallel = visitInParallel;
+exports.visitWithTypeInfo = visitWithTypeInfo;
+exports.getVisitFn = getVisitFn;
+exports.BREAK = exports.QueryDocumentKeys = void 0;
+
+var _inspect = _interopRequireDefault(require("../jsutils/inspect"));
+
+function _interopRequireDefault(obj) {
+  return obj && obj.__esModule ? obj : {
+    default: obj
+  };
+}
+
+var QueryDocumentKeys = {
+  Name: [],
+  Document: ['definitions'],
+  OperationDefinition: ['name', 'variableDefinitions', 'directives', 'selectionSet'],
+  VariableDefinition: ['variable', 'type', 'defaultValue', 'directives'],
+  Variable: ['name'],
+  SelectionSet: ['selections'],
+  Field: ['alias', 'name', 'arguments', 'directives', 'selectionSet'],
+  Argument: ['name', 'value'],
+  FragmentSpread: ['name', 'directives'],
+  InlineFragment: ['typeCondition', 'directives', 'selectionSet'],
+  FragmentDefinition: ['name', // Note: fragment variable definitions are experimental and may be changed
+  // or removed in the future.
+  'variableDefinitions', 'typeCondition', 'directives', 'selectionSet'],
+  IntValue: [],
+  FloatValue: [],
+  StringValue: [],
+  BooleanValue: [],
+  NullValue: [],
+  EnumValue: [],
+  ListValue: ['values'],
+  ObjectValue: ['fields'],
+  ObjectField: ['name', 'value'],
+  Directive: ['name', 'arguments'],
+  NamedType: ['name'],
+  ListType: ['type'],
+  NonNullType: ['type'],
+  SchemaDefinition: ['directives', 'operationTypes'],
+  OperationTypeDefinition: ['type'],
+  ScalarTypeDefinition: ['description', 'name', 'directives'],
+  ObjectTypeDefinition: ['description', 'name', 'interfaces', 'directives', 'fields'],
+  FieldDefinition: ['description', 'name', 'arguments', 'type', 'directives'],
+  InputValueDefinition: ['description', 'name', 'type', 'defaultValue', 'directives'],
+  InterfaceTypeDefinition: ['description', 'name', 'directives', 'fields'],
+  UnionTypeDefinition: ['description', 'name', 'directives', 'types'],
+  EnumTypeDefinition: ['description', 'name', 'directives', 'values'],
+  EnumValueDefinition: ['description', 'name', 'directives'],
+  InputObjectTypeDefinition: ['description', 'name', 'directives', 'fields'],
+  DirectiveDefinition: ['description', 'name', 'arguments', 'locations'],
+  SchemaExtension: ['directives', 'operationTypes'],
+  ScalarTypeExtension: ['name', 'directives'],
+  ObjectTypeExtension: ['name', 'interfaces', 'directives', 'fields'],
+  InterfaceTypeExtension: ['name', 'directives', 'fields'],
+  UnionTypeExtension: ['name', 'directives', 'types'],
+  EnumTypeExtension: ['name', 'directives', 'values'],
+  InputObjectTypeExtension: ['name', 'directives', 'fields']
+};
+exports.QueryDocumentKeys = QueryDocumentKeys;
+var BREAK = Object.freeze({});
+/**
+ * visit() will walk through an AST using a depth first traversal, calling
+ * the visitor's enter function at each node in the traversal, and calling the
+ * leave function after visiting that node and all of its child nodes.
+ *
+ * By returning different values from the enter and leave functions, the
+ * behavior of the visitor can be altered, including skipping over a sub-tree of
+ * the AST (by returning false), editing the AST by returning a value or null
+ * to remove the value, or to stop the whole traversal by returning BREAK.
+ *
+ * When using visit() to edit an AST, the original AST will not be modified, and
+ * a new version of the AST with the changes applied will be returned from the
+ * visit function.
+ *
+ *     const editedAST = visit(ast, {
+ *       enter(node, key, parent, path, ancestors) {
+ *         // @return
+ *         //   undefined: no action
+ *         //   false: skip visiting this node
+ *         //   visitor.BREAK: stop visiting altogether
+ *         //   null: delete this node
+ *         //   any value: replace this node with the returned value
+ *       },
+ *       leave(node, key, parent, path, ancestors) {
+ *         // @return
+ *         //   undefined: no action
+ *         //   false: no action
+ *         //   visitor.BREAK: stop visiting altogether
+ *         //   null: delete this node
+ *         //   any value: replace this node with the returned value
+ *       }
+ *     });
+ *
+ * Alternatively to providing enter() and leave() functions, a visitor can
+ * instead provide functions named the same as the kinds of AST nodes, or
+ * enter/leave visitors at a named key, leading to four permutations of
+ * visitor API:
+ *
+ * 1) Named visitors triggered when entering a node a specific kind.
+ *
+ *     visit(ast, {
+ *       Kind(node) {
+ *         // enter the "Kind" node
+ *       }
+ *     })
+ *
+ * 2) Named visitors that trigger upon entering and leaving a node of
+ *    a specific kind.
+ *
+ *     visit(ast, {
+ *       Kind: {
+ *         enter(node) {
+ *           // enter the "Kind" node
+ *         }
+ *         leave(node) {
+ *           // leave the "Kind" node
+ *         }
+ *       }
+ *     })
+ *
+ * 3) Generic visitors that trigger upon entering and leaving any node.
+ *
+ *     visit(ast, {
+ *       enter(node) {
+ *         // enter any node
+ *       },
+ *       leave(node) {
+ *         // leave any node
+ *       }
+ *     })
+ *
+ * 4) Parallel visitors for entering and leaving nodes of a specific kind.
+ *
+ *     visit(ast, {
+ *       enter: {
+ *         Kind(node) {
+ *           // enter the "Kind" node
+ *         }
+ *       },
+ *       leave: {
+ *         Kind(node) {
+ *           // leave the "Kind" node
+ *         }
+ *       }
+ *     })
+ */
+
+exports.BREAK = BREAK;
+
+function visit(root, visitor) {
+  var visitorKeys = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : QueryDocumentKeys;
+  /* eslint-disable no-undef-init */
+
+  var stack = undefined;
+  var inArray = Array.isArray(root);
+  var keys = [root];
+  var index = -1;
+  var edits = [];
+  var node = undefined;
+  var key = undefined;
+  var parent = undefined;
+  var path = [];
+  var ancestors = [];
+  var newRoot = root;
+  /* eslint-enable no-undef-init */
+
+  do {
+    index++;
+    var isLeaving = index === keys.length;
+    var isEdited = isLeaving && edits.length !== 0;
+
+    if (isLeaving) {
+      key = ancestors.length === 0 ? undefined : path[path.length - 1];
+      node = parent;
+      parent = ancestors.pop();
+
+      if (isEdited) {
+        if (inArray) {
+          node = node.slice();
+        } else {
+          var clone = {};
+
+          for (var _i2 = 0, _Object$keys2 = Object.keys(node); _i2 < _Object$keys2.length; _i2++) {
+            var k = _Object$keys2[_i2];
+            clone[k] = node[k];
+          }
+
+          node = clone;
+        }
+
+        var editOffset = 0;
+
+        for (var ii = 0; ii < edits.length; ii++) {
+          var editKey = edits[ii][0];
+          var editValue = edits[ii][1];
+
+          if (inArray) {
+            editKey -= editOffset;
+          }
+
+          if (inArray && editValue === null) {
+            node.splice(editKey, 1);
+            editOffset++;
+          } else {
+            node[editKey] = editValue;
+          }
+        }
+      }
+
+      index = stack.index;
+      keys = stack.keys;
+      edits = stack.edits;
+      inArray = stack.inArray;
+      stack = stack.prev;
+    } else {
+      key = parent ? inArray ? index : keys[index] : undefined;
+      node = parent ? parent[key] : newRoot;
+
+      if (node === null || node === undefined) {
+        continue;
+      }
+
+      if (parent) {
+        path.push(key);
+      }
+    }
+
+    var result = void 0;
+
+    if (!Array.isArray(node)) {
+      if (!isNode(node)) {
+        throw new Error('Invalid AST Node: ' + (0, _inspect.default)(node));
+      }
+
+      var visitFn = getVisitFn(visitor, node.kind, isLeaving);
+
+      if (visitFn) {
+        result = visitFn.call(visitor, node, key, parent, path, ancestors);
+
+        if (result === BREAK) {
+          break;
+        }
+
+        if (result === false) {
+          if (!isLeaving) {
+            path.pop();
+            continue;
+          }
+        } else if (result !== undefined) {
+          edits.push([key, result]);
+
+          if (!isLeaving) {
+            if (isNode(result)) {
+              node = result;
+            } else {
+              path.pop();
+              continue;
+            }
+          }
+        }
+      }
+    }
+
+    if (result === undefined && isEdited) {
+      edits.push([key, node]);
+    }
+
+    if (isLeaving) {
+      path.pop();
+    } else {
+      stack = {
+        inArray: inArray,
+        index: index,
+        keys: keys,
+        edits: edits,
+        prev: stack
+      };
+      inArray = Array.isArray(node);
+      keys = inArray ? node : visitorKeys[node.kind] || [];
+      index = -1;
+      edits = [];
+
+      if (parent) {
+        ancestors.push(parent);
+      }
+
+      parent = node;
+    }
+  } while (stack !== undefined);
+
+  if (edits.length !== 0) {
+    newRoot = edits[edits.length - 1][1];
+  }
+
+  return newRoot;
+}
+
+function isNode(maybeNode) {
+  return Boolean(maybeNode && typeof maybeNode.kind === 'string');
+}
+/**
+ * Creates a new visitor instance which delegates to many visitors to run in
+ * parallel. Each visitor will be visited for each node before moving on.
+ *
+ * If a prior visitor edits a node, no following visitors will see that node.
+ */
+
+
+function visitInParallel(visitors) {
+  var skipping = new Array(visitors.length);
+  return {
+    enter: function enter(node) {
+      for (var i = 0; i < visitors.length; i++) {
+        if (!skipping[i]) {
+          var fn = getVisitFn(visitors[i], node.kind,
+          /* isLeaving */
+          false);
+
+          if (fn) {
+            var result = fn.apply(visitors[i], arguments);
+
+            if (result === false) {
+              skipping[i] = node;
+            } else if (result === BREAK) {
+              skipping[i] = BREAK;
+            } else if (result !== undefined) {
+              return result;
+            }
+          }
+        }
+      }
+    },
+    leave: function leave(node) {
+      for (var i = 0; i < visitors.length; i++) {
+        if (!skipping[i]) {
+          var fn = getVisitFn(visitors[i], node.kind,
+          /* isLeaving */
+          true);
+
+          if (fn) {
+            var result = fn.apply(visitors[i], arguments);
+
+            if (result === BREAK) {
+              skipping[i] = BREAK;
+            } else if (result !== undefined && result !== false) {
+              return result;
+            }
+          }
+        } else if (skipping[i] === node) {
+          skipping[i] = null;
+        }
+      }
+    }
+  };
+}
+/**
+ * Creates a new visitor instance which maintains a provided TypeInfo instance
+ * along with visiting visitor.
+ */
+
+
+function visitWithTypeInfo(typeInfo, visitor) {
+  return {
+    enter: function enter(node) {
+      typeInfo.enter(node);
+      var fn = getVisitFn(visitor, node.kind,
+      /* isLeaving */
+      false);
+
+      if (fn) {
+        var result = fn.apply(visitor, arguments);
+
+        if (result !== undefined) {
+          typeInfo.leave(node);
+
+          if (isNode(result)) {
+            typeInfo.enter(result);
+          }
+        }
+
+        return result;
+      }
+    },
+    leave: function leave(node) {
+      var fn = getVisitFn(visitor, node.kind,
+      /* isLeaving */
+      true);
+      var result;
+
+      if (fn) {
+        result = fn.apply(visitor, arguments);
+      }
+
+      typeInfo.leave(node);
+      return result;
+    }
+  };
+}
+/**
+ * Given a visitor instance, if it is leaving or not, and a node kind, return
+ * the function the visitor runtime should call.
+ */
+
+
+function getVisitFn(visitor, kind, isLeaving) {
+  var kindVisitor = visitor[kind];
+
+  if (kindVisitor) {
+    if (!isLeaving && typeof kindVisitor === 'function') {
+      // { Kind() {} }
+      return kindVisitor;
+    }
+
+    var kindSpecificVisitor = isLeaving ? kindVisitor.leave : kindVisitor.enter;
+
+    if (typeof kindSpecificVisitor === 'function') {
+      // { Kind: { enter() {}, leave() {} } }
+      return kindSpecificVisitor;
+    }
+  } else {
+    var specificVisitor = isLeaving ? visitor.leave : visitor.enter;
+
+    if (specificVisitor) {
+      if (typeof specificVisitor === 'function') {
+        // { enter() {}, leave() {} }
+        return specificVisitor;
+      }
+
+      var specificKindVisitor = specificVisitor[kind];
+
+      if (typeof specificKindVisitor === 'function') {
+        // { enter: { Kind() {} }, leave: { Kind() {} } }
+        return specificKindVisitor;
+      }
+    }
+  }
+}
+},{"../jsutils/inspect":"../node_modules/graphql/jsutils/inspect.js"}],"../node_modules/graphql/language/blockString.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.dedentBlockStringValue = dedentBlockStringValue;
+exports.getBlockStringIndentation = getBlockStringIndentation;
+exports.printBlockString = printBlockString;
+/**
+ * Produces the value of a block string from its parsed raw value, similar to
+ * CoffeeScript's block string, Python's docstring trim or Ruby's strip_heredoc.
+ *
+ * This implements the GraphQL spec's BlockStringValue() static algorithm.
+ */
+
+function dedentBlockStringValue(rawString) {
+  // Expand a block string's raw value into independent lines.
+  var lines = rawString.split(/\r\n|[\n\r]/g); // Remove common indentation from all lines but first.
+
+  var commonIndent = getBlockStringIndentation(lines);
+
+  if (commonIndent !== 0) {
+    for (var i = 1; i < lines.length; i++) {
+      lines[i] = lines[i].slice(commonIndent);
+    }
+  } // Remove leading and trailing blank lines.
+
+
+  while (lines.length > 0 && isBlank(lines[0])) {
+    lines.shift();
+  }
+
+  while (lines.length > 0 && isBlank(lines[lines.length - 1])) {
+    lines.pop();
+  } // Return a string of the lines joined with U+000A.
+
+
+  return lines.join('\n');
+} // @internal
+
+
+function getBlockStringIndentation(lines) {
+  var commonIndent = null;
+
+  for (var i = 1; i < lines.length; i++) {
+    var line = lines[i];
+    var indent = leadingWhitespace(line);
+
+    if (indent === line.length) {
+      continue; // skip empty lines
+    }
+
+    if (commonIndent === null || indent < commonIndent) {
+      commonIndent = indent;
+
+      if (commonIndent === 0) {
+        break;
+      }
+    }
+  }
+
+  return commonIndent === null ? 0 : commonIndent;
+}
+
+function leadingWhitespace(str) {
+  var i = 0;
+
+  while (i < str.length && (str[i] === ' ' || str[i] === '\t')) {
+    i++;
+  }
+
+  return i;
+}
+
+function isBlank(str) {
+  return leadingWhitespace(str) === str.length;
+}
+/**
+ * Print a block string in the indented block form by adding a leading and
+ * trailing blank line. However, if a block string starts with whitespace and is
+ * a single-line, adding a leading blank line would strip that whitespace.
+ */
+
+
+function printBlockString(value) {
+  var indentation = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : '';
+  var preferMultipleLines = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
+  var isSingleLine = value.indexOf('\n') === -1;
+  var hasLeadingSpace = value[0] === ' ' || value[0] === '\t';
+  var hasTrailingQuote = value[value.length - 1] === '"';
+  var printAsMultipleLines = !isSingleLine || hasTrailingQuote || preferMultipleLines;
+  var result = ''; // Format a multi-line block quote to account for leading space.
+
+  if (printAsMultipleLines && !(isSingleLine && hasLeadingSpace)) {
+    result += '\n' + indentation;
+  }
+
+  result += indentation ? value.replace(/\n/g, '\n' + indentation) : value;
+
+  if (printAsMultipleLines) {
+    result += '\n';
+  }
+
+  return '"""' + result.replace(/"""/g, '\\"""') + '"""';
+}
+},{}],"../node_modules/graphql/language/printer.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.print = print;
+
+var _visitor = require("./visitor");
+
+var _blockString = require("./blockString");
+/**
+ * Converts an AST into a string, using one set of reasonable
+ * formatting rules.
+ */
+
+
+function print(ast) {
+  return (0, _visitor.visit)(ast, {
+    leave: printDocASTReducer
+  });
+} // TODO: provide better type coverage in future
+
+
+var printDocASTReducer = {
+  Name: function Name(node) {
+    return node.value;
+  },
+  Variable: function Variable(node) {
+    return '$' + node.name;
+  },
+  // Document
+  Document: function Document(node) {
+    return join(node.definitions, '\n\n') + '\n';
+  },
+  OperationDefinition: function OperationDefinition(node) {
+    var op = node.operation;
+    var name = node.name;
+    var varDefs = wrap('(', join(node.variableDefinitions, ', '), ')');
+    var directives = join(node.directives, ' ');
+    var selectionSet = node.selectionSet; // Anonymous queries with no directives or variable definitions can use
+    // the query short form.
+
+    return !name && !directives && !varDefs && op === 'query' ? selectionSet : join([op, join([name, varDefs]), directives, selectionSet], ' ');
+  },
+  VariableDefinition: function VariableDefinition(_ref) {
+    var variable = _ref.variable,
+        type = _ref.type,
+        defaultValue = _ref.defaultValue,
+        directives = _ref.directives;
+    return variable + ': ' + type + wrap(' = ', defaultValue) + wrap(' ', join(directives, ' '));
+  },
+  SelectionSet: function SelectionSet(_ref2) {
+    var selections = _ref2.selections;
+    return block(selections);
+  },
+  Field: function Field(_ref3) {
+    var alias = _ref3.alias,
+        name = _ref3.name,
+        args = _ref3.arguments,
+        directives = _ref3.directives,
+        selectionSet = _ref3.selectionSet;
+    return join([wrap('', alias, ': ') + name + wrap('(', join(args, ', '), ')'), join(directives, ' '), selectionSet], ' ');
+  },
+  Argument: function Argument(_ref4) {
+    var name = _ref4.name,
+        value = _ref4.value;
+    return name + ': ' + value;
+  },
+  // Fragments
+  FragmentSpread: function FragmentSpread(_ref5) {
+    var name = _ref5.name,
+        directives = _ref5.directives;
+    return '...' + name + wrap(' ', join(directives, ' '));
+  },
+  InlineFragment: function InlineFragment(_ref6) {
+    var typeCondition = _ref6.typeCondition,
+        directives = _ref6.directives,
+        selectionSet = _ref6.selectionSet;
+    return join(['...', wrap('on ', typeCondition), join(directives, ' '), selectionSet], ' ');
+  },
+  FragmentDefinition: function FragmentDefinition(_ref7) {
+    var name = _ref7.name,
+        typeCondition = _ref7.typeCondition,
+        variableDefinitions = _ref7.variableDefinitions,
+        directives = _ref7.directives,
+        selectionSet = _ref7.selectionSet;
+    return (// Note: fragment variable definitions are experimental and may be changed
+      // or removed in the future.
+      "fragment ".concat(name).concat(wrap('(', join(variableDefinitions, ', '), ')'), " ") + "on ".concat(typeCondition, " ").concat(wrap('', join(directives, ' '), ' ')) + selectionSet
+    );
+  },
+  // Value
+  IntValue: function IntValue(_ref8) {
+    var value = _ref8.value;
+    return value;
+  },
+  FloatValue: function FloatValue(_ref9) {
+    var value = _ref9.value;
+    return value;
+  },
+  StringValue: function StringValue(_ref10, key) {
+    var value = _ref10.value,
+        isBlockString = _ref10.block;
+    return isBlockString ? (0, _blockString.printBlockString)(value, key === 'description' ? '' : '  ') : JSON.stringify(value);
+  },
+  BooleanValue: function BooleanValue(_ref11) {
+    var value = _ref11.value;
+    return value ? 'true' : 'false';
+  },
+  NullValue: function NullValue() {
+    return 'null';
+  },
+  EnumValue: function EnumValue(_ref12) {
+    var value = _ref12.value;
+    return value;
+  },
+  ListValue: function ListValue(_ref13) {
+    var values = _ref13.values;
+    return '[' + join(values, ', ') + ']';
+  },
+  ObjectValue: function ObjectValue(_ref14) {
+    var fields = _ref14.fields;
+    return '{' + join(fields, ', ') + '}';
+  },
+  ObjectField: function ObjectField(_ref15) {
+    var name = _ref15.name,
+        value = _ref15.value;
+    return name + ': ' + value;
+  },
+  // Directive
+  Directive: function Directive(_ref16) {
+    var name = _ref16.name,
+        args = _ref16.arguments;
+    return '@' + name + wrap('(', join(args, ', '), ')');
+  },
+  // Type
+  NamedType: function NamedType(_ref17) {
+    var name = _ref17.name;
+    return name;
+  },
+  ListType: function ListType(_ref18) {
+    var type = _ref18.type;
+    return '[' + type + ']';
+  },
+  NonNullType: function NonNullType(_ref19) {
+    var type = _ref19.type;
+    return type + '!';
+  },
+  // Type System Definitions
+  SchemaDefinition: function SchemaDefinition(_ref20) {
+    var directives = _ref20.directives,
+        operationTypes = _ref20.operationTypes;
+    return join(['schema', join(directives, ' '), block(operationTypes)], ' ');
+  },
+  OperationTypeDefinition: function OperationTypeDefinition(_ref21) {
+    var operation = _ref21.operation,
+        type = _ref21.type;
+    return operation + ': ' + type;
+  },
+  ScalarTypeDefinition: addDescription(function (_ref22) {
+    var name = _ref22.name,
+        directives = _ref22.directives;
+    return join(['scalar', name, join(directives, ' ')], ' ');
+  }),
+  ObjectTypeDefinition: addDescription(function (_ref23) {
+    var name = _ref23.name,
+        interfaces = _ref23.interfaces,
+        directives = _ref23.directives,
+        fields = _ref23.fields;
+    return join(['type', name, wrap('implements ', join(interfaces, ' & ')), join(directives, ' '), block(fields)], ' ');
+  }),
+  FieldDefinition: addDescription(function (_ref24) {
+    var name = _ref24.name,
+        args = _ref24.arguments,
+        type = _ref24.type,
+        directives = _ref24.directives;
+    return name + (hasMultilineItems(args) ? wrap('(\n', indent(join(args, '\n')), '\n)') : wrap('(', join(args, ', '), ')')) + ': ' + type + wrap(' ', join(directives, ' '));
+  }),
+  InputValueDefinition: addDescription(function (_ref25) {
+    var name = _ref25.name,
+        type = _ref25.type,
+        defaultValue = _ref25.defaultValue,
+        directives = _ref25.directives;
+    return join([name + ': ' + type, wrap('= ', defaultValue), join(directives, ' ')], ' ');
+  }),
+  InterfaceTypeDefinition: addDescription(function (_ref26) {
+    var name = _ref26.name,
+        directives = _ref26.directives,
+        fields = _ref26.fields;
+    return join(['interface', name, join(directives, ' '), block(fields)], ' ');
+  }),
+  UnionTypeDefinition: addDescription(function (_ref27) {
+    var name = _ref27.name,
+        directives = _ref27.directives,
+        types = _ref27.types;
+    return join(['union', name, join(directives, ' '), types && types.length !== 0 ? '= ' + join(types, ' | ') : ''], ' ');
+  }),
+  EnumTypeDefinition: addDescription(function (_ref28) {
+    var name = _ref28.name,
+        directives = _ref28.directives,
+        values = _ref28.values;
+    return join(['enum', name, join(directives, ' '), block(values)], ' ');
+  }),
+  EnumValueDefinition: addDescription(function (_ref29) {
+    var name = _ref29.name,
+        directives = _ref29.directives;
+    return join([name, join(directives, ' ')], ' ');
+  }),
+  InputObjectTypeDefinition: addDescription(function (_ref30) {
+    var name = _ref30.name,
+        directives = _ref30.directives,
+        fields = _ref30.fields;
+    return join(['input', name, join(directives, ' '), block(fields)], ' ');
+  }),
+  DirectiveDefinition: addDescription(function (_ref31) {
+    var name = _ref31.name,
+        args = _ref31.arguments,
+        repeatable = _ref31.repeatable,
+        locations = _ref31.locations;
+    return 'directive @' + name + (hasMultilineItems(args) ? wrap('(\n', indent(join(args, '\n')), '\n)') : wrap('(', join(args, ', '), ')')) + (repeatable ? ' repeatable' : '') + ' on ' + join(locations, ' | ');
+  }),
+  SchemaExtension: function SchemaExtension(_ref32) {
+    var directives = _ref32.directives,
+        operationTypes = _ref32.operationTypes;
+    return join(['extend schema', join(directives, ' '), block(operationTypes)], ' ');
+  },
+  ScalarTypeExtension: function ScalarTypeExtension(_ref33) {
+    var name = _ref33.name,
+        directives = _ref33.directives;
+    return join(['extend scalar', name, join(directives, ' ')], ' ');
+  },
+  ObjectTypeExtension: function ObjectTypeExtension(_ref34) {
+    var name = _ref34.name,
+        interfaces = _ref34.interfaces,
+        directives = _ref34.directives,
+        fields = _ref34.fields;
+    return join(['extend type', name, wrap('implements ', join(interfaces, ' & ')), join(directives, ' '), block(fields)], ' ');
+  },
+  InterfaceTypeExtension: function InterfaceTypeExtension(_ref35) {
+    var name = _ref35.name,
+        directives = _ref35.directives,
+        fields = _ref35.fields;
+    return join(['extend interface', name, join(directives, ' '), block(fields)], ' ');
+  },
+  UnionTypeExtension: function UnionTypeExtension(_ref36) {
+    var name = _ref36.name,
+        directives = _ref36.directives,
+        types = _ref36.types;
+    return join(['extend union', name, join(directives, ' '), types && types.length !== 0 ? '= ' + join(types, ' | ') : ''], ' ');
+  },
+  EnumTypeExtension: function EnumTypeExtension(_ref37) {
+    var name = _ref37.name,
+        directives = _ref37.directives,
+        values = _ref37.values;
+    return join(['extend enum', name, join(directives, ' '), block(values)], ' ');
+  },
+  InputObjectTypeExtension: function InputObjectTypeExtension(_ref38) {
+    var name = _ref38.name,
+        directives = _ref38.directives,
+        fields = _ref38.fields;
+    return join(['extend input', name, join(directives, ' '), block(fields)], ' ');
+  }
+};
+
+function addDescription(cb) {
+  return function (node) {
+    return join([node.description, cb(node)], '\n');
+  };
+}
+/**
+ * Given maybeArray, print an empty string if it is null or empty, otherwise
+ * print all items together separated by separator if provided
+ */
+
+
+function join(maybeArray, separator) {
+  return maybeArray ? maybeArray.filter(function (x) {
+    return x;
+  }).join(separator || '') : '';
+}
+/**
+ * Given array, print each item on its own line, wrapped in an
+ * indented "{ }" block.
+ */
+
+
+function block(array) {
+  return array && array.length !== 0 ? '{\n' + indent(join(array, '\n')) + '\n}' : '';
+}
+/**
+ * If maybeString is not null or empty, then wrap with start and end, otherwise
+ * print an empty string.
+ */
+
+
+function wrap(start, maybeString, end) {
+  return maybeString ? start + maybeString + (end || '') : '';
+}
+
+function indent(maybeString) {
+  return maybeString && '  ' + maybeString.replace(/\n/g, '\n  ');
+}
+
+function isMultiline(string) {
+  return string.indexOf('\n') !== -1;
+}
+
+function hasMultilineItems(maybeArray) {
+  return maybeArray && maybeArray.some(isMultiline);
+}
+},{"./visitor":"../node_modules/graphql/language/visitor.js","./blockString":"../node_modules/graphql/language/blockString.js"}],"../node_modules/@apollo/client/link/http/selectHttpOptionsAndBody.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.selectHttpOptionsAndBody = exports.fallbackHttpConfig = void 0;
+
+var _tslib = require("tslib");
+
+var _printer = require("graphql/language/printer");
+
+var defaultHttpOptions = {
+  includeQuery: true,
+  includeExtensions: false
+};
+var defaultHeaders = {
+  accept: '*/*',
+  'content-type': 'application/json'
+};
+var defaultOptions = {
+  method: 'POST'
+};
+var fallbackHttpConfig = {
+  http: defaultHttpOptions,
+  headers: defaultHeaders,
+  options: defaultOptions
+};
+exports.fallbackHttpConfig = fallbackHttpConfig;
+
+var selectHttpOptionsAndBody = function (operation, fallbackConfig) {
+  var configs = [];
+
+  for (var _i = 2; _i < arguments.length; _i++) {
+    configs[_i - 2] = arguments[_i];
+  }
+
+  var options = (0, _tslib.__assign)((0, _tslib.__assign)({}, fallbackConfig.options), {
+    headers: fallbackConfig.headers,
+    credentials: fallbackConfig.credentials
+  });
+  var http = fallbackConfig.http;
+  configs.forEach(function (config) {
+    options = (0, _tslib.__assign)((0, _tslib.__assign)((0, _tslib.__assign)({}, options), config.options), {
+      headers: (0, _tslib.__assign)((0, _tslib.__assign)({}, options.headers), config.headers)
+    });
+    if (config.credentials) options.credentials = config.credentials;
+    http = (0, _tslib.__assign)((0, _tslib.__assign)({}, http), config.http);
+  });
+  var operationName = operation.operationName,
+      extensions = operation.extensions,
+      variables = operation.variables,
+      query = operation.query;
+  var body = {
+    operationName: operationName,
+    variables: variables
+  };
+  if (http.includeExtensions) body.extensions = extensions;
+  if (http.includeQuery) body.query = (0, _printer.print)(query);
+  return {
+    options: options,
+    body: body
+  };
+};
+
+exports.selectHttpOptionsAndBody = selectHttpOptionsAndBody;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","graphql/language/printer":"../node_modules/graphql/language/printer.js"}],"../node_modules/@apollo/client/link/http/createSignalIfSupported.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.createSignalIfSupported = void 0;
+
+var createSignalIfSupported = function () {
+  if (typeof AbortController === 'undefined') return {
+    controller: false,
+    signal: false
+  };
+  var controller = new AbortController();
+  var signal = controller.signal;
+  return {
+    controller: controller,
+    signal: signal
+  };
+};
+
+exports.createSignalIfSupported = createSignalIfSupported;
+},{}],"../node_modules/@apollo/client/link/utils/fromError.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.fromError = fromError;
+
+var _zenObservable = _interopRequireDefault(require("zen-observable"));
+
+require("symbol-observable");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function fromError(errorValue) {
+  return new _zenObservable.default(function (observer) {
+    observer.error(errorValue);
+  });
+}
+},{"zen-observable":"../node_modules/zen-observable/index.js","symbol-observable":"../node_modules/symbol-observable/es/index.js"}],"../node_modules/@apollo/client/link/http/rewriteURIForGET.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.rewriteURIForGET = rewriteURIForGET;
+
+var _serializeFetchParameter = require("./serializeFetchParameter.js");
+
+function rewriteURIForGET(chosenURI, body) {
+  var queryParams = [];
+
+  var addQueryParam = function (key, value) {
+    queryParams.push(key + "=" + encodeURIComponent(value));
+  };
+
+  if ('query' in body) {
+    addQueryParam('query', body.query);
+  }
+
+  if (body.operationName) {
+    addQueryParam('operationName', body.operationName);
+  }
+
+  if (body.variables) {
+    var serializedVariables = void 0;
+
+    try {
+      serializedVariables = (0, _serializeFetchParameter.serializeFetchParameter)(body.variables, 'Variables map');
+    } catch (parseError) {
+      return {
+        parseError: parseError
+      };
+    }
+
+    addQueryParam('variables', serializedVariables);
+  }
+
+  if (body.extensions) {
+    var serializedExtensions = void 0;
+
+    try {
+      serializedExtensions = (0, _serializeFetchParameter.serializeFetchParameter)(body.extensions, 'Extensions map');
+    } catch (parseError) {
+      return {
+        parseError: parseError
+      };
+    }
+
+    addQueryParam('extensions', serializedExtensions);
+  }
+
+  var fragment = '',
+      preFragment = chosenURI;
+  var fragmentStart = chosenURI.indexOf('#');
+
+  if (fragmentStart !== -1) {
+    fragment = chosenURI.substr(fragmentStart);
+    preFragment = chosenURI.substr(0, fragmentStart);
+  }
+
+  var queryParamsPrefix = preFragment.indexOf('?') === -1 ? '?' : '&';
+  var newURI = preFragment + queryParamsPrefix + queryParams.join('&') + fragment;
+  return {
+    newURI: newURI
+  };
+}
+},{"./serializeFetchParameter.js":"../node_modules/@apollo/client/link/http/serializeFetchParameter.js"}],"../node_modules/@apollo/client/link/http/createHttpLink.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.createHttpLink = void 0;
+
+var _tslib = require("tslib");
+
+var _zenObservable = _interopRequireDefault(require("zen-observable"));
+
+require("symbol-observable");
+
+var _ApolloLink = require("../core/ApolloLink.js");
+
+var _serializeFetchParameter = require("./serializeFetchParameter.js");
+
+var _selectURI = require("./selectURI.js");
+
+var _parseAndCheckHttpResponse = require("./parseAndCheckHttpResponse.js");
+
+var _checkFetcher = require("./checkFetcher.js");
+
+var _selectHttpOptionsAndBody = require("./selectHttpOptionsAndBody.js");
+
+var _createSignalIfSupported = require("./createSignalIfSupported.js");
+
+var _rewriteURIForGET = require("./rewriteURIForGET.js");
+
+var _fromError = require("../utils/fromError.js");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var createHttpLink = function (linkOptions) {
+  if (linkOptions === void 0) {
+    linkOptions = {};
+  }
+
+  var _a = linkOptions.uri,
+      uri = _a === void 0 ? '/graphql' : _a,
+      fetcher = linkOptions.fetch,
+      includeExtensions = linkOptions.includeExtensions,
+      useGETForQueries = linkOptions.useGETForQueries,
+      requestOptions = (0, _tslib.__rest)(linkOptions, ["uri", "fetch", "includeExtensions", "useGETForQueries"]);
+  (0, _checkFetcher.checkFetcher)(fetcher);
+
+  if (!fetcher) {
+    fetcher = fetch;
+  }
+
+  var linkConfig = {
+    http: {
+      includeExtensions: includeExtensions
+    },
+    options: requestOptions.fetchOptions,
+    credentials: requestOptions.credentials,
+    headers: requestOptions.headers
+  };
+  return new _ApolloLink.ApolloLink(function (operation) {
+    var chosenURI = (0, _selectURI.selectURI)(operation, uri);
+    var context = operation.getContext();
+    var clientAwarenessHeaders = {};
+
+    if (context.clientAwareness) {
+      var _a = context.clientAwareness,
+          name_1 = _a.name,
+          version = _a.version;
+
+      if (name_1) {
+        clientAwarenessHeaders['apollographql-client-name'] = name_1;
+      }
+
+      if (version) {
+        clientAwarenessHeaders['apollographql-client-version'] = version;
+      }
+    }
+
+    var contextHeaders = (0, _tslib.__assign)((0, _tslib.__assign)({}, clientAwarenessHeaders), context.headers);
+    var contextConfig = {
+      http: context.http,
+      options: context.fetchOptions,
+      credentials: context.credentials,
+      headers: contextHeaders
+    };
+
+    var _b = (0, _selectHttpOptionsAndBody.selectHttpOptionsAndBody)(operation, _selectHttpOptionsAndBody.fallbackHttpConfig, linkConfig, contextConfig),
+        options = _b.options,
+        body = _b.body;
+
+    var controller;
+
+    if (!options.signal) {
+      var _c = (0, _createSignalIfSupported.createSignalIfSupported)(),
+          _controller = _c.controller,
+          signal = _c.signal;
+
+      controller = _controller;
+      if (controller) options.signal = signal;
+    }
+
+    var definitionIsMutation = function (d) {
+      return d.kind === 'OperationDefinition' && d.operation === 'mutation';
+    };
+
+    if (useGETForQueries && !operation.query.definitions.some(definitionIsMutation)) {
+      options.method = 'GET';
+    }
+
+    if (options.method === 'GET') {
+      var _d = (0, _rewriteURIForGET.rewriteURIForGET)(chosenURI, body),
+          newURI = _d.newURI,
+          parseError = _d.parseError;
+
+      if (parseError) {
+        return (0, _fromError.fromError)(parseError);
+      }
+
+      chosenURI = newURI;
+    } else {
+      try {
+        options.body = (0, _serializeFetchParameter.serializeFetchParameter)(body, 'Payload');
+      } catch (parseError) {
+        return (0, _fromError.fromError)(parseError);
+      }
+    }
+
+    return new _zenObservable.default(function (observer) {
+      fetcher(chosenURI, options).then(function (response) {
+        operation.setContext({
+          response: response
+        });
+        return response;
+      }).then((0, _parseAndCheckHttpResponse.parseAndCheckHttpResponse)(operation)).then(function (result) {
+        observer.next(result);
+        observer.complete();
+        return result;
+      }).catch(function (err) {
+        if (err.name === 'AbortError') return;
+
+        if (err.result && err.result.errors && err.result.data) {
+          observer.next(err.result);
+        }
+
+        observer.error(err);
+      });
+      return function () {
+        if (controller) controller.abort();
+      };
+    });
+  });
+};
+
+exports.createHttpLink = createHttpLink;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","zen-observable":"../node_modules/zen-observable/index.js","symbol-observable":"../node_modules/symbol-observable/es/index.js","../core/ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js","./serializeFetchParameter.js":"../node_modules/@apollo/client/link/http/serializeFetchParameter.js","./selectURI.js":"../node_modules/@apollo/client/link/http/selectURI.js","./parseAndCheckHttpResponse.js":"../node_modules/@apollo/client/link/http/parseAndCheckHttpResponse.js","./checkFetcher.js":"../node_modules/@apollo/client/link/http/checkFetcher.js","./selectHttpOptionsAndBody.js":"../node_modules/@apollo/client/link/http/selectHttpOptionsAndBody.js","./createSignalIfSupported.js":"../node_modules/@apollo/client/link/http/createSignalIfSupported.js","./rewriteURIForGET.js":"../node_modules/@apollo/client/link/http/rewriteURIForGET.js","../utils/fromError.js":"../node_modules/@apollo/client/link/utils/fromError.js"}],"../node_modules/@apollo/client/link/http/HttpLink.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.HttpLink = void 0;
+
+var _tslib = require("tslib");
+
+var _ApolloLink = require("../core/ApolloLink.js");
+
+var _createHttpLink = require("./createHttpLink.js");
+
+var HttpLink = function (_super) {
+  (0, _tslib.__extends)(HttpLink, _super);
+
+  function HttpLink(options) {
+    if (options === void 0) {
+      options = {};
+    }
+
+    var _this = _super.call(this, (0, _createHttpLink.createHttpLink)(options).request) || this;
+
+    _this.options = options;
+    return _this;
+  }
+
+  return HttpLink;
+}(_ApolloLink.ApolloLink);
+
+exports.HttpLink = HttpLink;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","../core/ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js","./createHttpLink.js":"../node_modules/@apollo/client/link/http/createHttpLink.js"}],"../node_modules/@apollo/client/utilities/graphql/directives.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.getDirectiveNames = getDirectiveNames;
+exports.getInclusionDirectives = getInclusionDirectives;
+exports.hasClientExports = hasClientExports;
+exports.hasDirectives = hasDirectives;
+exports.shouldInclude = shouldInclude;
+
+var _tsInvariant = require("ts-invariant");
+
+var _visitor = require("graphql/language/visitor");
+
+function shouldInclude(selection, variables) {
+  if (variables === void 0) {
+    variables = {};
+  }
+
+  return getInclusionDirectives(selection.directives).every(function (_a) {
+    var directive = _a.directive,
+        ifArgument = _a.ifArgument;
+    var evaledValue = false;
+
+    if (ifArgument.value.kind === 'Variable') {
+      evaledValue = variables[ifArgument.value.name.value];
+      "development" === "production" ? (0, _tsInvariant.invariant)(evaledValue !== void 0, 42) : (0, _tsInvariant.invariant)(evaledValue !== void 0, "Invalid variable referenced in @" + directive.name.value + " directive.");
+    } else {
+      evaledValue = ifArgument.value.value;
+    }
+
+    return directive.name.value === 'skip' ? !evaledValue : evaledValue;
+  });
+}
+
+function getDirectiveNames(doc) {
+  var names = [];
+  (0, _visitor.visit)(doc, {
+    Directive: function (node) {
+      names.push(node.name.value);
+    }
+  });
+  return names;
+}
+
+function hasDirectives(names, doc) {
+  return getDirectiveNames(doc).some(function (name) {
+    return names.indexOf(name) > -1;
+  });
+}
+
+function hasClientExports(document) {
+  return document && hasDirectives(['client'], document) && hasDirectives(['export'], document);
+}
+
+function isInclusionDirective(_a) {
+  var value = _a.name.value;
+  return value === 'skip' || value === 'include';
+}
+
+function getInclusionDirectives(directives) {
+  return directives ? directives.filter(isInclusionDirective).map(function (directive) {
+    var directiveArguments = directive.arguments;
+    var directiveName = directive.name.value;
+    "development" === "production" ? (0, _tsInvariant.invariant)(directiveArguments && directiveArguments.length === 1, 43) : (0, _tsInvariant.invariant)(directiveArguments && directiveArguments.length === 1, "Incorrect number of arguments for the @" + directiveName + " directive.");
+    var ifArgument = directiveArguments[0];
+    "development" === "production" ? (0, _tsInvariant.invariant)(ifArgument.name && ifArgument.name.value === 'if', 44) : (0, _tsInvariant.invariant)(ifArgument.name && ifArgument.name.value === 'if', "Invalid argument for the @" + directiveName + " directive.");
+    var ifValue = ifArgument.value;
+    "development" === "production" ? (0, _tsInvariant.invariant)(ifValue && (ifValue.kind === 'Variable' || ifValue.kind === 'BooleanValue'), 45) : (0, _tsInvariant.invariant)(ifValue && (ifValue.kind === 'Variable' || ifValue.kind === 'BooleanValue'), "Argument for the @" + directiveName + " directive must be a variable or a boolean value.");
+    return {
+      directive: directive,
+      ifArgument: ifArgument
+    };
+  }) : [];
+}
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","graphql/language/visitor":"../node_modules/graphql/language/visitor.js"}],"../node_modules/@apollo/client/utilities/common/filterInPlace.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.filterInPlace = filterInPlace;
+
+function filterInPlace(array, test, context) {
+  var target = 0;
+  array.forEach(function (elem, i) {
+    if (test.call(this, elem, i, array)) {
+      array[target++] = elem;
+    }
+  }, context);
+  array.length = target;
+  return array;
+}
+},{}],"../node_modules/@apollo/client/utilities/graphql/transform.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.addTypenameToDocument = addTypenameToDocument;
+exports.buildQueryFromSelectionSet = buildQueryFromSelectionSet;
+exports.removeArgumentsFromDocument = removeArgumentsFromDocument;
+exports.removeClientSetsFromDocument = removeClientSetsFromDocument;
+exports.removeConnectionDirectiveFromDocument = removeConnectionDirectiveFromDocument;
+exports.removeDirectivesFromDocument = removeDirectivesFromDocument;
+exports.removeFragmentSpreadFromDocument = removeFragmentSpreadFromDocument;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+var _fragments = require("./fragments.js");
+
+var _storeUtils = require("./storeUtils.js");
+
+var _getFromAST = require("./getFromAST.js");
+
+var _visitor = require("graphql/language/visitor");
+
+var _filterInPlace = require("../common/filterInPlace.js");
+
+var TYPENAME_FIELD = {
+  kind: 'Field',
+  name: {
+    kind: 'Name',
+    value: '__typename'
+  }
+};
+
+function isEmpty(op, fragments) {
+  return op.selectionSet.selections.every(function (selection) {
+    return selection.kind === 'FragmentSpread' && isEmpty(fragments[selection.name.value], fragments);
+  });
+}
+
+function nullIfDocIsEmpty(doc) {
+  return isEmpty((0, _getFromAST.getOperationDefinition)(doc) || (0, _getFromAST.getFragmentDefinition)(doc), (0, _fragments.createFragmentMap)((0, _getFromAST.getFragmentDefinitions)(doc))) ? null : doc;
+}
+
+function getDirectiveMatcher(directives) {
+  return function directiveMatcher(directive) {
+    return directives.some(function (dir) {
+      return dir.name && dir.name === directive.name.value || dir.test && dir.test(directive);
+    });
+  };
+}
+
+function removeDirectivesFromDocument(directives, doc) {
+  var variablesInUse = Object.create(null);
+  var variablesToRemove = [];
+  var fragmentSpreadsInUse = Object.create(null);
+  var fragmentSpreadsToRemove = [];
+  var modifiedDoc = nullIfDocIsEmpty((0, _visitor.visit)(doc, {
+    Variable: {
+      enter: function (node, _key, parent) {
+        if (parent.kind !== 'VariableDefinition') {
+          variablesInUse[node.name.value] = true;
+        }
+      }
+    },
+    Field: {
+      enter: function (node) {
+        if (directives && node.directives) {
+          var shouldRemoveField = directives.some(function (directive) {
+            return directive.remove;
+          });
+
+          if (shouldRemoveField && node.directives && node.directives.some(getDirectiveMatcher(directives))) {
+            if (node.arguments) {
+              node.arguments.forEach(function (arg) {
+                if (arg.value.kind === 'Variable') {
+                  variablesToRemove.push({
+                    name: arg.value.name.value
+                  });
+                }
+              });
+            }
+
+            if (node.selectionSet) {
+              getAllFragmentSpreadsFromSelectionSet(node.selectionSet).forEach(function (frag) {
+                fragmentSpreadsToRemove.push({
+                  name: frag.name.value
+                });
+              });
+            }
+
+            return null;
+          }
+        }
+      }
+    },
+    FragmentSpread: {
+      enter: function (node) {
+        fragmentSpreadsInUse[node.name.value] = true;
+      }
+    },
+    Directive: {
+      enter: function (node) {
+        if (getDirectiveMatcher(directives)(node)) {
+          return null;
+        }
+      }
+    }
+  }));
+
+  if (modifiedDoc && (0, _filterInPlace.filterInPlace)(variablesToRemove, function (v) {
+    return !variablesInUse[v.name];
+  }).length) {
+    modifiedDoc = removeArgumentsFromDocument(variablesToRemove, modifiedDoc);
+  }
+
+  if (modifiedDoc && (0, _filterInPlace.filterInPlace)(fragmentSpreadsToRemove, function (fs) {
+    return !fragmentSpreadsInUse[fs.name];
+  }).length) {
+    modifiedDoc = removeFragmentSpreadFromDocument(fragmentSpreadsToRemove, modifiedDoc);
+  }
+
+  return modifiedDoc;
+}
+
+function addTypenameToDocument(doc) {
+  return (0, _visitor.visit)((0, _getFromAST.checkDocument)(doc), {
+    SelectionSet: {
+      enter: function (node, _key, parent) {
+        if (parent && parent.kind === 'OperationDefinition') {
+          return;
+        }
+
+        var selections = node.selections;
+
+        if (!selections) {
+          return;
+        }
+
+        var skip = selections.some(function (selection) {
+          return (0, _storeUtils.isField)(selection) && (selection.name.value === '__typename' || selection.name.value.lastIndexOf('__', 0) === 0);
+        });
+
+        if (skip) {
+          return;
+        }
+
+        var field = parent;
+
+        if ((0, _storeUtils.isField)(field) && field.directives && field.directives.some(function (d) {
+          return d.name.value === 'export';
+        })) {
+          return;
+        }
+
+        return (0, _tslib.__assign)((0, _tslib.__assign)({}, node), {
+          selections: (0, _tslib.__spreadArrays)(selections, [TYPENAME_FIELD])
+        });
+      }
+    }
+  });
+}
+
+addTypenameToDocument.added = function (field) {
+  return field === TYPENAME_FIELD;
+};
+
+var connectionRemoveConfig = {
+  test: function (directive) {
+    var willRemove = directive.name.value === 'connection';
+
+    if (willRemove) {
+      if (!directive.arguments || !directive.arguments.some(function (arg) {
+        return arg.name.value === 'key';
+      })) {
+        "development" === "production" || _tsInvariant.invariant.warn('Removing an @connection directive even though it does not have a key. ' + 'You may want to use the key parameter to specify a store key.');
+      }
+    }
+
+    return willRemove;
+  }
+};
+
+function removeConnectionDirectiveFromDocument(doc) {
+  return removeDirectivesFromDocument([connectionRemoveConfig], (0, _getFromAST.checkDocument)(doc));
+}
+
+function getArgumentMatcher(config) {
+  return function argumentMatcher(argument) {
+    return config.some(function (aConfig) {
+      return argument.value && argument.value.kind === 'Variable' && argument.value.name && (aConfig.name === argument.value.name.value || aConfig.test && aConfig.test(argument));
+    });
+  };
+}
+
+function removeArgumentsFromDocument(config, doc) {
+  var argMatcher = getArgumentMatcher(config);
+  return nullIfDocIsEmpty((0, _visitor.visit)(doc, {
+    OperationDefinition: {
+      enter: function (node) {
+        return (0, _tslib.__assign)((0, _tslib.__assign)({}, node), {
+          variableDefinitions: node.variableDefinitions.filter(function (varDef) {
+            return !config.some(function (arg) {
+              return arg.name === varDef.variable.name.value;
+            });
+          })
+        });
+      }
+    },
+    Field: {
+      enter: function (node) {
+        var shouldRemoveField = config.some(function (argConfig) {
+          return argConfig.remove;
+        });
+
+        if (shouldRemoveField) {
+          var argMatchCount_1 = 0;
+          node.arguments.forEach(function (arg) {
+            if (argMatcher(arg)) {
+              argMatchCount_1 += 1;
+            }
+          });
+
+          if (argMatchCount_1 === 1) {
+            return null;
+          }
+        }
+      }
+    },
+    Argument: {
+      enter: function (node) {
+        if (argMatcher(node)) {
+          return null;
+        }
+      }
+    }
+  }));
+}
+
+function removeFragmentSpreadFromDocument(config, doc) {
+  function enter(node) {
+    if (config.some(function (def) {
+      return def.name === node.name.value;
+    })) {
+      return null;
+    }
+  }
+
+  return nullIfDocIsEmpty((0, _visitor.visit)(doc, {
+    FragmentSpread: {
+      enter: enter
+    },
+    FragmentDefinition: {
+      enter: enter
+    }
+  }));
+}
+
+function getAllFragmentSpreadsFromSelectionSet(selectionSet) {
+  var allFragments = [];
+  selectionSet.selections.forEach(function (selection) {
+    if (((0, _storeUtils.isField)(selection) || (0, _storeUtils.isInlineFragment)(selection)) && selection.selectionSet) {
+      getAllFragmentSpreadsFromSelectionSet(selection.selectionSet).forEach(function (frag) {
+        return allFragments.push(frag);
+      });
+    } else if (selection.kind === 'FragmentSpread') {
+      allFragments.push(selection);
+    }
+  });
+  return allFragments;
+}
+
+function buildQueryFromSelectionSet(document) {
+  var definition = (0, _getFromAST.getMainDefinition)(document);
+  var definitionOperation = definition.operation;
+
+  if (definitionOperation === 'query') {
+    return document;
+  }
+
+  var modifiedDoc = (0, _visitor.visit)(document, {
+    OperationDefinition: {
+      enter: function (node) {
+        return (0, _tslib.__assign)((0, _tslib.__assign)({}, node), {
+          operation: 'query'
+        });
+      }
+    }
+  });
+  return modifiedDoc;
+}
+
+function removeClientSetsFromDocument(document) {
+  (0, _getFromAST.checkDocument)(document);
+  var modifiedDoc = removeDirectivesFromDocument([{
+    test: function (directive) {
+      return directive.name.value === 'client';
+    },
+    remove: true
+  }], document);
+
+  if (modifiedDoc) {
+    modifiedDoc = (0, _visitor.visit)(modifiedDoc, {
+      FragmentDefinition: {
+        enter: function (node) {
+          if (node.selectionSet) {
+            var isTypenameOnly = node.selectionSet.selections.every(function (selection) {
+              return (0, _storeUtils.isField)(selection) && selection.name.value === '__typename';
+            });
+
+            if (isTypenameOnly) {
+              return null;
+            }
+          }
+        }
+      }
+    });
+  }
+
+  return modifiedDoc;
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","./fragments.js":"../node_modules/@apollo/client/utilities/graphql/fragments.js","./storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js","./getFromAST.js":"../node_modules/@apollo/client/utilities/graphql/getFromAST.js","graphql/language/visitor":"../node_modules/graphql/language/visitor.js","../common/filterInPlace.js":"../node_modules/@apollo/client/utilities/common/filterInPlace.js"}],"../node_modules/@apollo/client/utilities/common/mergeDeep.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.mergeDeep = mergeDeep;
+exports.mergeDeepArray = mergeDeepArray;
+exports.DeepMerger = void 0;
+
+var _tslib = require("tslib");
+
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+
+function mergeDeep() {
+  var sources = [];
+
+  for (var _i = 0; _i < arguments.length; _i++) {
+    sources[_i] = arguments[_i];
+  }
+
+  return mergeDeepArray(sources);
+}
+
+function mergeDeepArray(sources) {
+  var target = sources[0] || {};
+  var count = sources.length;
+
+  if (count > 1) {
+    var merger = new DeepMerger();
+
+    for (var i = 1; i < count; ++i) {
+      target = merger.merge(target, sources[i]);
+    }
+  }
+
+  return target;
+}
+
+function isObject(obj) {
+  return obj !== null && typeof obj === 'object';
+}
+
+var defaultReconciler = function (target, source, property) {
+  return this.merge(target[property], source[property]);
+};
+
+var DeepMerger = function () {
+  function DeepMerger(reconciler) {
+    if (reconciler === void 0) {
+      reconciler = defaultReconciler;
+    }
+
+    this.reconciler = reconciler;
+    this.pastCopies = [];
+    this.isObject = isObject;
+  }
+
+  DeepMerger.prototype.merge = function (target, source) {
+    var _this = this;
+
+    var context = [];
+
+    for (var _i = 2; _i < arguments.length; _i++) {
+      context[_i - 2] = arguments[_i];
+    }
+
+    if (isObject(source) && isObject(target)) {
+      Object.keys(source).forEach(function (sourceKey) {
+        if (hasOwnProperty.call(target, sourceKey)) {
+          var targetValue = target[sourceKey];
+
+          if (source[sourceKey] !== targetValue) {
+            var result = _this.reconciler.apply(_this, (0, _tslib.__spreadArrays)([target, source, sourceKey], context));
+
+            if (result !== targetValue) {
+              target = _this.shallowCopyForMerge(target);
+              target[sourceKey] = result;
+            }
+          }
+        } else {
+          target = _this.shallowCopyForMerge(target);
+          target[sourceKey] = source[sourceKey];
+        }
+      });
+      return target;
+    }
+
+    return source;
+  };
+
+  DeepMerger.prototype.shallowCopyForMerge = function (value) {
+    if (value !== null && typeof value === 'object' && this.pastCopies.indexOf(value) < 0) {
+      if (Array.isArray(value)) {
+        value = value.slice(0);
+      } else {
+        value = (0, _tslib.__assign)({
+          __proto__: Object.getPrototypeOf(value)
+        }, value);
+      }
+
+      this.pastCopies.push(value);
+    }
+
+    return value;
+  };
+
+  return DeepMerger;
+}();
+
+exports.DeepMerger = DeepMerger;
+},{"tslib":"../node_modules/tslib/tslib.es6.js"}],"../node_modules/@apollo/client/core/LocalState.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.LocalState = void 0;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+var _fragments = require("../utilities/graphql/fragments.js");
+
+var _storeUtils = require("../utilities/graphql/storeUtils.js");
+
+var _getFromAST = require("../utilities/graphql/getFromAST.js");
+
+var _visitor = require("graphql/language/visitor");
+
+var _directives = require("../utilities/graphql/directives.js");
+
+var _transform = require("../utilities/graphql/transform.js");
+
+var _mergeDeep = require("../utilities/common/mergeDeep.js");
+
+var LocalState = function () {
+  function LocalState(_a) {
+    var cache = _a.cache,
+        client = _a.client,
+        resolvers = _a.resolvers,
+        fragmentMatcher = _a.fragmentMatcher;
+    this.cache = cache;
+
+    if (client) {
+      this.client = client;
+    }
+
+    if (resolvers) {
+      this.addResolvers(resolvers);
+    }
+
+    if (fragmentMatcher) {
+      this.setFragmentMatcher(fragmentMatcher);
+    }
+  }
+
+  LocalState.prototype.addResolvers = function (resolvers) {
+    var _this = this;
+
+    this.resolvers = this.resolvers || {};
+
+    if (Array.isArray(resolvers)) {
+      resolvers.forEach(function (resolverGroup) {
+        _this.resolvers = (0, _mergeDeep.mergeDeep)(_this.resolvers, resolverGroup);
+      });
+    } else {
+      this.resolvers = (0, _mergeDeep.mergeDeep)(this.resolvers, resolvers);
+    }
+  };
+
+  LocalState.prototype.setResolvers = function (resolvers) {
+    this.resolvers = {};
+    this.addResolvers(resolvers);
+  };
+
+  LocalState.prototype.getResolvers = function () {
+    return this.resolvers || {};
+  };
+
+  LocalState.prototype.runResolvers = function (_a) {
+    var document = _a.document,
+        remoteResult = _a.remoteResult,
+        context = _a.context,
+        variables = _a.variables,
+        _b = _a.onlyRunForcedResolvers,
+        onlyRunForcedResolvers = _b === void 0 ? false : _b;
+    return (0, _tslib.__awaiter)(this, void 0, void 0, function () {
+      return (0, _tslib.__generator)(this, function (_c) {
+        if (document) {
+          return [2, this.resolveDocument(document, remoteResult.data, context, variables, this.fragmentMatcher, onlyRunForcedResolvers).then(function (localResult) {
+            return (0, _tslib.__assign)((0, _tslib.__assign)({}, remoteResult), {
+              data: localResult.result
+            });
+          })];
+        }
+
+        return [2, remoteResult];
+      });
+    });
+  };
+
+  LocalState.prototype.setFragmentMatcher = function (fragmentMatcher) {
+    this.fragmentMatcher = fragmentMatcher;
+  };
+
+  LocalState.prototype.getFragmentMatcher = function () {
+    return this.fragmentMatcher;
+  };
+
+  LocalState.prototype.clientQuery = function (document) {
+    if ((0, _directives.hasDirectives)(['client'], document)) {
+      if (this.resolvers) {
+        return document;
+      }
+
+      "development" === "production" || _tsInvariant.invariant.warn('Found @client directives in a query but no ApolloClient resolvers ' + 'were specified. This means ApolloClient local resolver handling ' + 'has been disabled, and @client directives will be passed through ' + 'to your link chain.');
+    }
+
+    return null;
+  };
+
+  LocalState.prototype.serverQuery = function (document) {
+    return this.resolvers ? (0, _transform.removeClientSetsFromDocument)(document) : document;
+  };
+
+  LocalState.prototype.prepareContext = function (context) {
+    if (context === void 0) {
+      context = {};
+    }
+
+    var cache = this.cache;
+    var newContext = (0, _tslib.__assign)((0, _tslib.__assign)({}, context), {
+      cache: cache,
+      getCacheKey: function (obj) {
+        if (cache.config) {
+          return cache.config.dataIdFromObject(obj);
+        } else {
+          "development" === "production" ? (0, _tsInvariant.invariant)(false, 34) : (0, _tsInvariant.invariant)(false, 'To use context.getCacheKey, you need to use a cache that has ' + 'a configurable dataIdFromObject, like apollo-cache-inmemory.');
+        }
+      }
+    });
+    return newContext;
+  };
+
+  LocalState.prototype.addExportedVariables = function (document, variables, context) {
+    if (variables === void 0) {
+      variables = {};
+    }
+
+    if (context === void 0) {
+      context = {};
+    }
+
+    return (0, _tslib.__awaiter)(this, void 0, void 0, function () {
+      return (0, _tslib.__generator)(this, function (_a) {
+        if (document) {
+          return [2, this.resolveDocument(document, this.buildRootValueFromCache(document, variables) || {}, this.prepareContext(context), variables).then(function (data) {
+            return (0, _tslib.__assign)((0, _tslib.__assign)({}, variables), data.exportedVariables);
+          })];
+        }
+
+        return [2, (0, _tslib.__assign)({}, variables)];
+      });
+    });
+  };
+
+  LocalState.prototype.shouldForceResolvers = function (document) {
+    var forceResolvers = false;
+    (0, _visitor.visit)(document, {
+      Directive: {
+        enter: function (node) {
+          if (node.name.value === 'client' && node.arguments) {
+            forceResolvers = node.arguments.some(function (arg) {
+              return arg.name.value === 'always' && arg.value.kind === 'BooleanValue' && arg.value.value === true;
+            });
+
+            if (forceResolvers) {
+              return _visitor.BREAK;
+            }
+          }
+        }
+      }
+    });
+    return forceResolvers;
+  };
+
+  LocalState.prototype.buildRootValueFromCache = function (document, variables) {
+    return this.cache.diff({
+      query: (0, _transform.buildQueryFromSelectionSet)(document),
+      variables: variables,
+      returnPartialData: true,
+      optimistic: false
+    }).result;
+  };
+
+  LocalState.prototype.resolveDocument = function (document, rootValue, context, variables, fragmentMatcher, onlyRunForcedResolvers) {
+    if (context === void 0) {
+      context = {};
+    }
+
+    if (variables === void 0) {
+      variables = {};
+    }
+
+    if (fragmentMatcher === void 0) {
+      fragmentMatcher = function () {
+        return true;
+      };
+    }
+
+    if (onlyRunForcedResolvers === void 0) {
+      onlyRunForcedResolvers = false;
+    }
+
+    return (0, _tslib.__awaiter)(this, void 0, void 0, function () {
+      var mainDefinition, fragments, fragmentMap, definitionOperation, defaultOperationType, _a, cache, client, execContext;
+
+      return (0, _tslib.__generator)(this, function (_b) {
+        mainDefinition = (0, _getFromAST.getMainDefinition)(document);
+        fragments = (0, _getFromAST.getFragmentDefinitions)(document);
+        fragmentMap = (0, _fragments.createFragmentMap)(fragments);
+        definitionOperation = mainDefinition.operation;
+        defaultOperationType = definitionOperation ? definitionOperation.charAt(0).toUpperCase() + definitionOperation.slice(1) : 'Query';
+        _a = this, cache = _a.cache, client = _a.client;
+        execContext = {
+          fragmentMap: fragmentMap,
+          context: (0, _tslib.__assign)((0, _tslib.__assign)({}, context), {
+            cache: cache,
+            client: client
+          }),
+          variables: variables,
+          fragmentMatcher: fragmentMatcher,
+          defaultOperationType: defaultOperationType,
+          exportedVariables: {},
+          onlyRunForcedResolvers: onlyRunForcedResolvers
+        };
+        return [2, this.resolveSelectionSet(mainDefinition.selectionSet, rootValue, execContext).then(function (result) {
+          return {
+            result: result,
+            exportedVariables: execContext.exportedVariables
+          };
+        })];
+      });
+    });
+  };
+
+  LocalState.prototype.resolveSelectionSet = function (selectionSet, rootValue, execContext) {
+    return (0, _tslib.__awaiter)(this, void 0, void 0, function () {
+      var fragmentMap, context, variables, resultsToMerge, execute;
+
+      var _this = this;
+
+      return (0, _tslib.__generator)(this, function (_a) {
+        fragmentMap = execContext.fragmentMap, context = execContext.context, variables = execContext.variables;
+        resultsToMerge = [rootValue];
+
+        execute = function (selection) {
+          return (0, _tslib.__awaiter)(_this, void 0, void 0, function () {
+            var fragment, typeCondition;
+            return (0, _tslib.__generator)(this, function (_a) {
+              if (!(0, _directives.shouldInclude)(selection, variables)) {
+                return [2];
+              }
+
+              if ((0, _storeUtils.isField)(selection)) {
+                return [2, this.resolveField(selection, rootValue, execContext).then(function (fieldResult) {
+                  var _a;
+
+                  if (typeof fieldResult !== 'undefined') {
+                    resultsToMerge.push((_a = {}, _a[(0, _storeUtils.resultKeyNameFromField)(selection)] = fieldResult, _a));
+                  }
+                })];
+              }
+
+              if ((0, _storeUtils.isInlineFragment)(selection)) {
+                fragment = selection;
+              } else {
+                fragment = fragmentMap[selection.name.value];
+                "development" === "production" ? (0, _tsInvariant.invariant)(fragment, 35) : (0, _tsInvariant.invariant)(fragment, "No fragment named " + selection.name.value);
+              }
+
+              if (fragment && fragment.typeCondition) {
+                typeCondition = fragment.typeCondition.name.value;
+
+                if (execContext.fragmentMatcher(rootValue, typeCondition, context)) {
+                  return [2, this.resolveSelectionSet(fragment.selectionSet, rootValue, execContext).then(function (fragmentResult) {
+                    resultsToMerge.push(fragmentResult);
+                  })];
+                }
+              }
+
+              return [2];
+            });
+          });
+        };
+
+        return [2, Promise.all(selectionSet.selections.map(execute)).then(function () {
+          return (0, _mergeDeep.mergeDeepArray)(resultsToMerge);
+        })];
+      });
+    });
+  };
+
+  LocalState.prototype.resolveField = function (field, rootValue, execContext) {
+    return (0, _tslib.__awaiter)(this, void 0, void 0, function () {
+      var variables, fieldName, aliasedFieldName, aliasUsed, defaultResult, resultPromise, resolverType, resolverMap, resolve;
+
+      var _this = this;
+
+      return (0, _tslib.__generator)(this, function (_a) {
+        variables = execContext.variables;
+        fieldName = field.name.value;
+        aliasedFieldName = (0, _storeUtils.resultKeyNameFromField)(field);
+        aliasUsed = fieldName !== aliasedFieldName;
+        defaultResult = rootValue[aliasedFieldName] || rootValue[fieldName];
+        resultPromise = Promise.resolve(defaultResult);
+
+        if (!execContext.onlyRunForcedResolvers || this.shouldForceResolvers(field)) {
+          resolverType = rootValue.__typename || execContext.defaultOperationType;
+          resolverMap = this.resolvers && this.resolvers[resolverType];
+
+          if (resolverMap) {
+            resolve = resolverMap[aliasUsed ? fieldName : aliasedFieldName];
+
+            if (resolve) {
+              resultPromise = Promise.resolve(resolve(rootValue, (0, _storeUtils.argumentsObjectFromField)(field, variables), execContext.context, {
+                field: field,
+                fragmentMap: execContext.fragmentMap
+              }));
+            }
+          }
+        }
+
+        return [2, resultPromise.then(function (result) {
+          if (result === void 0) {
+            result = defaultResult;
+          }
+
+          if (field.directives) {
+            field.directives.forEach(function (directive) {
+              if (directive.name.value === 'export' && directive.arguments) {
+                directive.arguments.forEach(function (arg) {
+                  if (arg.name.value === 'as' && arg.value.kind === 'StringValue') {
+                    execContext.exportedVariables[arg.value.value] = result;
+                  }
+                });
+              }
+            });
+          }
+
+          if (!field.selectionSet) {
+            return result;
+          }
+
+          if (result == null) {
+            return result;
+          }
+
+          if (Array.isArray(result)) {
+            return _this.resolveSubSelectedArray(field, result, execContext);
+          }
+
+          if (field.selectionSet) {
+            return _this.resolveSelectionSet(field.selectionSet, result, execContext);
+          }
+        })];
+      });
+    });
+  };
+
+  LocalState.prototype.resolveSubSelectedArray = function (field, result, execContext) {
+    var _this = this;
+
+    return Promise.all(result.map(function (item) {
+      if (item === null) {
+        return null;
+      }
+
+      if (Array.isArray(item)) {
+        return _this.resolveSubSelectedArray(field, item, execContext);
+      }
+
+      if (field.selectionSet) {
+        return _this.resolveSelectionSet(field.selectionSet, item, execContext);
+      }
+    }));
+  };
+
+  return LocalState;
+}();
+
+exports.LocalState = LocalState;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","../utilities/graphql/fragments.js":"../node_modules/@apollo/client/utilities/graphql/fragments.js","../utilities/graphql/storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js","../utilities/graphql/getFromAST.js":"../node_modules/@apollo/client/utilities/graphql/getFromAST.js","graphql/language/visitor":"../node_modules/graphql/language/visitor.js","../utilities/graphql/directives.js":"../node_modules/@apollo/client/utilities/graphql/directives.js","../utilities/graphql/transform.js":"../node_modules/@apollo/client/utilities/graphql/transform.js","../utilities/common/mergeDeep.js":"../node_modules/@apollo/client/utilities/common/mergeDeep.js"}],"../node_modules/@apollo/client/utilities/common/canUse.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.canUseWeakMap = void 0;
+var canUseWeakMap = typeof WeakMap === 'function' && !(typeof navigator === 'object' && navigator.product === 'ReactNative');
+exports.canUseWeakMap = canUseWeakMap;
+},{}],"../node_modules/@apollo/client/data/mutations.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.MutationStore = void 0;
+
+var MutationStore = function () {
+  function MutationStore() {
+    this.store = {};
+  }
+
+  MutationStore.prototype.getStore = function () {
+    return this.store;
+  };
+
+  MutationStore.prototype.get = function (mutationId) {
+    return this.store[mutationId];
+  };
+
+  MutationStore.prototype.initMutation = function (mutationId, mutation, variables) {
+    this.store[mutationId] = {
+      mutation: mutation,
+      variables: variables || {},
+      loading: true,
+      error: null
+    };
+  };
+
+  MutationStore.prototype.markMutationError = function (mutationId, error) {
+    var mutation = this.store[mutationId];
+
+    if (mutation) {
+      mutation.loading = false;
+      mutation.error = error;
+    }
+  };
+
+  MutationStore.prototype.markMutationResult = function (mutationId) {
+    var mutation = this.store[mutationId];
+
+    if (mutation) {
+      mutation.loading = false;
+      mutation.error = null;
+    }
+  };
+
+  MutationStore.prototype.reset = function () {
+    this.store = {};
+  };
+
+  return MutationStore;
+}();
+
+exports.MutationStore = MutationStore;
+},{}],"../node_modules/@apollo/client/data/queries.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.QueryStore = void 0;
+
+var _tsInvariant = require("ts-invariant");
+
+var _arrays = require("../utilities/common/arrays.js");
+
+var _equality = require("@wry/equality");
+
+var _networkStatus = require("../core/networkStatus.js");
+
+var QueryStore = function () {
+  function QueryStore() {
+    this.store = {};
+  }
+
+  QueryStore.prototype.getStore = function () {
+    return this.store;
+  };
+
+  QueryStore.prototype.get = function (queryId) {
+    return this.store[queryId];
+  };
+
+  QueryStore.prototype.initQuery = function (query) {
+    var previousQuery = this.store[query.queryId];
+    "development" === "production" ? (0, _tsInvariant.invariant)(!previousQuery || previousQuery.document === query.document || (0, _equality.equal)(previousQuery.document, query.document), 41) : (0, _tsInvariant.invariant)(!previousQuery || previousQuery.document === query.document || (0, _equality.equal)(previousQuery.document, query.document), 'Internal Error: may not update existing query string in store');
+    var isSetVariables = false;
+    var previousVariables = null;
+
+    if (query.storePreviousVariables && previousQuery && previousQuery.networkStatus !== _networkStatus.NetworkStatus.loading) {
+      if (!(0, _equality.equal)(previousQuery.variables, query.variables)) {
+        isSetVariables = true;
+        previousVariables = previousQuery.variables;
+      }
+    }
+
+    var networkStatus;
+
+    if (isSetVariables) {
+      networkStatus = _networkStatus.NetworkStatus.setVariables;
+    } else if (query.isPoll) {
+      networkStatus = _networkStatus.NetworkStatus.poll;
+    } else if (query.isRefetch) {
+      networkStatus = _networkStatus.NetworkStatus.refetch;
+    } else {
+      networkStatus = _networkStatus.NetworkStatus.loading;
+    }
+
+    var graphQLErrors = [];
+
+    if (previousQuery && previousQuery.graphQLErrors) {
+      graphQLErrors = previousQuery.graphQLErrors;
+    }
+
+    this.store[query.queryId] = {
+      document: query.document,
+      variables: query.variables,
+      previousVariables: previousVariables,
+      networkError: null,
+      graphQLErrors: graphQLErrors,
+      networkStatus: networkStatus,
+      metadata: query.metadata
+    };
+
+    if (typeof query.fetchMoreForQueryId === 'string' && this.store[query.fetchMoreForQueryId]) {
+      this.store[query.fetchMoreForQueryId].networkStatus = _networkStatus.NetworkStatus.fetchMore;
+    }
+  };
+
+  QueryStore.prototype.markQueryResult = function (queryId, result, fetchMoreForQueryId) {
+    if (!this.store || !this.store[queryId]) return;
+    this.store[queryId].networkError = null;
+    this.store[queryId].graphQLErrors = (0, _arrays.isNonEmptyArray)(result.errors) ? result.errors : [];
+    this.store[queryId].previousVariables = null;
+    this.store[queryId].networkStatus = _networkStatus.NetworkStatus.ready;
+
+    if (typeof fetchMoreForQueryId === 'string' && this.store[fetchMoreForQueryId]) {
+      this.store[fetchMoreForQueryId].networkStatus = _networkStatus.NetworkStatus.ready;
+    }
+  };
+
+  QueryStore.prototype.markQueryError = function (queryId, error, fetchMoreForQueryId) {
+    if (!this.store || !this.store[queryId]) return;
+    this.store[queryId].networkError = error;
+    this.store[queryId].networkStatus = _networkStatus.NetworkStatus.error;
+
+    if (typeof fetchMoreForQueryId === 'string') {
+      this.markQueryResultClient(fetchMoreForQueryId, true);
+    }
+  };
+
+  QueryStore.prototype.markQueryResultClient = function (queryId, complete) {
+    var storeValue = this.store && this.store[queryId];
+
+    if (storeValue) {
+      storeValue.networkError = null;
+      storeValue.previousVariables = null;
+
+      if (complete) {
+        storeValue.networkStatus = _networkStatus.NetworkStatus.ready;
+      }
+    }
+  };
+
+  QueryStore.prototype.stopQuery = function (queryId) {
+    delete this.store[queryId];
+  };
+
+  QueryStore.prototype.reset = function (observableQueryIds) {
+    var _this = this;
+
+    Object.keys(this.store).forEach(function (queryId) {
+      if (observableQueryIds.indexOf(queryId) < 0) {
+        _this.stopQuery(queryId);
+      } else {
+        _this.store[queryId].networkStatus = _networkStatus.NetworkStatus.loading;
+      }
+    });
+  };
+
+  return QueryStore;
+}();
+
+exports.QueryStore = QueryStore;
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","../utilities/common/arrays.js":"../node_modules/@apollo/client/utilities/common/arrays.js","@wry/equality":"../node_modules/@wry/equality/lib/equality.esm.js","../core/networkStatus.js":"../node_modules/@apollo/client/core/networkStatus.js"}],"../node_modules/@apollo/client/utilities/observables/observables.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.asyncMap = asyncMap;
+exports.multiplex = multiplex;
+
+var _zenObservable = _interopRequireDefault(require("zen-observable"));
+
+require("symbol-observable");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function multiplex(inner) {
+  var observers = new Set();
+  var sub = null;
+  return new _zenObservable.default(function (observer) {
+    observers.add(observer);
+    sub = sub || inner.subscribe({
+      next: function (value) {
+        observers.forEach(function (obs) {
+          return obs.next && obs.next(value);
+        });
+      },
+      error: function (error) {
+        observers.forEach(function (obs) {
+          return obs.error && obs.error(error);
+        });
+      },
+      complete: function () {
+        observers.forEach(function (obs) {
+          return obs.complete && obs.complete();
+        });
+      }
+    });
+    return function () {
+      if (observers.delete(observer) && !observers.size && sub) {
+        sub.unsubscribe();
+        sub = null;
+      }
+    };
+  });
+}
+
+function asyncMap(observable, mapFn) {
+  return new _zenObservable.default(function (observer) {
+    var next = observer.next,
+        error = observer.error,
+        complete = observer.complete;
+    var activeNextCount = 0;
+    var completed = false;
+    var handler = {
+      next: function (value) {
+        ++activeNextCount;
+        new Promise(function (resolve) {
+          resolve(mapFn(value));
+        }).then(function (result) {
+          --activeNextCount;
+          next && next.call(observer, result);
+          completed && handler.complete();
+        }, function (e) {
+          --activeNextCount;
+          error && error.call(observer, e);
+        });
+      },
+      error: function (e) {
+        error && error.call(observer, e);
+      },
+      complete: function () {
+        completed = true;
+
+        if (!activeNextCount) {
+          complete && complete.call(observer);
+        }
+      }
+    };
+    var sub = observable.subscribe(handler);
+    return function () {
+      return sub.unsubscribe();
+    };
+  });
+}
+},{"zen-observable":"../node_modules/zen-observable/index.js","symbol-observable":"../node_modules/symbol-observable/es/index.js"}],"../node_modules/@apollo/client/core/QueryManager.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.QueryManager = void 0;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+var _zenObservable = _interopRequireDefault(require("zen-observable"));
+
+require("symbol-observable");
+
+var _getFromAST = require("../utilities/graphql/getFromAST.js");
+
+var _execute = require("../link/core/execute.js");
+
+var _directives = require("../utilities/graphql/directives.js");
+
+var _errorHandling = require("../utilities/common/errorHandling.js");
+
+var _transform = require("../utilities/graphql/transform.js");
+
+var _canUse = require("../utilities/common/canUse.js");
+
+var _arrays = require("../utilities/common/arrays.js");
+
+var _ApolloError = require("../errors/ApolloError.js");
+
+var _mutations = require("../data/mutations.js");
+
+var _networkStatus = require("./networkStatus.js");
+
+var _queries = require("../data/queries.js");
+
+var _types = require("./types.js");
+
+var _ObservableQuery = require("./ObservableQuery.js");
+
+var _LocalState = require("./LocalState.js");
+
+var _observables = require("../utilities/observables/observables.js");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+
+var QueryManager = function () {
+  function QueryManager(_a) {
+    var cache = _a.cache,
+        link = _a.link,
+        _b = _a.queryDeduplication,
+        queryDeduplication = _b === void 0 ? false : _b,
+        _c = _a.onBroadcast,
+        onBroadcast = _c === void 0 ? function () {
+      return undefined;
+    } : _c,
+        _d = _a.ssrMode,
+        ssrMode = _d === void 0 ? false : _d,
+        _e = _a.clientAwareness,
+        clientAwareness = _e === void 0 ? {} : _e,
+        localState = _a.localState,
+        assumeImmutableResults = _a.assumeImmutableResults;
+    this.mutationStore = new _mutations.MutationStore();
+    this.queryStore = new _queries.QueryStore();
+    this.clientAwareness = {};
+    this.idCounter = 1;
+    this.queries = new Map();
+    this.fetchQueryRejectFns = new Map();
+    this.transformCache = new (_canUse.canUseWeakMap ? WeakMap : Map)();
+    this.inFlightLinkObservables = new Map();
+    this.pollingInfoByQueryId = new Map();
+    this.cache = cache;
+    this.link = link;
+    this.queryDeduplication = queryDeduplication;
+    this.onBroadcast = onBroadcast;
+    this.clientAwareness = clientAwareness;
+    this.localState = localState || new _LocalState.LocalState({
+      cache: cache
+    });
+    this.ssrMode = ssrMode;
+    this.assumeImmutableResults = !!assumeImmutableResults;
+  }
+
+  QueryManager.prototype.stop = function () {
+    var _this = this;
+
+    this.queries.forEach(function (_info, queryId) {
+      _this.stopQueryNoBroadcast(queryId);
+    });
+    this.fetchQueryRejectFns.forEach(function (reject) {
+      reject("development" === "production" ? new _tsInvariant.InvariantError(23) : new _tsInvariant.InvariantError('QueryManager stopped while query was in flight'));
+    });
+  };
+
+  QueryManager.prototype.mutate = function (_a) {
+    var mutation = _a.mutation,
+        variables = _a.variables,
+        optimisticResponse = _a.optimisticResponse,
+        updateQueriesByName = _a.updateQueries,
+        _b = _a.refetchQueries,
+        refetchQueries = _b === void 0 ? [] : _b,
+        _c = _a.awaitRefetchQueries,
+        awaitRefetchQueries = _c === void 0 ? false : _c,
+        updateWithProxyFn = _a.update,
+        _d = _a.errorPolicy,
+        errorPolicy = _d === void 0 ? 'none' : _d,
+        fetchPolicy = _a.fetchPolicy,
+        _e = _a.context,
+        context = _e === void 0 ? {} : _e;
+    return (0, _tslib.__awaiter)(this, void 0, void 0, function () {
+      var mutationId, generateUpdateQueriesInfo, optimistic_1, self;
+
+      var _this = this;
+
+      return (0, _tslib.__generator)(this, function (_f) {
+        switch (_f.label) {
+          case 0:
+            "development" === "production" ? (0, _tsInvariant.invariant)(mutation, 24) : (0, _tsInvariant.invariant)(mutation, 'mutation option is required. You must specify your GraphQL document in the mutation option.');
+            "development" === "production" ? (0, _tsInvariant.invariant)(!fetchPolicy || fetchPolicy === 'no-cache', 25) : (0, _tsInvariant.invariant)(!fetchPolicy || fetchPolicy === 'no-cache', "Mutations only support a 'no-cache' fetchPolicy. If you don't want to disable the cache, remove your fetchPolicy setting to proceed with the default mutation behavior.");
+            mutationId = this.generateQueryId();
+            mutation = this.transform(mutation).document;
+            this.setQuery(mutationId, function () {
+              return {
+                document: mutation
+              };
+            });
+            variables = this.getVariables(mutation, variables);
+            if (!this.transform(mutation).hasClientExports) return [3, 2];
+            return [4, this.localState.addExportedVariables(mutation, variables, context)];
+
+          case 1:
+            variables = _f.sent();
+            _f.label = 2;
+
+          case 2:
+            generateUpdateQueriesInfo = function () {
+              var ret = {};
+
+              if (updateQueriesByName) {
+                _this.queries.forEach(function (_a, queryId) {
+                  var observableQuery = _a.observableQuery;
+
+                  if (observableQuery) {
+                    var queryName = observableQuery.queryName;
+
+                    if (queryName && hasOwnProperty.call(updateQueriesByName, queryName)) {
+                      ret[queryId] = {
+                        updater: updateQueriesByName[queryName],
+                        query: _this.queryStore.get(queryId)
+                      };
+                    }
+                  }
+                });
+              }
+
+              return ret;
+            };
+
+            this.mutationStore.initMutation(mutationId, mutation, variables);
+
+            if (optimisticResponse) {
+              optimistic_1 = typeof optimisticResponse === 'function' ? optimisticResponse(variables) : optimisticResponse;
+              this.cache.recordOptimisticTransaction(function (cache) {
+                markMutationResult({
+                  mutationId: mutationId,
+                  result: {
+                    data: optimistic_1
+                  },
+                  document: mutation,
+                  variables: variables,
+                  queryUpdatersById: generateUpdateQueriesInfo(),
+                  update: updateWithProxyFn
+                }, cache);
+              }, mutationId);
+            }
+
+            this.broadcastQueries();
+            self = this;
+            return [2, new Promise(function (resolve, reject) {
+              var storeResult;
+              var error;
+              self.getObservableFromLink(mutation, (0, _tslib.__assign)((0, _tslib.__assign)({}, context), {
+                optimisticResponse: optimisticResponse
+              }), variables, false).subscribe({
+                next: function (result) {
+                  if ((0, _errorHandling.graphQLResultHasError)(result) && errorPolicy === 'none') {
+                    error = new _ApolloError.ApolloError({
+                      graphQLErrors: result.errors
+                    });
+                    return;
+                  }
+
+                  self.mutationStore.markMutationResult(mutationId);
+
+                  if (fetchPolicy !== 'no-cache') {
+                    markMutationResult({
+                      mutationId: mutationId,
+                      result: result,
+                      document: mutation,
+                      variables: variables,
+                      queryUpdatersById: generateUpdateQueriesInfo(),
+                      update: updateWithProxyFn
+                    }, self.cache);
+                  }
+
+                  storeResult = result;
+                },
+                error: function (err) {
+                  self.mutationStore.markMutationError(mutationId, err);
+
+                  if (optimisticResponse) {
+                    self.cache.removeOptimistic(mutationId);
+                  }
+
+                  self.broadcastQueries();
+                  self.setQuery(mutationId, function () {
+                    return {
+                      document: null
+                    };
+                  });
+                  reject(new _ApolloError.ApolloError({
+                    networkError: err
+                  }));
+                },
+                complete: function () {
+                  if (error) {
+                    self.mutationStore.markMutationError(mutationId, error);
+                  }
+
+                  if (optimisticResponse) {
+                    self.cache.removeOptimistic(mutationId);
+                  }
+
+                  self.broadcastQueries();
+
+                  if (error) {
+                    reject(error);
+                    return;
+                  }
+
+                  if (typeof refetchQueries === 'function') {
+                    refetchQueries = refetchQueries(storeResult);
+                  }
+
+                  var refetchQueryPromises = [];
+
+                  if ((0, _arrays.isNonEmptyArray)(refetchQueries)) {
+                    refetchQueries.forEach(function (refetchQuery) {
+                      if (typeof refetchQuery === 'string') {
+                        self.queries.forEach(function (_a) {
+                          var observableQuery = _a.observableQuery;
+
+                          if (observableQuery && observableQuery.queryName === refetchQuery) {
+                            refetchQueryPromises.push(observableQuery.refetch());
+                          }
+                        });
+                      } else {
+                        var queryOptions = {
+                          query: refetchQuery.query,
+                          variables: refetchQuery.variables,
+                          fetchPolicy: 'network-only'
+                        };
+
+                        if (refetchQuery.context) {
+                          queryOptions.context = refetchQuery.context;
+                        }
+
+                        refetchQueryPromises.push(self.query(queryOptions));
+                      }
+                    });
+                  }
+
+                  Promise.all(awaitRefetchQueries ? refetchQueryPromises : []).then(function () {
+                    self.setQuery(mutationId, function () {
+                      return {
+                        document: null
+                      };
+                    });
+
+                    if (errorPolicy === 'ignore' && storeResult && (0, _errorHandling.graphQLResultHasError)(storeResult)) {
+                      delete storeResult.errors;
+                    }
+
+                    resolve(storeResult);
+                  });
+                }
+              });
+            })];
+        }
+      });
+    });
+  };
+
+  QueryManager.prototype.fetchQuery = function (queryId, options, fetchType, fetchMoreForQueryId) {
+    return (0, _tslib.__awaiter)(this, void 0, void 0, function () {
+      var _a, metadata, _b, fetchPolicy, _c, context, query, variables, storeResult, isNetworkOnly, needToFetch, _d, complete, result, shouldFetch, requestId, cancel, networkResult;
+
+      var _this = this;
+
+      return (0, _tslib.__generator)(this, function (_e) {
+        switch (_e.label) {
+          case 0:
+            _a = options.metadata, metadata = _a === void 0 ? null : _a, _b = options.fetchPolicy, fetchPolicy = _b === void 0 ? 'cache-first' : _b, _c = options.context, context = _c === void 0 ? {} : _c;
+            query = this.transform(options.query).document;
+            variables = this.getVariables(query, options.variables);
+            if (!this.transform(query).hasClientExports) return [3, 2];
+            return [4, this.localState.addExportedVariables(query, variables, context)];
+
+          case 1:
+            variables = _e.sent();
+            _e.label = 2;
+
+          case 2:
+            options = (0, _tslib.__assign)((0, _tslib.__assign)({}, options), {
+              variables: variables
+            });
+            isNetworkOnly = fetchPolicy === 'network-only' || fetchPolicy === 'no-cache';
+            needToFetch = isNetworkOnly;
+
+            if (!isNetworkOnly) {
+              _d = this.cache.diff({
+                query: query,
+                variables: variables,
+                returnPartialData: true,
+                optimistic: false
+              }), complete = _d.complete, result = _d.result;
+              needToFetch = !complete || fetchPolicy === 'cache-and-network';
+              storeResult = result;
+            }
+
+            shouldFetch = needToFetch && fetchPolicy !== 'cache-only' && fetchPolicy !== 'standby';
+            if ((0, _directives.hasDirectives)(['live'], query)) shouldFetch = true;
+            requestId = this.idCounter++;
+            cancel = fetchPolicy !== 'no-cache' ? this.updateQueryWatch(queryId, query, options) : undefined;
+            this.setQuery(queryId, function () {
+              return {
+                document: query,
+                lastRequestId: requestId,
+                invalidated: true,
+                cancel: cancel
+              };
+            });
+            this.invalidate(fetchMoreForQueryId);
+            this.queryStore.initQuery({
+              queryId: queryId,
+              document: query,
+              storePreviousVariables: shouldFetch,
+              variables: variables,
+              isPoll: fetchType === _types.FetchType.poll,
+              isRefetch: fetchType === _types.FetchType.refetch,
+              metadata: metadata,
+              fetchMoreForQueryId: fetchMoreForQueryId
+            });
+
+            if (shouldFetch) {
+              this.broadcastQueries();
+              networkResult = this.fetchRequest({
+                requestId: requestId,
+                queryId: queryId,
+                document: query,
+                options: options,
+                fetchMoreForQueryId: fetchMoreForQueryId
+              }).catch(function (error) {
+                if ((0, _ApolloError.isApolloError)(error)) {
+                  throw error;
+                } else {
+                  if (requestId >= _this.getQuery(queryId).lastRequestId) {
+                    _this.queryStore.markQueryError(queryId, error, fetchMoreForQueryId);
+
+                    _this.invalidate(queryId);
+
+                    _this.invalidate(fetchMoreForQueryId);
+
+                    _this.broadcastQueries();
+                  }
+
+                  throw new _ApolloError.ApolloError({
+                    networkError: error
+                  });
+                }
+              });
+
+              if (fetchPolicy !== 'cache-and-network') {
+                return [2, networkResult];
+              }
+
+              networkResult.catch(function () {});
+            }
+
+            this.queryStore.markQueryResultClient(queryId, !shouldFetch);
+            this.invalidate(queryId);
+            this.invalidate(fetchMoreForQueryId);
+
+            if (this.transform(query).hasForcedResolvers) {
+              return [2, this.localState.runResolvers({
+                document: query,
+                remoteResult: {
+                  data: storeResult
+                },
+                context: context,
+                variables: variables,
+                onlyRunForcedResolvers: true
+              }).then(function (result) {
+                _this.markQueryResult(queryId, result, options, fetchMoreForQueryId);
+
+                _this.broadcastQueries();
+
+                return result;
+              })];
+            }
+
+            this.broadcastQueries();
+            return [2, {
+              data: storeResult
+            }];
+        }
+      });
+    });
+  };
+
+  QueryManager.prototype.markQueryResult = function (queryId, result, _a, fetchMoreForQueryId) {
+    var fetchPolicy = _a.fetchPolicy,
+        variables = _a.variables,
+        errorPolicy = _a.errorPolicy;
+
+    if (fetchPolicy === 'no-cache') {
+      this.setQuery(queryId, function () {
+        return {
+          newData: {
+            result: result.data,
+            complete: true
+          }
+        };
+      });
+    } else {
+      var document_1 = this.getQuery(queryId).document;
+      var ignoreErrors = errorPolicy === 'ignore' || errorPolicy === 'all';
+      var writeWithErrors = !(0, _errorHandling.graphQLResultHasError)(result);
+
+      if (ignoreErrors && (0, _errorHandling.graphQLResultHasError)(result) && result.data) {
+        writeWithErrors = true;
+      }
+
+      if (!fetchMoreForQueryId && writeWithErrors) {
+        this.cache.write({
+          result: result.data,
+          dataId: 'ROOT_QUERY',
+          query: document_1,
+          variables: variables
+        });
+      }
+    }
+  };
+
+  QueryManager.prototype.queryListenerForObserver = function (queryId, options, observer) {
+    var _this = this;
+
+    function invoke(method, argument) {
+      if (observer[method]) {
+        try {
+          observer[method](argument);
+        } catch (e) {
+          "development" === "production" || _tsInvariant.invariant.error(e);
+        }
+      } else if (method === 'error') {
+        "development" === "production" || _tsInvariant.invariant.error(argument);
+      }
+    }
+
+    return function (queryStoreValue, newData) {
+      _this.invalidate(queryId, false);
+
+      if (!queryStoreValue) return;
+
+      var _a = _this.getQuery(queryId),
+          observableQuery = _a.observableQuery,
+          document = _a.document;
+
+      var fetchPolicy = observableQuery ? observableQuery.options.fetchPolicy : options.fetchPolicy;
+      if (fetchPolicy === 'standby') return;
+      var loading = (0, _networkStatus.isNetworkRequestInFlight)(queryStoreValue.networkStatus);
+      var lastResult = observableQuery && observableQuery.getLastResult();
+      var networkStatusChanged = !!(lastResult && lastResult.networkStatus !== queryStoreValue.networkStatus);
+      var shouldNotifyIfLoading = options.returnPartialData || !newData && queryStoreValue.previousVariables || networkStatusChanged && options.notifyOnNetworkStatusChange || fetchPolicy === 'cache-only' || fetchPolicy === 'cache-and-network';
+
+      if (loading && !shouldNotifyIfLoading) {
+        return;
+      }
+
+      var hasGraphQLErrors = (0, _arrays.isNonEmptyArray)(queryStoreValue.graphQLErrors);
+      var errorPolicy = observableQuery && observableQuery.options.errorPolicy || options.errorPolicy || 'none';
+
+      if (errorPolicy === 'none' && hasGraphQLErrors || queryStoreValue.networkError) {
+        return invoke('error', new _ApolloError.ApolloError({
+          graphQLErrors: queryStoreValue.graphQLErrors,
+          networkError: queryStoreValue.networkError
+        }));
+      }
+
+      try {
+        var data = void 0;
+        var isMissing = void 0;
+
+        if (newData) {
+          if (fetchPolicy !== 'no-cache' && fetchPolicy !== 'network-only') {
+            _this.setQuery(queryId, function () {
+              return {
+                newData: null
+              };
+            });
+          }
+
+          data = newData.result;
+          isMissing = !newData.complete;
+        } else {
+          var lastError = observableQuery && observableQuery.getLastError();
+          var errorStatusChanged = errorPolicy !== 'none' && (lastError && lastError.graphQLErrors) !== queryStoreValue.graphQLErrors;
+
+          if (lastResult && lastResult.data && !errorStatusChanged) {
+            data = lastResult.data;
+            isMissing = false;
+          } else {
+            var diffResult = _this.cache.diff({
+              query: document,
+              variables: queryStoreValue.previousVariables || queryStoreValue.variables,
+              returnPartialData: true,
+              optimistic: true
+            });
+
+            data = diffResult.result;
+            isMissing = !diffResult.complete;
+          }
+        }
+
+        var stale = isMissing && !(options.returnPartialData || options.partialRefetch || fetchPolicy === 'cache-only');
+        var resultFromStore = {
+          data: stale ? lastResult && lastResult.data : data,
+          loading: loading,
+          networkStatus: queryStoreValue.networkStatus,
+          stale: stale
+        };
+
+        if (errorPolicy === 'all' && hasGraphQLErrors) {
+          resultFromStore.errors = queryStoreValue.graphQLErrors;
+        }
+
+        invoke('next', resultFromStore);
+      } catch (networkError) {
+        invoke('error', new _ApolloError.ApolloError({
+          networkError: networkError
+        }));
+      }
+    };
+  };
+
+  QueryManager.prototype.transform = function (document) {
+    var transformCache = this.transformCache;
+
+    if (!transformCache.has(document)) {
+      var transformed = this.cache.transformDocument(document);
+      var forLink = (0, _transform.removeConnectionDirectiveFromDocument)(this.cache.transformForLink(transformed));
+      var clientQuery = this.localState.clientQuery(transformed);
+      var serverQuery = this.localState.serverQuery(forLink);
+      var cacheEntry_1 = {
+        document: transformed,
+        hasClientExports: (0, _directives.hasClientExports)(transformed),
+        hasForcedResolvers: this.localState.shouldForceResolvers(transformed),
+        clientQuery: clientQuery,
+        serverQuery: serverQuery,
+        defaultVars: (0, _getFromAST.getDefaultValues)((0, _getFromAST.getOperationDefinition)(transformed))
+      };
+
+      var add = function (doc) {
+        if (doc && !transformCache.has(doc)) {
+          transformCache.set(doc, cacheEntry_1);
+        }
+      };
+
+      add(document);
+      add(transformed);
+      add(clientQuery);
+      add(serverQuery);
+    }
+
+    return transformCache.get(document);
+  };
+
+  QueryManager.prototype.getVariables = function (document, variables) {
+    return (0, _tslib.__assign)((0, _tslib.__assign)({}, this.transform(document).defaultVars), variables);
+  };
+
+  QueryManager.prototype.watchQuery = function (options, shouldSubscribe) {
+    if (shouldSubscribe === void 0) {
+      shouldSubscribe = true;
+    }
+
+    "development" === "production" ? (0, _tsInvariant.invariant)(options.fetchPolicy !== 'standby', 26) : (0, _tsInvariant.invariant)(options.fetchPolicy !== 'standby', 'client.watchQuery cannot be called with fetchPolicy set to "standby"');
+    options.variables = this.getVariables(options.query, options.variables);
+
+    if (typeof options.notifyOnNetworkStatusChange === 'undefined') {
+      options.notifyOnNetworkStatusChange = false;
+    }
+
+    var transformedOptions = (0, _tslib.__assign)({}, options);
+    var observable = new _ObservableQuery.ObservableQuery({
+      queryManager: this,
+      options: transformedOptions,
+      shouldSubscribe: shouldSubscribe
+    });
+    this.queryStore.initQuery({
+      queryId: observable.queryId,
+      document: this.transform(options.query).document,
+      variables: options.variables,
+      storePreviousVariables: false,
+      isPoll: false,
+      isRefetch: false,
+      metadata: options.metadata,
+      fetchMoreForQueryId: void 0
+    });
+    return observable;
+  };
+
+  QueryManager.prototype.query = function (options) {
+    var _this = this;
+
+    "development" === "production" ? (0, _tsInvariant.invariant)(options.query, 27) : (0, _tsInvariant.invariant)(options.query, 'query option is required. You must specify your GraphQL document ' + 'in the query option.');
+    "development" === "production" ? (0, _tsInvariant.invariant)(options.query.kind === 'Document', 28) : (0, _tsInvariant.invariant)(options.query.kind === 'Document', 'You must wrap the query string in a "gql" tag.');
+    "development" === "production" ? (0, _tsInvariant.invariant)(!options.returnPartialData, 29) : (0, _tsInvariant.invariant)(!options.returnPartialData, 'returnPartialData option only supported on watchQuery.');
+    "development" === "production" ? (0, _tsInvariant.invariant)(!options.pollInterval, 30) : (0, _tsInvariant.invariant)(!options.pollInterval, 'pollInterval option only supported on watchQuery.');
+    return new Promise(function (resolve, reject) {
+      var watchedQuery = _this.watchQuery(options, false);
+
+      _this.fetchQueryRejectFns.set("query:" + watchedQuery.queryId, reject);
+
+      watchedQuery.result().then(resolve, reject).then(function () {
+        return _this.fetchQueryRejectFns.delete("query:" + watchedQuery.queryId);
+      });
+    });
+  };
+
+  QueryManager.prototype.generateQueryId = function () {
+    return String(this.idCounter++);
+  };
+
+  QueryManager.prototype.stopQueryInStore = function (queryId) {
+    this.stopQueryInStoreNoBroadcast(queryId);
+    this.broadcastQueries();
+  };
+
+  QueryManager.prototype.stopQueryInStoreNoBroadcast = function (queryId) {
+    this.stopPollingQuery(queryId);
+    this.queryStore.stopQuery(queryId);
+    this.invalidate(queryId);
+  };
+
+  QueryManager.prototype.addQueryListener = function (queryId, listener) {
+    this.setQuery(queryId, function (_a) {
+      var listeners = _a.listeners;
+      listeners.add(listener);
+      return {
+        invalidated: false
+      };
+    });
+  };
+
+  QueryManager.prototype.updateQueryWatch = function (queryId, document, options) {
+    var _this = this;
+
+    var cancel = this.getQuery(queryId).cancel;
+    if (cancel) cancel();
+
+    var previousResult = function () {
+      var previousResult = null;
+
+      var observableQuery = _this.getQuery(queryId).observableQuery;
+
+      if (observableQuery) {
+        var lastResult = observableQuery.getLastResult();
+
+        if (lastResult) {
+          previousResult = lastResult.data;
+        }
+      }
+
+      return previousResult;
+    };
+
+    return this.cache.watch({
+      query: document,
+      variables: options.variables,
+      optimistic: true,
+      previousResult: previousResult,
+      callback: function (newData) {
+        _this.setQuery(queryId, function () {
+          return {
+            invalidated: true,
+            newData: newData
+          };
+        });
+      }
+    });
+  };
+
+  QueryManager.prototype.addObservableQuery = function (queryId, observableQuery) {
+    this.setQuery(queryId, function () {
+      return {
+        observableQuery: observableQuery
+      };
+    });
+  };
+
+  QueryManager.prototype.removeObservableQuery = function (queryId) {
+    var cancel = this.getQuery(queryId).cancel;
+    this.setQuery(queryId, function () {
+      return {
+        observableQuery: null
+      };
+    });
+    if (cancel) cancel();
+  };
+
+  QueryManager.prototype.clearStore = function () {
+    this.fetchQueryRejectFns.forEach(function (reject) {
+      reject("development" === "production" ? new _tsInvariant.InvariantError(31) : new _tsInvariant.InvariantError('Store reset while query was in flight (not completed in link chain)'));
+    });
+    var resetIds = [];
+    this.queries.forEach(function (_a, queryId) {
+      var observableQuery = _a.observableQuery;
+      if (observableQuery) resetIds.push(queryId);
+    });
+    this.queryStore.reset(resetIds);
+    this.mutationStore.reset();
+    return this.cache.reset();
+  };
+
+  QueryManager.prototype.resetStore = function () {
+    var _this = this;
+
+    return this.clearStore().then(function () {
+      return _this.reFetchObservableQueries();
+    });
+  };
+
+  QueryManager.prototype.reFetchObservableQueries = function (includeStandby) {
+    var _this = this;
+
+    if (includeStandby === void 0) {
+      includeStandby = false;
+    }
+
+    var observableQueryPromises = [];
+    this.queries.forEach(function (_a, queryId) {
+      var observableQuery = _a.observableQuery;
+
+      if (observableQuery) {
+        var fetchPolicy = observableQuery.options.fetchPolicy;
+        observableQuery.resetLastResults();
+
+        if (fetchPolicy !== 'cache-only' && (includeStandby || fetchPolicy !== 'standby')) {
+          observableQueryPromises.push(observableQuery.refetch());
+        }
+
+        _this.setQuery(queryId, function () {
+          return {
+            newData: null
+          };
+        });
+
+        _this.invalidate(queryId);
+      }
+    });
+    this.broadcastQueries();
+    return Promise.all(observableQueryPromises);
+  };
+
+  QueryManager.prototype.observeQuery = function (queryId, options, observer) {
+    this.addQueryListener(queryId, this.queryListenerForObserver(queryId, options, observer));
+    return this.fetchQuery(queryId, options);
+  };
+
+  QueryManager.prototype.startGraphQLSubscription = function (_a) {
+    var _this = this;
+
+    var query = _a.query,
+        fetchPolicy = _a.fetchPolicy,
+        variables = _a.variables;
+    query = this.transform(query).document;
+    variables = this.getVariables(query, variables);
+
+    var makeObservable = function (variables) {
+      return _this.getObservableFromLink(query, {}, variables, false).map(function (result) {
+        if (!fetchPolicy || fetchPolicy !== 'no-cache') {
+          if (!(0, _errorHandling.graphQLResultHasError)(result)) {
+            _this.cache.write({
+              query: query,
+              result: result.data,
+              dataId: 'ROOT_SUBSCRIPTION',
+              variables: variables
+            });
+          }
+
+          _this.broadcastQueries();
+        }
+
+        if ((0, _errorHandling.graphQLResultHasError)(result)) {
+          throw new _ApolloError.ApolloError({
+            graphQLErrors: result.errors
+          });
+        }
+
+        return result;
+      });
+    };
+
+    if (this.transform(query).hasClientExports) {
+      var observablePromise_1 = this.localState.addExportedVariables(query, variables).then(makeObservable);
+      return new _zenObservable.default(function (observer) {
+        var sub = null;
+        observablePromise_1.then(function (observable) {
+          return sub = observable.subscribe(observer);
+        }, observer.error);
+        return function () {
+          return sub && sub.unsubscribe();
+        };
+      });
+    }
+
+    return makeObservable(variables);
+  };
+
+  QueryManager.prototype.stopQuery = function (queryId) {
+    this.stopQueryNoBroadcast(queryId);
+    this.broadcastQueries();
+  };
+
+  QueryManager.prototype.stopQueryNoBroadcast = function (queryId) {
+    this.stopQueryInStoreNoBroadcast(queryId);
+    this.removeQuery(queryId);
+  };
+
+  QueryManager.prototype.removeQuery = function (queryId) {
+    this.fetchQueryRejectFns.delete("query:" + queryId);
+    this.fetchQueryRejectFns.delete("fetchRequest:" + queryId);
+    this.getQuery(queryId).subscriptions.forEach(function (x) {
+      return x.unsubscribe();
+    });
+    this.queries.delete(queryId);
+  };
+
+  QueryManager.prototype.getCurrentQueryResult = function (observableQuery, optimistic) {
+    if (optimistic === void 0) {
+      optimistic = true;
+    }
+
+    var _a = observableQuery.options,
+        variables = _a.variables,
+        query = _a.query,
+        fetchPolicy = _a.fetchPolicy,
+        returnPartialData = _a.returnPartialData;
+    var lastResult = observableQuery.getLastResult();
+    var newData = this.getQuery(observableQuery.queryId).newData;
+
+    if (newData && newData.complete) {
+      return {
+        data: newData.result,
+        partial: false
+      };
+    }
+
+    if (fetchPolicy === 'no-cache' || fetchPolicy === 'network-only') {
+      return {
+        data: undefined,
+        partial: false
+      };
+    }
+
+    var _b = this.cache.diff({
+      query: query,
+      variables: variables,
+      previousResult: lastResult ? lastResult.data : undefined,
+      returnPartialData: true,
+      optimistic: optimistic
+    }),
+        result = _b.result,
+        complete = _b.complete;
+
+    return {
+      data: complete || returnPartialData ? result : void 0,
+      partial: !complete
+    };
+  };
+
+  QueryManager.prototype.getQueryWithPreviousResult = function (queryIdOrObservable) {
+    var observableQuery;
+
+    if (typeof queryIdOrObservable === 'string') {
+      var foundObservableQuery = this.getQuery(queryIdOrObservable).observableQuery;
+      "development" === "production" ? (0, _tsInvariant.invariant)(foundObservableQuery, 32) : (0, _tsInvariant.invariant)(foundObservableQuery, "ObservableQuery with this id doesn't exist: " + queryIdOrObservable);
+      observableQuery = foundObservableQuery;
+    } else {
+      observableQuery = queryIdOrObservable;
+    }
+
+    var _a = observableQuery.options,
+        variables = _a.variables,
+        query = _a.query;
+    return {
+      previousResult: this.getCurrentQueryResult(observableQuery, false).data,
+      variables: variables,
+      document: query
+    };
+  };
+
+  QueryManager.prototype.broadcastQueries = function () {
+    var _this = this;
+
+    this.onBroadcast();
+    this.queries.forEach(function (info, id) {
+      if (info.invalidated) {
+        info.listeners.forEach(function (listener) {
+          if (listener) {
+            listener(_this.queryStore.get(id), info.newData);
+          }
+        });
+      }
+    });
+  };
+
+  QueryManager.prototype.getLocalState = function () {
+    return this.localState;
+  };
+
+  QueryManager.prototype.getObservableFromLink = function (query, context, variables, deduplication) {
+    var _this = this;
+
+    if (deduplication === void 0) {
+      deduplication = this.queryDeduplication;
+    }
+
+    var observable;
+    var serverQuery = this.transform(query).serverQuery;
+
+    if (serverQuery) {
+      var _a = this,
+          inFlightLinkObservables_1 = _a.inFlightLinkObservables,
+          link = _a.link;
+
+      var operation = {
+        query: serverQuery,
+        variables: variables,
+        operationName: (0, _getFromAST.getOperationName)(serverQuery) || void 0,
+        context: this.prepareContext((0, _tslib.__assign)((0, _tslib.__assign)({}, context), {
+          forceFetch: !deduplication
+        }))
+      };
+      context = operation.context;
+
+      if (deduplication) {
+        var byVariables_1 = inFlightLinkObservables_1.get(serverQuery) || new Map();
+        inFlightLinkObservables_1.set(serverQuery, byVariables_1);
+        var varJson_1 = JSON.stringify(variables);
+        observable = byVariables_1.get(varJson_1);
+
+        if (!observable) {
+          byVariables_1.set(varJson_1, observable = (0, _observables.multiplex)((0, _execute.execute)(link, operation)));
+
+          var cleanup = function () {
+            byVariables_1.delete(varJson_1);
+            if (!byVariables_1.size) inFlightLinkObservables_1.delete(serverQuery);
+            cleanupSub_1.unsubscribe();
+          };
+
+          var cleanupSub_1 = observable.subscribe({
+            next: cleanup,
+            error: cleanup,
+            complete: cleanup
+          });
+        }
+      } else {
+        observable = (0, _observables.multiplex)((0, _execute.execute)(link, operation));
+      }
+    } else {
+      observable = _zenObservable.default.of({
+        data: {}
+      });
+      context = this.prepareContext(context);
+    }
+
+    var clientQuery = this.transform(query).clientQuery;
+
+    if (clientQuery) {
+      observable = (0, _observables.asyncMap)(observable, function (result) {
+        return _this.localState.runResolvers({
+          document: clientQuery,
+          remoteResult: result,
+          context: context,
+          variables: variables
+        });
+      });
+    }
+
+    return observable;
+  };
+
+  QueryManager.prototype.fetchRequest = function (_a) {
+    var _this = this;
+
+    var requestId = _a.requestId,
+        queryId = _a.queryId,
+        document = _a.document,
+        options = _a.options,
+        fetchMoreForQueryId = _a.fetchMoreForQueryId;
+    var variables = options.variables,
+        _b = options.errorPolicy,
+        errorPolicy = _b === void 0 ? 'none' : _b,
+        fetchPolicy = options.fetchPolicy;
+    var resultFromStore;
+    var errorsFromStore;
+    return new Promise(function (resolve, reject) {
+      var observable = _this.getObservableFromLink(document, options.context, variables);
+
+      var fqrfId = "fetchRequest:" + queryId;
+
+      _this.fetchQueryRejectFns.set(fqrfId, reject);
+
+      var cleanup = function () {
+        _this.fetchQueryRejectFns.delete(fqrfId);
+
+        _this.setQuery(queryId, function (_a) {
+          var subscriptions = _a.subscriptions;
+          subscriptions.delete(subscription);
+        });
+      };
+
+      var subscription = observable.map(function (result) {
+        if (requestId >= _this.getQuery(queryId).lastRequestId) {
+          _this.markQueryResult(queryId, result, options, fetchMoreForQueryId);
+
+          _this.queryStore.markQueryResult(queryId, result, fetchMoreForQueryId);
+
+          _this.invalidate(queryId);
+
+          _this.invalidate(fetchMoreForQueryId);
+
+          _this.broadcastQueries();
+        }
+
+        if (errorPolicy === 'none' && (0, _arrays.isNonEmptyArray)(result.errors)) {
+          return reject(new _ApolloError.ApolloError({
+            graphQLErrors: result.errors
+          }));
+        }
+
+        if (errorPolicy === 'all') {
+          errorsFromStore = result.errors;
+        }
+
+        if (fetchMoreForQueryId || fetchPolicy === 'no-cache') {
+          resultFromStore = result.data;
+        } else {
+          var _a = _this.cache.diff({
+            variables: variables,
+            query: document,
+            optimistic: false,
+            returnPartialData: true
+          }),
+              result_1 = _a.result,
+              complete = _a.complete;
+
+          if (complete || options.returnPartialData) {
+            resultFromStore = result_1;
+          }
+        }
+      }).subscribe({
+        error: function (error) {
+          cleanup();
+          reject(error);
+        },
+        complete: function () {
+          cleanup();
+          resolve({
+            data: resultFromStore,
+            errors: errorsFromStore,
+            loading: false,
+            networkStatus: _networkStatus.NetworkStatus.ready,
+            stale: false
+          });
+        }
+      });
+
+      _this.setQuery(queryId, function (_a) {
+        var subscriptions = _a.subscriptions;
+        subscriptions.add(subscription);
+      });
+    });
+  };
+
+  QueryManager.prototype.getQuery = function (queryId) {
+    return this.queries.get(queryId) || {
+      listeners: new Set(),
+      invalidated: false,
+      document: null,
+      newData: null,
+      lastRequestId: 1,
+      observableQuery: null,
+      subscriptions: new Set()
+    };
+  };
+
+  QueryManager.prototype.setQuery = function (queryId, updater) {
+    var prev = this.getQuery(queryId);
+    var newInfo = (0, _tslib.__assign)((0, _tslib.__assign)({}, prev), updater(prev));
+    this.queries.set(queryId, newInfo);
+  };
+
+  QueryManager.prototype.invalidate = function (queryId, invalidated) {
+    if (invalidated === void 0) {
+      invalidated = true;
+    }
+
+    if (queryId) {
+      this.setQuery(queryId, function () {
+        return {
+          invalidated: invalidated
+        };
+      });
+    }
+  };
+
+  QueryManager.prototype.prepareContext = function (context) {
+    if (context === void 0) {
+      context = {};
+    }
+
+    var newContext = this.localState.prepareContext(context);
+    return (0, _tslib.__assign)((0, _tslib.__assign)({}, newContext), {
+      clientAwareness: this.clientAwareness
+    });
+  };
+
+  QueryManager.prototype.checkInFlight = function (queryId) {
+    var query = this.queryStore.get(queryId);
+    return query && query.networkStatus !== _networkStatus.NetworkStatus.ready && query.networkStatus !== _networkStatus.NetworkStatus.error;
+  };
+
+  QueryManager.prototype.startPollingQuery = function (options, queryId, listener) {
+    var _this = this;
+
+    var pollInterval = options.pollInterval;
+    "development" === "production" ? (0, _tsInvariant.invariant)(pollInterval, 33) : (0, _tsInvariant.invariant)(pollInterval, 'Attempted to start a polling query without a polling interval.');
+
+    if (!this.ssrMode) {
+      var info = this.pollingInfoByQueryId.get(queryId);
+
+      if (!info) {
+        this.pollingInfoByQueryId.set(queryId, info = {});
+      }
+
+      info.interval = pollInterval;
+      info.options = (0, _tslib.__assign)((0, _tslib.__assign)({}, options), {
+        fetchPolicy: 'network-only'
+      });
+
+      var maybeFetch_1 = function () {
+        var info = _this.pollingInfoByQueryId.get(queryId);
+
+        if (info) {
+          if (_this.checkInFlight(queryId)) {
+            poll_1();
+          } else {
+            _this.fetchQuery(queryId, info.options, _types.FetchType.poll).then(poll_1, poll_1);
+          }
+        }
+      };
+
+      var poll_1 = function () {
+        var info = _this.pollingInfoByQueryId.get(queryId);
+
+        if (info) {
+          clearTimeout(info.timeout);
+          info.timeout = setTimeout(maybeFetch_1, info.interval);
+        }
+      };
+
+      if (listener) {
+        this.addQueryListener(queryId, listener);
+      }
+
+      poll_1();
+    }
+
+    return queryId;
+  };
+
+  QueryManager.prototype.stopPollingQuery = function (queryId) {
+    this.pollingInfoByQueryId.delete(queryId);
+  };
+
+  return QueryManager;
+}();
+
+exports.QueryManager = QueryManager;
+
+function markMutationResult(mutation, cache) {
+  if (!(0, _errorHandling.graphQLResultHasError)(mutation.result)) {
+    var cacheWrites_1 = [{
+      result: mutation.result.data,
+      dataId: 'ROOT_MUTATION',
+      query: mutation.document,
+      variables: mutation.variables
+    }];
+    var queryUpdatersById_1 = mutation.queryUpdatersById;
+
+    if (queryUpdatersById_1) {
+      Object.keys(queryUpdatersById_1).forEach(function (id) {
+        var _a = queryUpdatersById_1[id],
+            query = _a.query,
+            updater = _a.updater;
+
+        var _b = cache.diff({
+          query: query.document,
+          variables: query.variables,
+          returnPartialData: true,
+          optimistic: false
+        }),
+            currentQueryResult = _b.result,
+            complete = _b.complete;
+
+        if (complete) {
+          var nextQueryResult = (0, _errorHandling.tryFunctionOrLogError)(function () {
+            return updater(currentQueryResult, {
+              mutationResult: mutation.result,
+              queryName: (0, _getFromAST.getOperationName)(query.document) || undefined,
+              queryVariables: query.variables
+            });
+          });
+
+          if (nextQueryResult) {
+            cacheWrites_1.push({
+              result: nextQueryResult,
+              dataId: 'ROOT_QUERY',
+              query: query.document,
+              variables: query.variables
+            });
+          }
+        }
+      });
+    }
+
+    cache.performTransaction(function (c) {
+      cacheWrites_1.forEach(function (write) {
+        return c.write(write);
+      });
+      var update = mutation.update;
+
+      if (update) {
+        (0, _errorHandling.tryFunctionOrLogError)(function () {
+          return update(c, mutation.result);
+        });
+      }
+    });
+  }
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","zen-observable":"../node_modules/zen-observable/index.js","symbol-observable":"../node_modules/symbol-observable/es/index.js","../utilities/graphql/getFromAST.js":"../node_modules/@apollo/client/utilities/graphql/getFromAST.js","../link/core/execute.js":"../node_modules/@apollo/client/link/core/execute.js","../utilities/graphql/directives.js":"../node_modules/@apollo/client/utilities/graphql/directives.js","../utilities/common/errorHandling.js":"../node_modules/@apollo/client/utilities/common/errorHandling.js","../utilities/graphql/transform.js":"../node_modules/@apollo/client/utilities/graphql/transform.js","../utilities/common/canUse.js":"../node_modules/@apollo/client/utilities/common/canUse.js","../utilities/common/arrays.js":"../node_modules/@apollo/client/utilities/common/arrays.js","../errors/ApolloError.js":"../node_modules/@apollo/client/errors/ApolloError.js","../data/mutations.js":"../node_modules/@apollo/client/data/mutations.js","./networkStatus.js":"../node_modules/@apollo/client/core/networkStatus.js","../data/queries.js":"../node_modules/@apollo/client/data/queries.js","./types.js":"../node_modules/@apollo/client/core/types.js","./ObservableQuery.js":"../node_modules/@apollo/client/core/ObservableQuery.js","./LocalState.js":"../node_modules/@apollo/client/core/LocalState.js","../utilities/observables/observables.js":"../node_modules/@apollo/client/utilities/observables/observables.js"}],"../node_modules/@apollo/client/version.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.version = void 0;
+var version = 'local';
+exports.version = version;
+},{}],"../node_modules/@apollo/client/ApolloClient.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.ApolloClient = void 0;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+var _ApolloLink = require("./link/core/ApolloLink.js");
+
+var _execute = require("./link/core/execute.js");
+
+var _LocalState = require("./core/LocalState.js");
+
+var _QueryManager = require("./core/QueryManager.js");
+
+var _version = require("./version.js");
+
+var _HttpLink = require("./link/http/HttpLink.js");
+
+var hasSuggestedDevtools = false;
+
+var ApolloClient = function () {
+  function ApolloClient(options) {
+    var _this = this;
+
+    this.defaultOptions = {};
+    this.resetStoreCallbacks = [];
+    this.clearStoreCallbacks = [];
+    var uri = options.uri,
+        credentials = options.credentials,
+        headers = options.headers,
+        cache = options.cache,
+        _a = options.ssrMode,
+        ssrMode = _a === void 0 ? false : _a,
+        _b = options.ssrForceFetchDelay,
+        ssrForceFetchDelay = _b === void 0 ? 0 : _b,
+        connectToDevTools = options.connectToDevTools,
+        _c = options.queryDeduplication,
+        queryDeduplication = _c === void 0 ? true : _c,
+        defaultOptions = options.defaultOptions,
+        _d = options.assumeImmutableResults,
+        assumeImmutableResults = _d === void 0 ? false : _d,
+        resolvers = options.resolvers,
+        typeDefs = options.typeDefs,
+        fragmentMatcher = options.fragmentMatcher,
+        clientAwarenessName = options.name,
+        clientAwarenessVersion = options.version;
+    var link = options.link;
+
+    if (!link) {
+      if (uri) {
+        link = new _HttpLink.HttpLink({
+          uri: uri,
+          credentials: credentials,
+          headers: headers
+        });
+      } else if (resolvers) {
+        link = _ApolloLink.ApolloLink.empty();
+      }
+    }
+
+    if (!link || !cache) {
+      throw "development" === "production" ? new _tsInvariant.InvariantError(1) : new _tsInvariant.InvariantError("To initialize Apollo Client, you must specify 'uri' or 'link' and " + "'cache' properties in the options object. \n" + "For more information, please visit: " + "https://www.apollographql.com/docs/react/");
+    }
+
+    this.link = link;
+    this.cache = cache;
+    this.disableNetworkFetches = ssrMode || ssrForceFetchDelay > 0;
+    this.queryDeduplication = queryDeduplication;
+    this.defaultOptions = defaultOptions || {};
+    this.typeDefs = typeDefs;
+
+    if (ssrForceFetchDelay) {
+      setTimeout(function () {
+        return _this.disableNetworkFetches = false;
+      }, ssrForceFetchDelay);
+    }
+
+    this.watchQuery = this.watchQuery.bind(this);
+    this.query = this.query.bind(this);
+    this.mutate = this.mutate.bind(this);
+    this.resetStore = this.resetStore.bind(this);
+    this.reFetchObservableQueries = this.reFetchObservableQueries.bind(this);
+    var defaultConnectToDevTools = "development" !== 'production' && typeof window !== 'undefined' && !window.__APOLLO_CLIENT__;
+
+    if (typeof connectToDevTools === 'undefined' ? defaultConnectToDevTools : connectToDevTools && typeof window !== 'undefined') {
+      window.__APOLLO_CLIENT__ = this;
+    }
+
+    if (!hasSuggestedDevtools && "development" !== 'production') {
+      hasSuggestedDevtools = true;
+
+      if (typeof window !== 'undefined' && window.document && window.top === window.self) {
+        if (typeof window.__APOLLO_DEVTOOLS_GLOBAL_HOOK__ === 'undefined') {
+          if (window.navigator && window.navigator.userAgent && window.navigator.userAgent.indexOf('Chrome') > -1) {
+            console.debug('Download the Apollo DevTools ' + 'for a better development experience: ' + 'https://chrome.google.com/webstore/detail/apollo-client-developer-t/jdkknkkbebbapilgoeccciglkfbmbnfm');
+          }
+        }
+      }
+    }
+
+    this.version = _version.version;
+    this.localState = new _LocalState.LocalState({
+      cache: cache,
+      client: this,
+      resolvers: resolvers,
+      fragmentMatcher: fragmentMatcher
+    });
+    this.queryManager = new _QueryManager.QueryManager({
+      cache: this.cache,
+      link: this.link,
+      queryDeduplication: queryDeduplication,
+      ssrMode: ssrMode,
+      clientAwareness: {
+        name: clientAwarenessName,
+        version: clientAwarenessVersion
+      },
+      localState: this.localState,
+      assumeImmutableResults: assumeImmutableResults,
+      onBroadcast: function () {
+        if (_this.devToolsHookCb) {
+          _this.devToolsHookCb({
+            action: {},
+            state: {
+              queries: _this.queryManager.queryStore.getStore(),
+              mutations: _this.queryManager.mutationStore.getStore()
+            },
+            dataWithOptimisticResults: _this.cache.extract(true)
+          });
+        }
+      }
+    });
+  }
+
+  ApolloClient.prototype.stop = function () {
+    this.queryManager.stop();
+  };
+
+  ApolloClient.prototype.watchQuery = function (options) {
+    if (this.defaultOptions.watchQuery) {
+      options = (0, _tslib.__assign)((0, _tslib.__assign)({}, this.defaultOptions.watchQuery), options);
+    }
+
+    if (this.disableNetworkFetches && (options.fetchPolicy === 'network-only' || options.fetchPolicy === 'cache-and-network')) {
+      options = (0, _tslib.__assign)((0, _tslib.__assign)({}, options), {
+        fetchPolicy: 'cache-first'
+      });
+    }
+
+    return this.queryManager.watchQuery(options);
+  };
+
+  ApolloClient.prototype.query = function (options) {
+    if (this.defaultOptions.query) {
+      options = (0, _tslib.__assign)((0, _tslib.__assign)({}, this.defaultOptions.query), options);
+    }
+
+    "development" === "production" ? (0, _tsInvariant.invariant)(options.fetchPolicy !== 'cache-and-network', 2) : (0, _tsInvariant.invariant)(options.fetchPolicy !== 'cache-and-network', 'The cache-and-network fetchPolicy does not work with client.query, because ' + 'client.query can only return a single result. Please use client.watchQuery ' + 'to receive multiple results from the cache and the network, or consider ' + 'using a different fetchPolicy, such as cache-first or network-only.');
+
+    if (this.disableNetworkFetches && options.fetchPolicy === 'network-only') {
+      options = (0, _tslib.__assign)((0, _tslib.__assign)({}, options), {
+        fetchPolicy: 'cache-first'
+      });
+    }
+
+    return this.queryManager.query(options);
+  };
+
+  ApolloClient.prototype.mutate = function (options) {
+    if (this.defaultOptions.mutate) {
+      options = (0, _tslib.__assign)((0, _tslib.__assign)({}, this.defaultOptions.mutate), options);
+    }
+
+    return this.queryManager.mutate(options);
+  };
+
+  ApolloClient.prototype.subscribe = function (options) {
+    return this.queryManager.startGraphQLSubscription(options);
+  };
+
+  ApolloClient.prototype.readQuery = function (options, optimistic) {
+    if (optimistic === void 0) {
+      optimistic = false;
+    }
+
+    return this.cache.readQuery(options, optimistic);
+  };
+
+  ApolloClient.prototype.readFragment = function (options, optimistic) {
+    if (optimistic === void 0) {
+      optimistic = false;
+    }
+
+    return this.cache.readFragment(options, optimistic);
+  };
+
+  ApolloClient.prototype.writeQuery = function (options) {
+    var result = this.cache.writeQuery(options);
+    this.queryManager.broadcastQueries();
+    return result;
+  };
+
+  ApolloClient.prototype.writeFragment = function (options) {
+    var result = this.cache.writeFragment(options);
+    this.queryManager.broadcastQueries();
+    return result;
+  };
+
+  ApolloClient.prototype.writeData = function (options) {
+    var result = this.cache.writeData(options);
+    this.queryManager.broadcastQueries();
+    return result;
+  };
+
+  ApolloClient.prototype.__actionHookForDevTools = function (cb) {
+    this.devToolsHookCb = cb;
+  };
+
+  ApolloClient.prototype.__requestRaw = function (payload) {
+    return (0, _execute.execute)(this.link, payload);
+  };
+
+  ApolloClient.prototype.resetStore = function () {
+    var _this = this;
+
+    return Promise.resolve().then(function () {
+      return _this.queryManager.clearStore();
+    }).then(function () {
+      return Promise.all(_this.resetStoreCallbacks.map(function (fn) {
+        return fn();
+      }));
+    }).then(function () {
+      return _this.reFetchObservableQueries();
+    });
+  };
+
+  ApolloClient.prototype.clearStore = function () {
+    var _this = this;
+
+    return Promise.resolve().then(function () {
+      return _this.queryManager.clearStore();
+    }).then(function () {
+      return Promise.all(_this.clearStoreCallbacks.map(function (fn) {
+        return fn();
+      }));
+    });
+  };
+
+  ApolloClient.prototype.onResetStore = function (cb) {
+    var _this = this;
+
+    this.resetStoreCallbacks.push(cb);
+    return function () {
+      _this.resetStoreCallbacks = _this.resetStoreCallbacks.filter(function (c) {
+        return c !== cb;
+      });
+    };
+  };
+
+  ApolloClient.prototype.onClearStore = function (cb) {
+    var _this = this;
+
+    this.clearStoreCallbacks.push(cb);
+    return function () {
+      _this.clearStoreCallbacks = _this.clearStoreCallbacks.filter(function (c) {
+        return c !== cb;
+      });
+    };
+  };
+
+  ApolloClient.prototype.reFetchObservableQueries = function (includeStandby) {
+    return this.queryManager.reFetchObservableQueries(includeStandby);
+  };
+
+  ApolloClient.prototype.extract = function (optimistic) {
+    return this.cache.extract(optimistic);
+  };
+
+  ApolloClient.prototype.restore = function (serializedState) {
+    return this.cache.restore(serializedState);
+  };
+
+  ApolloClient.prototype.addResolvers = function (resolvers) {
+    this.localState.addResolvers(resolvers);
+  };
+
+  ApolloClient.prototype.setResolvers = function (resolvers) {
+    this.localState.setResolvers(resolvers);
+  };
+
+  ApolloClient.prototype.getResolvers = function () {
+    return this.localState.getResolvers();
+  };
+
+  ApolloClient.prototype.setLocalStateFragmentMatcher = function (fragmentMatcher) {
+    this.localState.setFragmentMatcher(fragmentMatcher);
+  };
+
+  return ApolloClient;
+}();
+
+exports.ApolloClient = ApolloClient;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","./link/core/ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js","./link/core/execute.js":"../node_modules/@apollo/client/link/core/execute.js","./core/LocalState.js":"../node_modules/@apollo/client/core/LocalState.js","./core/QueryManager.js":"../node_modules/@apollo/client/core/QueryManager.js","./version.js":"../node_modules/@apollo/client/version.js","./link/http/HttpLink.js":"../node_modules/@apollo/client/link/http/HttpLink.js"}],"../node_modules/graphql/jsutils/devAssert.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = devAssert;
+
+function devAssert(condition, message) {
+  var booleanCondition = Boolean(condition);
+
+  if (!booleanCondition) {
+    throw new Error(message);
+  }
+}
+},{}],"../node_modules/graphql/jsutils/defineToJSON.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = defineToJSON;
+
+var _nodejsCustomInspectSymbol = _interopRequireDefault(require("./nodejsCustomInspectSymbol"));
+
+function _interopRequireDefault(obj) {
+  return obj && obj.__esModule ? obj : {
+    default: obj
+  };
+}
+/**
+ * The `defineToJSON()` function defines toJSON() and inspect() prototype
+ * methods, if no function provided they become aliases for toString().
+ */
+
+
+function defineToJSON(classObject) {
+  var fn = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : classObject.prototype.toString;
+  classObject.prototype.toJSON = fn;
+  classObject.prototype.inspect = fn;
+
+  if (_nodejsCustomInspectSymbol.default) {
+    classObject.prototype[_nodejsCustomInspectSymbol.default] = fn;
+  }
+}
+},{"./nodejsCustomInspectSymbol":"../node_modules/graphql/jsutils/nodejsCustomInspectSymbol.js"}],"../node_modules/graphql/jsutils/isObjectLike.js":[function(require,module,exports) {
+"use strict";
+
+function _typeof2(obj) { if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") { _typeof2 = function (obj) { return typeof obj; }; } else { _typeof2 = function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; } return _typeof2(obj); }
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = isObjectLike;
+
+function _typeof(obj) {
+  if (typeof Symbol === "function" && _typeof2(Symbol.iterator) === "symbol") {
+    _typeof = function _typeof(obj) {
+      return _typeof2(obj);
+    };
+  } else {
+    _typeof = function _typeof(obj) {
+      return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : _typeof2(obj);
+    };
+  }
+
+  return _typeof(obj);
+}
+/**
+ * Return true if `value` is object-like. A value is object-like if it's not
+ * `null` and has a `typeof` result of "object".
+ */
+
+
+function isObjectLike(value) {
+  return _typeof(value) == 'object' && value !== null;
+}
+},{}],"../node_modules/graphql/language/location.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.getLocation = getLocation;
+/**
+ * Represents a location in a Source.
+ */
+
+/**
+ * Takes a Source and a UTF-8 character offset, and returns the corresponding
+ * line and column as a SourceLocation.
+ */
+
+function getLocation(source, position) {
+  var lineRegexp = /\r\n|[\n\r]/g;
+  var line = 1;
+  var column = position + 1;
+  var match;
+
+  while ((match = lineRegexp.exec(source.body)) && match.index < position) {
+    line += 1;
+    column = position + 1 - (match.index + match[0].length);
+  }
+
+  return {
+    line: line,
+    column: column
+  };
+}
+},{}],"../node_modules/graphql/language/printLocation.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.printLocation = printLocation;
+exports.printSourceLocation = printSourceLocation;
+
+var _location = require("../language/location");
+/**
+ * Render a helpful description of the location in the GraphQL Source document.
+ */
+
+
+function printLocation(location) {
+  return printSourceLocation(location.source, (0, _location.getLocation)(location.source, location.start));
+}
+/**
+ * Render a helpful description of the location in the GraphQL Source document.
+ */
+
+
+function printSourceLocation(source, sourceLocation) {
+  var firstLineColumnOffset = source.locationOffset.column - 1;
+  var body = whitespace(firstLineColumnOffset) + source.body;
+  var lineIndex = sourceLocation.line - 1;
+  var lineOffset = source.locationOffset.line - 1;
+  var lineNum = sourceLocation.line + lineOffset;
+  var columnOffset = sourceLocation.line === 1 ? firstLineColumnOffset : 0;
+  var columnNum = sourceLocation.column + columnOffset;
+  var locationStr = "".concat(source.name, ":").concat(lineNum, ":").concat(columnNum, "\n");
+  var lines = body.split(/\r\n|[\n\r]/g);
+  var locationLine = lines[lineIndex]; // Special case for minified documents
+
+  if (locationLine.length > 120) {
+    var sublineIndex = Math.floor(columnNum / 80);
+    var sublineColumnNum = columnNum % 80;
+    var sublines = [];
+
+    for (var i = 0; i < locationLine.length; i += 80) {
+      sublines.push(locationLine.slice(i, i + 80));
+    }
+
+    return locationStr + printPrefixedLines([["".concat(lineNum), sublines[0]]].concat(sublines.slice(1, sublineIndex + 1).map(function (subline) {
+      return ['', subline];
+    }), [[' ', whitespace(sublineColumnNum - 1) + '^'], ['', sublines[sublineIndex + 1]]]));
+  }
+
+  return locationStr + printPrefixedLines([// Lines specified like this: ["prefix", "string"],
+  ["".concat(lineNum - 1), lines[lineIndex - 1]], ["".concat(lineNum), locationLine], ['', whitespace(columnNum - 1) + '^'], ["".concat(lineNum + 1), lines[lineIndex + 1]]]);
+}
+
+function printPrefixedLines(lines) {
+  var existingLines = lines.filter(function (_ref) {
+    var _ = _ref[0],
+        line = _ref[1];
+    return line !== undefined;
+  });
+  var padLen = Math.max.apply(Math, existingLines.map(function (_ref2) {
+    var prefix = _ref2[0];
+    return prefix.length;
+  }));
+  return existingLines.map(function (_ref3) {
+    var prefix = _ref3[0],
+        line = _ref3[1];
+    return lpad(padLen, prefix) + (line ? ' | ' + line : ' |');
+  }).join('\n');
+}
+
+function whitespace(len) {
+  return Array(len + 1).join(' ');
+}
+
+function lpad(len, str) {
+  return whitespace(len - str.length) + str;
+}
+},{"../language/location":"../node_modules/graphql/language/location.js"}],"../node_modules/graphql/error/GraphQLError.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.GraphQLError = GraphQLError;
+exports.printError = printError;
+
+var _isObjectLike = _interopRequireDefault(require("../jsutils/isObjectLike"));
+
+var _location = require("../language/location");
+
+var _printLocation = require("../language/printLocation");
+
+function _interopRequireDefault(obj) {
+  return obj && obj.__esModule ? obj : {
+    default: obj
+  };
+}
+
+function GraphQLError( // eslint-disable-line no-redeclare
+message, nodes, source, positions, path, originalError, extensions) {
+  // Compute list of blame nodes.
+  var _nodes = Array.isArray(nodes) ? nodes.length !== 0 ? nodes : undefined : nodes ? [nodes] : undefined; // Compute locations in the source for the given nodes/positions.
+
+
+  var _source = source;
+
+  if (!_source && _nodes) {
+    var node = _nodes[0];
+    _source = node && node.loc && node.loc.source;
+  }
+
+  var _positions = positions;
+
+  if (!_positions && _nodes) {
+    _positions = _nodes.reduce(function (list, node) {
+      if (node.loc) {
+        list.push(node.loc.start);
+      }
+
+      return list;
+    }, []);
+  }
+
+  if (_positions && _positions.length === 0) {
+    _positions = undefined;
+  }
+
+  var _locations;
+
+  if (positions && source) {
+    _locations = positions.map(function (pos) {
+      return (0, _location.getLocation)(source, pos);
+    });
+  } else if (_nodes) {
+    _locations = _nodes.reduce(function (list, node) {
+      if (node.loc) {
+        list.push((0, _location.getLocation)(node.loc.source, node.loc.start));
+      }
+
+      return list;
+    }, []);
+  }
+
+  var _extensions = extensions;
+
+  if (_extensions == null && originalError != null) {
+    var originalExtensions = originalError.extensions;
+
+    if ((0, _isObjectLike.default)(originalExtensions)) {
+      _extensions = originalExtensions;
+    }
+  }
+
+  Object.defineProperties(this, {
+    message: {
+      value: message,
+      // By being enumerable, JSON.stringify will include `message` in the
+      // resulting output. This ensures that the simplest possible GraphQL
+      // service adheres to the spec.
+      enumerable: true,
+      writable: true
+    },
+    locations: {
+      // Coercing falsey values to undefined ensures they will not be included
+      // in JSON.stringify() when not provided.
+      value: _locations || undefined,
+      // By being enumerable, JSON.stringify will include `locations` in the
+      // resulting output. This ensures that the simplest possible GraphQL
+      // service adheres to the spec.
+      enumerable: Boolean(_locations)
+    },
+    path: {
+      // Coercing falsey values to undefined ensures they will not be included
+      // in JSON.stringify() when not provided.
+      value: path || undefined,
+      // By being enumerable, JSON.stringify will include `path` in the
+      // resulting output. This ensures that the simplest possible GraphQL
+      // service adheres to the spec.
+      enumerable: Boolean(path)
+    },
+    nodes: {
+      value: _nodes || undefined
+    },
+    source: {
+      value: _source || undefined
+    },
+    positions: {
+      value: _positions || undefined
+    },
+    originalError: {
+      value: originalError
+    },
+    extensions: {
+      // Coercing falsey values to undefined ensures they will not be included
+      // in JSON.stringify() when not provided.
+      value: _extensions || undefined,
+      // By being enumerable, JSON.stringify will include `path` in the
+      // resulting output. This ensures that the simplest possible GraphQL
+      // service adheres to the spec.
+      enumerable: Boolean(_extensions)
+    }
+  }); // Include (non-enumerable) stack trace.
+
+  if (originalError && originalError.stack) {
+    Object.defineProperty(this, 'stack', {
+      value: originalError.stack,
+      writable: true,
+      configurable: true
+    });
+  } else if (Error.captureStackTrace) {
+    Error.captureStackTrace(this, GraphQLError);
+  } else {
+    Object.defineProperty(this, 'stack', {
+      value: Error().stack,
+      writable: true,
+      configurable: true
+    });
+  }
+}
+
+GraphQLError.prototype = Object.create(Error.prototype, {
+  constructor: {
+    value: GraphQLError
+  },
+  name: {
+    value: 'GraphQLError'
+  },
+  toString: {
+    value: function toString() {
+      return printError(this);
+    }
+  }
+});
+/**
+ * Prints a GraphQLError to a string, representing useful location information
+ * about the error's position in the source.
+ */
+
+function printError(error) {
+  var output = error.message;
+
+  if (error.nodes) {
+    for (var _i2 = 0, _error$nodes2 = error.nodes; _i2 < _error$nodes2.length; _i2++) {
+      var node = _error$nodes2[_i2];
+
+      if (node.loc) {
+        output += '\n\n' + (0, _printLocation.printLocation)(node.loc);
+      }
+    }
+  } else if (error.source && error.locations) {
+    for (var _i4 = 0, _error$locations2 = error.locations; _i4 < _error$locations2.length; _i4++) {
+      var location = _error$locations2[_i4];
+      output += '\n\n' + (0, _printLocation.printSourceLocation)(error.source, location);
+    }
+  }
+
+  return output;
+}
+},{"../jsutils/isObjectLike":"../node_modules/graphql/jsutils/isObjectLike.js","../language/location":"../node_modules/graphql/language/location.js","../language/printLocation":"../node_modules/graphql/language/printLocation.js"}],"../node_modules/graphql/error/syntaxError.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.syntaxError = syntaxError;
+
+var _GraphQLError = require("./GraphQLError");
+/**
+ * Produces a GraphQLError representing a syntax error, containing useful
+ * descriptive information about the syntax error's position in the source.
+ */
+
+
+function syntaxError(source, position, description) {
+  return new _GraphQLError.GraphQLError("Syntax Error: ".concat(description), undefined, source, [position]);
+}
+},{"./GraphQLError":"../node_modules/graphql/error/GraphQLError.js"}],"../node_modules/graphql/language/kinds.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.Kind = void 0;
+/**
+ * The set of allowed kind values for AST nodes.
+ */
+
+var Kind = Object.freeze({
+  // Name
+  NAME: 'Name',
+  // Document
+  DOCUMENT: 'Document',
+  OPERATION_DEFINITION: 'OperationDefinition',
+  VARIABLE_DEFINITION: 'VariableDefinition',
+  SELECTION_SET: 'SelectionSet',
+  FIELD: 'Field',
+  ARGUMENT: 'Argument',
+  // Fragments
+  FRAGMENT_SPREAD: 'FragmentSpread',
+  INLINE_FRAGMENT: 'InlineFragment',
+  FRAGMENT_DEFINITION: 'FragmentDefinition',
+  // Values
+  VARIABLE: 'Variable',
+  INT: 'IntValue',
+  FLOAT: 'FloatValue',
+  STRING: 'StringValue',
+  BOOLEAN: 'BooleanValue',
+  NULL: 'NullValue',
+  ENUM: 'EnumValue',
+  LIST: 'ListValue',
+  OBJECT: 'ObjectValue',
+  OBJECT_FIELD: 'ObjectField',
+  // Directives
+  DIRECTIVE: 'Directive',
+  // Types
+  NAMED_TYPE: 'NamedType',
+  LIST_TYPE: 'ListType',
+  NON_NULL_TYPE: 'NonNullType',
+  // Type System Definitions
+  SCHEMA_DEFINITION: 'SchemaDefinition',
+  OPERATION_TYPE_DEFINITION: 'OperationTypeDefinition',
+  // Type Definitions
+  SCALAR_TYPE_DEFINITION: 'ScalarTypeDefinition',
+  OBJECT_TYPE_DEFINITION: 'ObjectTypeDefinition',
+  FIELD_DEFINITION: 'FieldDefinition',
+  INPUT_VALUE_DEFINITION: 'InputValueDefinition',
+  INTERFACE_TYPE_DEFINITION: 'InterfaceTypeDefinition',
+  UNION_TYPE_DEFINITION: 'UnionTypeDefinition',
+  ENUM_TYPE_DEFINITION: 'EnumTypeDefinition',
+  ENUM_VALUE_DEFINITION: 'EnumValueDefinition',
+  INPUT_OBJECT_TYPE_DEFINITION: 'InputObjectTypeDefinition',
+  // Directive Definitions
+  DIRECTIVE_DEFINITION: 'DirectiveDefinition',
+  // Type System Extensions
+  SCHEMA_EXTENSION: 'SchemaExtension',
+  // Type Extensions
+  SCALAR_TYPE_EXTENSION: 'ScalarTypeExtension',
+  OBJECT_TYPE_EXTENSION: 'ObjectTypeExtension',
+  INTERFACE_TYPE_EXTENSION: 'InterfaceTypeExtension',
+  UNION_TYPE_EXTENSION: 'UnionTypeExtension',
+  ENUM_TYPE_EXTENSION: 'EnumTypeExtension',
+  INPUT_OBJECT_TYPE_EXTENSION: 'InputObjectTypeExtension'
+});
+/**
+ * The enum type representing the possible kind values of AST nodes.
+ */
+
+exports.Kind = Kind;
+},{}],"../node_modules/graphql/jsutils/defineToStringTag.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = defineToStringTag;
+/**
+ * The `defineToStringTag()` function checks first to see if the runtime
+ * supports the `Symbol` class and then if the `Symbol.toStringTag` constant
+ * is defined as a `Symbol` instance. If both conditions are met, the
+ * Symbol.toStringTag property is defined as a getter that returns the
+ * supplied class constructor's name.
+ *
+ * @method defineToStringTag
+ *
+ * @param {Class<any>} classObject a class such as Object, String, Number but
+ * typically one of your own creation through the class keyword; `class A {}`,
+ * for example.
+ */
+
+function defineToStringTag(classObject) {
+  if (typeof Symbol === 'function' && Symbol.toStringTag) {
+    Object.defineProperty(classObject.prototype, Symbol.toStringTag, {
+      get: function get() {
+        return this.constructor.name;
+      }
+    });
+  }
+}
+},{}],"../node_modules/graphql/language/source.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.Source = void 0;
+
+var _devAssert = _interopRequireDefault(require("../jsutils/devAssert"));
+
+var _defineToStringTag = _interopRequireDefault(require("../jsutils/defineToStringTag"));
+
+function _interopRequireDefault(obj) {
+  return obj && obj.__esModule ? obj : {
+    default: obj
+  };
+}
+/**
+ * A representation of source input to GraphQL.
+ * `name` and `locationOffset` are optional. They are useful for clients who
+ * store GraphQL documents in source files; for example, if the GraphQL input
+ * starts at line 40 in a file named Foo.graphql, it might be useful for name to
+ * be "Foo.graphql" and location to be `{ line: 40, column: 0 }`.
+ * line and column in locationOffset are 1-indexed
+ */
+
+
+var Source = function Source(body, name, locationOffset) {
+  this.body = body;
+  this.name = name || 'GraphQL request';
+  this.locationOffset = locationOffset || {
+    line: 1,
+    column: 1
+  };
+  this.locationOffset.line > 0 || (0, _devAssert.default)(0, 'line in locationOffset is 1-indexed and must be positive');
+  this.locationOffset.column > 0 || (0, _devAssert.default)(0, 'column in locationOffset is 1-indexed and must be positive');
+}; // Conditionally apply `[Symbol.toStringTag]` if `Symbol`s are supported
+
+
+exports.Source = Source;
+(0, _defineToStringTag.default)(Source);
+},{"../jsutils/devAssert":"../node_modules/graphql/jsutils/devAssert.js","../jsutils/defineToStringTag":"../node_modules/graphql/jsutils/defineToStringTag.js"}],"../node_modules/graphql/language/tokenKind.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.TokenKind = void 0;
+/**
+ * An exported enum describing the different kinds of tokens that the
+ * lexer emits.
+ */
+
+var TokenKind = Object.freeze({
+  SOF: '<SOF>',
+  EOF: '<EOF>',
+  BANG: '!',
+  DOLLAR: '$',
+  AMP: '&',
+  PAREN_L: '(',
+  PAREN_R: ')',
+  SPREAD: '...',
+  COLON: ':',
+  EQUALS: '=',
+  AT: '@',
+  BRACKET_L: '[',
+  BRACKET_R: ']',
+  BRACE_L: '{',
+  PIPE: '|',
+  BRACE_R: '}',
+  NAME: 'Name',
+  INT: 'Int',
+  FLOAT: 'Float',
+  STRING: 'String',
+  BLOCK_STRING: 'BlockString',
+  COMMENT: 'Comment'
+});
+/**
+ * The enum type representing the token kinds values.
+ */
+
+exports.TokenKind = TokenKind;
+},{}],"../node_modules/graphql/language/lexer.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.createLexer = createLexer;
+exports.isPunctuatorToken = isPunctuatorToken;
+
+var _defineToJSON = _interopRequireDefault(require("../jsutils/defineToJSON"));
+
+var _syntaxError = require("../error/syntaxError");
+
+var _blockString = require("./blockString");
+
+var _tokenKind = require("./tokenKind");
+
+function _interopRequireDefault(obj) {
+  return obj && obj.__esModule ? obj : {
+    default: obj
+  };
+}
+/**
+ * Given a Source object, this returns a Lexer for that source.
+ * A Lexer is a stateful stream generator in that every time
+ * it is advanced, it returns the next token in the Source. Assuming the
+ * source lexes, the final Token emitted by the lexer will be of kind
+ * EOF, after which the lexer will repeatedly return the same EOF token
+ * whenever called.
+ */
+
+
+function createLexer(source, options) {
+  var startOfFileToken = new Tok(_tokenKind.TokenKind.SOF, 0, 0, 0, 0, null);
+  var lexer = {
+    source: source,
+    options: options,
+    lastToken: startOfFileToken,
+    token: startOfFileToken,
+    line: 1,
+    lineStart: 0,
+    advance: advanceLexer,
+    lookahead: lookahead
+  };
+  return lexer;
+}
+
+function advanceLexer() {
+  this.lastToken = this.token;
+  var token = this.token = this.lookahead();
+  return token;
+}
+
+function lookahead() {
+  var token = this.token;
+
+  if (token.kind !== _tokenKind.TokenKind.EOF) {
+    do {
+      // Note: next is only mutable during parsing, so we cast to allow this.
+      token = token.next || (token.next = readToken(this, token));
+    } while (token.kind === _tokenKind.TokenKind.COMMENT);
+  }
+
+  return token;
+}
+/**
+ * The return type of createLexer.
+ */
+// @internal
+
+
+function isPunctuatorToken(token) {
+  var kind = token.kind;
+  return kind === _tokenKind.TokenKind.BANG || kind === _tokenKind.TokenKind.DOLLAR || kind === _tokenKind.TokenKind.AMP || kind === _tokenKind.TokenKind.PAREN_L || kind === _tokenKind.TokenKind.PAREN_R || kind === _tokenKind.TokenKind.SPREAD || kind === _tokenKind.TokenKind.COLON || kind === _tokenKind.TokenKind.EQUALS || kind === _tokenKind.TokenKind.AT || kind === _tokenKind.TokenKind.BRACKET_L || kind === _tokenKind.TokenKind.BRACKET_R || kind === _tokenKind.TokenKind.BRACE_L || kind === _tokenKind.TokenKind.PIPE || kind === _tokenKind.TokenKind.BRACE_R;
+}
+/**
+ * Helper function for constructing the Token object.
+ */
+
+
+function Tok(kind, start, end, line, column, prev, value) {
+  this.kind = kind;
+  this.start = start;
+  this.end = end;
+  this.line = line;
+  this.column = column;
+  this.value = value;
+  this.prev = prev;
+  this.next = null;
+} // Print a simplified form when appearing in JSON/util.inspect.
+
+
+(0, _defineToJSON.default)(Tok, function () {
+  return {
+    kind: this.kind,
+    value: this.value,
+    line: this.line,
+    column: this.column
+  };
+});
+
+function printCharCode(code) {
+  return (// NaN/undefined represents access beyond the end of the file.
+    isNaN(code) ? _tokenKind.TokenKind.EOF : // Trust JSON for ASCII.
+    code < 0x007f ? JSON.stringify(String.fromCharCode(code)) : // Otherwise print the escaped form.
+    "\"\\u".concat(('00' + code.toString(16).toUpperCase()).slice(-4), "\"")
+  );
+}
+/**
+ * Gets the next token from the source starting at the given position.
+ *
+ * This skips over whitespace until it finds the next lexable token, then lexes
+ * punctuators immediately or calls the appropriate helper function for more
+ * complicated tokens.
+ */
+
+
+function readToken(lexer, prev) {
+  var source = lexer.source;
+  var body = source.body;
+  var bodyLength = body.length;
+  var pos = positionAfterWhitespace(body, prev.end, lexer);
+  var line = lexer.line;
+  var col = 1 + pos - lexer.lineStart;
+
+  if (pos >= bodyLength) {
+    return new Tok(_tokenKind.TokenKind.EOF, bodyLength, bodyLength, line, col, prev);
+  }
+
+  var code = body.charCodeAt(pos); // SourceCharacter
+
+  switch (code) {
+    // !
+    case 33:
+      return new Tok(_tokenKind.TokenKind.BANG, pos, pos + 1, line, col, prev);
+    // #
+
+    case 35:
+      return readComment(source, pos, line, col, prev);
+    // $
+
+    case 36:
+      return new Tok(_tokenKind.TokenKind.DOLLAR, pos, pos + 1, line, col, prev);
+    // &
+
+    case 38:
+      return new Tok(_tokenKind.TokenKind.AMP, pos, pos + 1, line, col, prev);
+    // (
+
+    case 40:
+      return new Tok(_tokenKind.TokenKind.PAREN_L, pos, pos + 1, line, col, prev);
+    // )
+
+    case 41:
+      return new Tok(_tokenKind.TokenKind.PAREN_R, pos, pos + 1, line, col, prev);
+    // .
+
+    case 46:
+      if (body.charCodeAt(pos + 1) === 46 && body.charCodeAt(pos + 2) === 46) {
+        return new Tok(_tokenKind.TokenKind.SPREAD, pos, pos + 3, line, col, prev);
+      }
+
+      break;
+    // :
+
+    case 58:
+      return new Tok(_tokenKind.TokenKind.COLON, pos, pos + 1, line, col, prev);
+    // =
+
+    case 61:
+      return new Tok(_tokenKind.TokenKind.EQUALS, pos, pos + 1, line, col, prev);
+    // @
+
+    case 64:
+      return new Tok(_tokenKind.TokenKind.AT, pos, pos + 1, line, col, prev);
+    // [
+
+    case 91:
+      return new Tok(_tokenKind.TokenKind.BRACKET_L, pos, pos + 1, line, col, prev);
+    // ]
+
+    case 93:
+      return new Tok(_tokenKind.TokenKind.BRACKET_R, pos, pos + 1, line, col, prev);
+    // {
+
+    case 123:
+      return new Tok(_tokenKind.TokenKind.BRACE_L, pos, pos + 1, line, col, prev);
+    // |
+
+    case 124:
+      return new Tok(_tokenKind.TokenKind.PIPE, pos, pos + 1, line, col, prev);
+    // }
+
+    case 125:
+      return new Tok(_tokenKind.TokenKind.BRACE_R, pos, pos + 1, line, col, prev);
+    // A-Z _ a-z
+
+    case 65:
+    case 66:
+    case 67:
+    case 68:
+    case 69:
+    case 70:
+    case 71:
+    case 72:
+    case 73:
+    case 74:
+    case 75:
+    case 76:
+    case 77:
+    case 78:
+    case 79:
+    case 80:
+    case 81:
+    case 82:
+    case 83:
+    case 84:
+    case 85:
+    case 86:
+    case 87:
+    case 88:
+    case 89:
+    case 90:
+    case 95:
+    case 97:
+    case 98:
+    case 99:
+    case 100:
+    case 101:
+    case 102:
+    case 103:
+    case 104:
+    case 105:
+    case 106:
+    case 107:
+    case 108:
+    case 109:
+    case 110:
+    case 111:
+    case 112:
+    case 113:
+    case 114:
+    case 115:
+    case 116:
+    case 117:
+    case 118:
+    case 119:
+    case 120:
+    case 121:
+    case 122:
+      return readName(source, pos, line, col, prev);
+    // - 0-9
+
+    case 45:
+    case 48:
+    case 49:
+    case 50:
+    case 51:
+    case 52:
+    case 53:
+    case 54:
+    case 55:
+    case 56:
+    case 57:
+      return readNumber(source, pos, code, line, col, prev);
+    // "
+
+    case 34:
+      if (body.charCodeAt(pos + 1) === 34 && body.charCodeAt(pos + 2) === 34) {
+        return readBlockString(source, pos, line, col, prev, lexer);
+      }
+
+      return readString(source, pos, line, col, prev);
+  }
+
+  throw (0, _syntaxError.syntaxError)(source, pos, unexpectedCharacterMessage(code));
+}
+/**
+ * Report a message that an unexpected character was encountered.
+ */
+
+
+function unexpectedCharacterMessage(code) {
+  if (code < 0x0020 && code !== 0x0009 && code !== 0x000a && code !== 0x000d) {
+    return "Cannot contain the invalid character ".concat(printCharCode(code), ".");
+  }
+
+  if (code === 39) {
+    // '
+    return 'Unexpected single quote character (\'), did you mean to use a double quote (")?';
+  }
+
+  return "Cannot parse the unexpected character ".concat(printCharCode(code), ".");
+}
+/**
+ * Reads from body starting at startPosition until it finds a non-whitespace
+ * character, then returns the position of that character for lexing.
+ */
+
+
+function positionAfterWhitespace(body, startPosition, lexer) {
+  var bodyLength = body.length;
+  var position = startPosition;
+
+  while (position < bodyLength) {
+    var code = body.charCodeAt(position); // tab | space | comma | BOM
+
+    if (code === 9 || code === 32 || code === 44 || code === 0xfeff) {
+      ++position;
+    } else if (code === 10) {
+      // new line
+      ++position;
+      ++lexer.line;
+      lexer.lineStart = position;
+    } else if (code === 13) {
+      // carriage return
+      if (body.charCodeAt(position + 1) === 10) {
+        position += 2;
+      } else {
+        ++position;
+      }
+
+      ++lexer.line;
+      lexer.lineStart = position;
+    } else {
+      break;
+    }
+  }
+
+  return position;
+}
+/**
+ * Reads a comment token from the source file.
+ *
+ * #[\u0009\u0020-\uFFFF]*
+ */
+
+
+function readComment(source, start, line, col, prev) {
+  var body = source.body;
+  var code;
+  var position = start;
+
+  do {
+    code = body.charCodeAt(++position);
+  } while (!isNaN(code) && ( // SourceCharacter but not LineTerminator
+  code > 0x001f || code === 0x0009));
+
+  return new Tok(_tokenKind.TokenKind.COMMENT, start, position, line, col, prev, body.slice(start + 1, position));
+}
+/**
+ * Reads a number token from the source file, either a float
+ * or an int depending on whether a decimal point appears.
+ *
+ * Int:   -?(0|[1-9][0-9]*)
+ * Float: -?(0|[1-9][0-9]*)(\.[0-9]+)?((E|e)(+|-)?[0-9]+)?
+ */
+
+
+function readNumber(source, start, firstCode, line, col, prev) {
+  var body = source.body;
+  var code = firstCode;
+  var position = start;
+  var isFloat = false;
+
+  if (code === 45) {
+    // -
+    code = body.charCodeAt(++position);
+  }
+
+  if (code === 48) {
+    // 0
+    code = body.charCodeAt(++position);
+
+    if (code >= 48 && code <= 57) {
+      throw (0, _syntaxError.syntaxError)(source, position, "Invalid number, unexpected digit after 0: ".concat(printCharCode(code), "."));
+    }
+  } else {
+    position = readDigits(source, position, code);
+    code = body.charCodeAt(position);
+  }
+
+  if (code === 46) {
+    // .
+    isFloat = true;
+    code = body.charCodeAt(++position);
+    position = readDigits(source, position, code);
+    code = body.charCodeAt(position);
+  }
+
+  if (code === 69 || code === 101) {
+    // E e
+    isFloat = true;
+    code = body.charCodeAt(++position);
+
+    if (code === 43 || code === 45) {
+      // + -
+      code = body.charCodeAt(++position);
+    }
+
+    position = readDigits(source, position, code);
+    code = body.charCodeAt(position);
+  } // Numbers cannot be followed by . or e
+
+
+  if (code === 46 || code === 69 || code === 101) {
+    throw (0, _syntaxError.syntaxError)(source, position, "Invalid number, expected digit but got: ".concat(printCharCode(code), "."));
+  }
+
+  return new Tok(isFloat ? _tokenKind.TokenKind.FLOAT : _tokenKind.TokenKind.INT, start, position, line, col, prev, body.slice(start, position));
+}
+/**
+ * Returns the new position in the source after reading digits.
+ */
+
+
+function readDigits(source, start, firstCode) {
+  var body = source.body;
+  var position = start;
+  var code = firstCode;
+
+  if (code >= 48 && code <= 57) {
+    // 0 - 9
+    do {
+      code = body.charCodeAt(++position);
+    } while (code >= 48 && code <= 57); // 0 - 9
+
+
+    return position;
+  }
+
+  throw (0, _syntaxError.syntaxError)(source, position, "Invalid number, expected digit but got: ".concat(printCharCode(code), "."));
+}
+/**
+ * Reads a string token from the source file.
+ *
+ * "([^"\\\u000A\u000D]|(\\(u[0-9a-fA-F]{4}|["\\/bfnrt])))*"
+ */
+
+
+function readString(source, start, line, col, prev) {
+  var body = source.body;
+  var position = start + 1;
+  var chunkStart = position;
+  var code = 0;
+  var value = '';
+
+  while (position < body.length && !isNaN(code = body.charCodeAt(position)) && // not LineTerminator
+  code !== 0x000a && code !== 0x000d) {
+    // Closing Quote (")
+    if (code === 34) {
+      value += body.slice(chunkStart, position);
+      return new Tok(_tokenKind.TokenKind.STRING, start, position + 1, line, col, prev, value);
+    } // SourceCharacter
+
+
+    if (code < 0x0020 && code !== 0x0009) {
+      throw (0, _syntaxError.syntaxError)(source, position, "Invalid character within String: ".concat(printCharCode(code), "."));
+    }
+
+    ++position;
+
+    if (code === 92) {
+      // \
+      value += body.slice(chunkStart, position - 1);
+      code = body.charCodeAt(position);
+
+      switch (code) {
+        case 34:
+          value += '"';
+          break;
+
+        case 47:
+          value += '/';
+          break;
+
+        case 92:
+          value += '\\';
+          break;
+
+        case 98:
+          value += '\b';
+          break;
+
+        case 102:
+          value += '\f';
+          break;
+
+        case 110:
+          value += '\n';
+          break;
+
+        case 114:
+          value += '\r';
+          break;
+
+        case 116:
+          value += '\t';
+          break;
+
+        case 117:
+          {
+            // uXXXX
+            var charCode = uniCharCode(body.charCodeAt(position + 1), body.charCodeAt(position + 2), body.charCodeAt(position + 3), body.charCodeAt(position + 4));
+
+            if (charCode < 0) {
+              var invalidSequence = body.slice(position + 1, position + 5);
+              throw (0, _syntaxError.syntaxError)(source, position, "Invalid character escape sequence: \\u".concat(invalidSequence, "."));
+            }
+
+            value += String.fromCharCode(charCode);
+            position += 4;
+            break;
+          }
+
+        default:
+          throw (0, _syntaxError.syntaxError)(source, position, "Invalid character escape sequence: \\".concat(String.fromCharCode(code), "."));
+      }
+
+      ++position;
+      chunkStart = position;
+    }
+  }
+
+  throw (0, _syntaxError.syntaxError)(source, position, 'Unterminated string.');
+}
+/**
+ * Reads a block string token from the source file.
+ *
+ * """("?"?(\\"""|\\(?!=""")|[^"\\]))*"""
+ */
+
+
+function readBlockString(source, start, line, col, prev, lexer) {
+  var body = source.body;
+  var position = start + 3;
+  var chunkStart = position;
+  var code = 0;
+  var rawValue = '';
+
+  while (position < body.length && !isNaN(code = body.charCodeAt(position))) {
+    // Closing Triple-Quote (""")
+    if (code === 34 && body.charCodeAt(position + 1) === 34 && body.charCodeAt(position + 2) === 34) {
+      rawValue += body.slice(chunkStart, position);
+      return new Tok(_tokenKind.TokenKind.BLOCK_STRING, start, position + 3, line, col, prev, (0, _blockString.dedentBlockStringValue)(rawValue));
+    } // SourceCharacter
+
+
+    if (code < 0x0020 && code !== 0x0009 && code !== 0x000a && code !== 0x000d) {
+      throw (0, _syntaxError.syntaxError)(source, position, "Invalid character within String: ".concat(printCharCode(code), "."));
+    }
+
+    if (code === 10) {
+      // new line
+      ++position;
+      ++lexer.line;
+      lexer.lineStart = position;
+    } else if (code === 13) {
+      // carriage return
+      if (body.charCodeAt(position + 1) === 10) {
+        position += 2;
+      } else {
+        ++position;
+      }
+
+      ++lexer.line;
+      lexer.lineStart = position;
+    } else if ( // Escape Triple-Quote (\""")
+    code === 92 && body.charCodeAt(position + 1) === 34 && body.charCodeAt(position + 2) === 34 && body.charCodeAt(position + 3) === 34) {
+      rawValue += body.slice(chunkStart, position) + '"""';
+      position += 4;
+      chunkStart = position;
+    } else {
+      ++position;
+    }
+  }
+
+  throw (0, _syntaxError.syntaxError)(source, position, 'Unterminated string.');
+}
+/**
+ * Converts four hexadecimal chars to the integer that the
+ * string represents. For example, uniCharCode('0','0','0','f')
+ * will return 15, and uniCharCode('0','0','f','f') returns 255.
+ *
+ * Returns a negative number on error, if a char was invalid.
+ *
+ * This is implemented by noting that char2hex() returns -1 on error,
+ * which means the result of ORing the char2hex() will also be negative.
+ */
+
+
+function uniCharCode(a, b, c, d) {
+  return char2hex(a) << 12 | char2hex(b) << 8 | char2hex(c) << 4 | char2hex(d);
+}
+/**
+ * Converts a hex character to its integer value.
+ * '0' becomes 0, '9' becomes 9
+ * 'A' becomes 10, 'F' becomes 15
+ * 'a' becomes 10, 'f' becomes 15
+ *
+ * Returns -1 on error.
+ */
+
+
+function char2hex(a) {
+  return a >= 48 && a <= 57 ? a - 48 // 0-9
+  : a >= 65 && a <= 70 ? a - 55 // A-F
+  : a >= 97 && a <= 102 ? a - 87 // a-f
+  : -1;
+}
+/**
+ * Reads an alphanumeric + underscore name from the source.
+ *
+ * [_A-Za-z][_0-9A-Za-z]*
+ */
+
+
+function readName(source, start, line, col, prev) {
+  var body = source.body;
+  var bodyLength = body.length;
+  var position = start + 1;
+  var code = 0;
+
+  while (position !== bodyLength && !isNaN(code = body.charCodeAt(position)) && (code === 95 || // _
+  code >= 48 && code <= 57 || // 0-9
+  code >= 65 && code <= 90 || // A-Z
+  code >= 97 && code <= 122) // a-z
+  ) {
+    ++position;
+  }
+
+  return new Tok(_tokenKind.TokenKind.NAME, start, position, line, col, prev, body.slice(start, position));
+}
+},{"../jsutils/defineToJSON":"../node_modules/graphql/jsutils/defineToJSON.js","../error/syntaxError":"../node_modules/graphql/error/syntaxError.js","./blockString":"../node_modules/graphql/language/blockString.js","./tokenKind":"../node_modules/graphql/language/tokenKind.js"}],"../node_modules/graphql/language/directiveLocation.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.DirectiveLocation = void 0;
+/**
+ * The set of allowed directive location values.
+ */
+
+var DirectiveLocation = Object.freeze({
+  // Request Definitions
+  QUERY: 'QUERY',
+  MUTATION: 'MUTATION',
+  SUBSCRIPTION: 'SUBSCRIPTION',
+  FIELD: 'FIELD',
+  FRAGMENT_DEFINITION: 'FRAGMENT_DEFINITION',
+  FRAGMENT_SPREAD: 'FRAGMENT_SPREAD',
+  INLINE_FRAGMENT: 'INLINE_FRAGMENT',
+  VARIABLE_DEFINITION: 'VARIABLE_DEFINITION',
+  // Type System Definitions
+  SCHEMA: 'SCHEMA',
+  SCALAR: 'SCALAR',
+  OBJECT: 'OBJECT',
+  FIELD_DEFINITION: 'FIELD_DEFINITION',
+  ARGUMENT_DEFINITION: 'ARGUMENT_DEFINITION',
+  INTERFACE: 'INTERFACE',
+  UNION: 'UNION',
+  ENUM: 'ENUM',
+  ENUM_VALUE: 'ENUM_VALUE',
+  INPUT_OBJECT: 'INPUT_OBJECT',
+  INPUT_FIELD_DEFINITION: 'INPUT_FIELD_DEFINITION'
+});
+/**
+ * The enum type representing the directive location values.
+ */
+
+exports.DirectiveLocation = DirectiveLocation;
+},{}],"../node_modules/graphql/language/parser.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.parse = parse;
+exports.parseValue = parseValue;
+exports.parseType = parseType;
+
+var _inspect = _interopRequireDefault(require("../jsutils/inspect"));
+
+var _devAssert = _interopRequireDefault(require("../jsutils/devAssert"));
+
+var _defineToJSON = _interopRequireDefault(require("../jsutils/defineToJSON"));
+
+var _syntaxError = require("../error/syntaxError");
+
+var _kinds = require("./kinds");
+
+var _source = require("./source");
+
+var _lexer = require("./lexer");
+
+var _directiveLocation = require("./directiveLocation");
+
+var _tokenKind = require("./tokenKind");
+
+function _interopRequireDefault(obj) {
+  return obj && obj.__esModule ? obj : {
+    default: obj
+  };
+}
+/**
+ * Given a GraphQL source, parses it into a Document.
+ * Throws GraphQLError if a syntax error is encountered.
+ */
+
+
+function parse(source, options) {
+  var parser = new Parser(source, options);
+  return parser.parseDocument();
+}
+/**
+ * Given a string containing a GraphQL value (ex. `[42]`), parse the AST for
+ * that value.
+ * Throws GraphQLError if a syntax error is encountered.
+ *
+ * This is useful within tools that operate upon GraphQL Values directly and
+ * in isolation of complete GraphQL documents.
+ *
+ * Consider providing the results to the utility function: valueFromAST().
+ */
+
+
+function parseValue(source, options) {
+  var parser = new Parser(source, options);
+  parser.expectToken(_tokenKind.TokenKind.SOF);
+  var value = parser.parseValueLiteral(false);
+  parser.expectToken(_tokenKind.TokenKind.EOF);
+  return value;
+}
+/**
+ * Given a string containing a GraphQL Type (ex. `[Int!]`), parse the AST for
+ * that type.
+ * Throws GraphQLError if a syntax error is encountered.
+ *
+ * This is useful within tools that operate upon GraphQL Types directly and
+ * in isolation of complete GraphQL documents.
+ *
+ * Consider providing the results to the utility function: typeFromAST().
+ */
+
+
+function parseType(source, options) {
+  var parser = new Parser(source, options);
+  parser.expectToken(_tokenKind.TokenKind.SOF);
+  var type = parser.parseTypeReference();
+  parser.expectToken(_tokenKind.TokenKind.EOF);
+  return type;
+}
+
+var Parser =
+/*#__PURE__*/
+function () {
+  function Parser(source, options) {
+    var sourceObj = typeof source === 'string' ? new _source.Source(source) : source;
+    sourceObj instanceof _source.Source || (0, _devAssert.default)(0, "Must provide Source. Received: ".concat((0, _inspect.default)(sourceObj)));
+    this._lexer = (0, _lexer.createLexer)(sourceObj);
+    this._options = options || {};
+  }
+  /**
+   * Converts a name lex token into a name parse node.
+   */
+
+
+  var _proto = Parser.prototype;
+
+  _proto.parseName = function parseName() {
+    var token = this.expectToken(_tokenKind.TokenKind.NAME);
+    return {
+      kind: _kinds.Kind.NAME,
+      value: token.value,
+      loc: this.loc(token)
+    };
+  } // Implements the parsing rules in the Document section.
+
+  /**
+   * Document : Definition+
+   */
+  ;
+
+  _proto.parseDocument = function parseDocument() {
+    var start = this._lexer.token;
+    return {
+      kind: _kinds.Kind.DOCUMENT,
+      definitions: this.many(_tokenKind.TokenKind.SOF, this.parseDefinition, _tokenKind.TokenKind.EOF),
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * Definition :
+   *   - ExecutableDefinition
+   *   - TypeSystemDefinition
+   *   - TypeSystemExtension
+   *
+   * ExecutableDefinition :
+   *   - OperationDefinition
+   *   - FragmentDefinition
+   */
+  ;
+
+  _proto.parseDefinition = function parseDefinition() {
+    if (this.peek(_tokenKind.TokenKind.NAME)) {
+      switch (this._lexer.token.value) {
+        case 'query':
+        case 'mutation':
+        case 'subscription':
+          return this.parseOperationDefinition();
+
+        case 'fragment':
+          return this.parseFragmentDefinition();
+
+        case 'schema':
+        case 'scalar':
+        case 'type':
+        case 'interface':
+        case 'union':
+        case 'enum':
+        case 'input':
+        case 'directive':
+          return this.parseTypeSystemDefinition();
+
+        case 'extend':
+          return this.parseTypeSystemExtension();
+      }
+    } else if (this.peek(_tokenKind.TokenKind.BRACE_L)) {
+      return this.parseOperationDefinition();
+    } else if (this.peekDescription()) {
+      return this.parseTypeSystemDefinition();
+    }
+
+    throw this.unexpected();
+  } // Implements the parsing rules in the Operations section.
+
+  /**
+   * OperationDefinition :
+   *  - SelectionSet
+   *  - OperationType Name? VariableDefinitions? Directives? SelectionSet
+   */
+  ;
+
+  _proto.parseOperationDefinition = function parseOperationDefinition() {
+    var start = this._lexer.token;
+
+    if (this.peek(_tokenKind.TokenKind.BRACE_L)) {
+      return {
+        kind: _kinds.Kind.OPERATION_DEFINITION,
+        operation: 'query',
+        name: undefined,
+        variableDefinitions: [],
+        directives: [],
+        selectionSet: this.parseSelectionSet(),
+        loc: this.loc(start)
+      };
+    }
+
+    var operation = this.parseOperationType();
+    var name;
+
+    if (this.peek(_tokenKind.TokenKind.NAME)) {
+      name = this.parseName();
+    }
+
+    return {
+      kind: _kinds.Kind.OPERATION_DEFINITION,
+      operation: operation,
+      name: name,
+      variableDefinitions: this.parseVariableDefinitions(),
+      directives: this.parseDirectives(false),
+      selectionSet: this.parseSelectionSet(),
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * OperationType : one of query mutation subscription
+   */
+  ;
+
+  _proto.parseOperationType = function parseOperationType() {
+    var operationToken = this.expectToken(_tokenKind.TokenKind.NAME);
+
+    switch (operationToken.value) {
+      case 'query':
+        return 'query';
+
+      case 'mutation':
+        return 'mutation';
+
+      case 'subscription':
+        return 'subscription';
+    }
+
+    throw this.unexpected(operationToken);
+  }
+  /**
+   * VariableDefinitions : ( VariableDefinition+ )
+   */
+  ;
+
+  _proto.parseVariableDefinitions = function parseVariableDefinitions() {
+    return this.optionalMany(_tokenKind.TokenKind.PAREN_L, this.parseVariableDefinition, _tokenKind.TokenKind.PAREN_R);
+  }
+  /**
+   * VariableDefinition : Variable : Type DefaultValue? Directives[Const]?
+   */
+  ;
+
+  _proto.parseVariableDefinition = function parseVariableDefinition() {
+    var start = this._lexer.token;
+    return {
+      kind: _kinds.Kind.VARIABLE_DEFINITION,
+      variable: this.parseVariable(),
+      type: (this.expectToken(_tokenKind.TokenKind.COLON), this.parseTypeReference()),
+      defaultValue: this.expectOptionalToken(_tokenKind.TokenKind.EQUALS) ? this.parseValueLiteral(true) : undefined,
+      directives: this.parseDirectives(true),
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * Variable : $ Name
+   */
+  ;
+
+  _proto.parseVariable = function parseVariable() {
+    var start = this._lexer.token;
+    this.expectToken(_tokenKind.TokenKind.DOLLAR);
+    return {
+      kind: _kinds.Kind.VARIABLE,
+      name: this.parseName(),
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * SelectionSet : { Selection+ }
+   */
+  ;
+
+  _proto.parseSelectionSet = function parseSelectionSet() {
+    var start = this._lexer.token;
+    return {
+      kind: _kinds.Kind.SELECTION_SET,
+      selections: this.many(_tokenKind.TokenKind.BRACE_L, this.parseSelection, _tokenKind.TokenKind.BRACE_R),
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * Selection :
+   *   - Field
+   *   - FragmentSpread
+   *   - InlineFragment
+   */
+  ;
+
+  _proto.parseSelection = function parseSelection() {
+    return this.peek(_tokenKind.TokenKind.SPREAD) ? this.parseFragment() : this.parseField();
+  }
+  /**
+   * Field : Alias? Name Arguments? Directives? SelectionSet?
+   *
+   * Alias : Name :
+   */
+  ;
+
+  _proto.parseField = function parseField() {
+    var start = this._lexer.token;
+    var nameOrAlias = this.parseName();
+    var alias;
+    var name;
+
+    if (this.expectOptionalToken(_tokenKind.TokenKind.COLON)) {
+      alias = nameOrAlias;
+      name = this.parseName();
+    } else {
+      name = nameOrAlias;
+    }
+
+    return {
+      kind: _kinds.Kind.FIELD,
+      alias: alias,
+      name: name,
+      arguments: this.parseArguments(false),
+      directives: this.parseDirectives(false),
+      selectionSet: this.peek(_tokenKind.TokenKind.BRACE_L) ? this.parseSelectionSet() : undefined,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * Arguments[Const] : ( Argument[?Const]+ )
+   */
+  ;
+
+  _proto.parseArguments = function parseArguments(isConst) {
+    var item = isConst ? this.parseConstArgument : this.parseArgument;
+    return this.optionalMany(_tokenKind.TokenKind.PAREN_L, item, _tokenKind.TokenKind.PAREN_R);
+  }
+  /**
+   * Argument[Const] : Name : Value[?Const]
+   */
+  ;
+
+  _proto.parseArgument = function parseArgument() {
+    var start = this._lexer.token;
+    var name = this.parseName();
+    this.expectToken(_tokenKind.TokenKind.COLON);
+    return {
+      kind: _kinds.Kind.ARGUMENT,
+      name: name,
+      value: this.parseValueLiteral(false),
+      loc: this.loc(start)
+    };
+  };
+
+  _proto.parseConstArgument = function parseConstArgument() {
+    var start = this._lexer.token;
+    return {
+      kind: _kinds.Kind.ARGUMENT,
+      name: this.parseName(),
+      value: (this.expectToken(_tokenKind.TokenKind.COLON), this.parseValueLiteral(true)),
+      loc: this.loc(start)
+    };
+  } // Implements the parsing rules in the Fragments section.
+
+  /**
+   * Corresponds to both FragmentSpread and InlineFragment in the spec.
+   *
+   * FragmentSpread : ... FragmentName Directives?
+   *
+   * InlineFragment : ... TypeCondition? Directives? SelectionSet
+   */
+  ;
+
+  _proto.parseFragment = function parseFragment() {
+    var start = this._lexer.token;
+    this.expectToken(_tokenKind.TokenKind.SPREAD);
+    var hasTypeCondition = this.expectOptionalKeyword('on');
+
+    if (!hasTypeCondition && this.peek(_tokenKind.TokenKind.NAME)) {
+      return {
+        kind: _kinds.Kind.FRAGMENT_SPREAD,
+        name: this.parseFragmentName(),
+        directives: this.parseDirectives(false),
+        loc: this.loc(start)
+      };
+    }
+
+    return {
+      kind: _kinds.Kind.INLINE_FRAGMENT,
+      typeCondition: hasTypeCondition ? this.parseNamedType() : undefined,
+      directives: this.parseDirectives(false),
+      selectionSet: this.parseSelectionSet(),
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * FragmentDefinition :
+   *   - fragment FragmentName on TypeCondition Directives? SelectionSet
+   *
+   * TypeCondition : NamedType
+   */
+  ;
+
+  _proto.parseFragmentDefinition = function parseFragmentDefinition() {
+    var start = this._lexer.token;
+    this.expectKeyword('fragment'); // Experimental support for defining variables within fragments changes
+    // the grammar of FragmentDefinition:
+    //   - fragment FragmentName VariableDefinitions? on TypeCondition Directives? SelectionSet
+
+    if (this._options.experimentalFragmentVariables) {
+      return {
+        kind: _kinds.Kind.FRAGMENT_DEFINITION,
+        name: this.parseFragmentName(),
+        variableDefinitions: this.parseVariableDefinitions(),
+        typeCondition: (this.expectKeyword('on'), this.parseNamedType()),
+        directives: this.parseDirectives(false),
+        selectionSet: this.parseSelectionSet(),
+        loc: this.loc(start)
+      };
+    }
+
+    return {
+      kind: _kinds.Kind.FRAGMENT_DEFINITION,
+      name: this.parseFragmentName(),
+      typeCondition: (this.expectKeyword('on'), this.parseNamedType()),
+      directives: this.parseDirectives(false),
+      selectionSet: this.parseSelectionSet(),
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * FragmentName : Name but not `on`
+   */
+  ;
+
+  _proto.parseFragmentName = function parseFragmentName() {
+    if (this._lexer.token.value === 'on') {
+      throw this.unexpected();
+    }
+
+    return this.parseName();
+  } // Implements the parsing rules in the Values section.
+
+  /**
+   * Value[Const] :
+   *   - [~Const] Variable
+   *   - IntValue
+   *   - FloatValue
+   *   - StringValue
+   *   - BooleanValue
+   *   - NullValue
+   *   - EnumValue
+   *   - ListValue[?Const]
+   *   - ObjectValue[?Const]
+   *
+   * BooleanValue : one of `true` `false`
+   *
+   * NullValue : `null`
+   *
+   * EnumValue : Name but not `true`, `false` or `null`
+   */
+  ;
+
+  _proto.parseValueLiteral = function parseValueLiteral(isConst) {
+    var token = this._lexer.token;
+
+    switch (token.kind) {
+      case _tokenKind.TokenKind.BRACKET_L:
+        return this.parseList(isConst);
+
+      case _tokenKind.TokenKind.BRACE_L:
+        return this.parseObject(isConst);
+
+      case _tokenKind.TokenKind.INT:
+        this._lexer.advance();
+
+        return {
+          kind: _kinds.Kind.INT,
+          value: token.value,
+          loc: this.loc(token)
+        };
+
+      case _tokenKind.TokenKind.FLOAT:
+        this._lexer.advance();
+
+        return {
+          kind: _kinds.Kind.FLOAT,
+          value: token.value,
+          loc: this.loc(token)
+        };
+
+      case _tokenKind.TokenKind.STRING:
+      case _tokenKind.TokenKind.BLOCK_STRING:
+        return this.parseStringLiteral();
+
+      case _tokenKind.TokenKind.NAME:
+        if (token.value === 'true' || token.value === 'false') {
+          this._lexer.advance();
+
+          return {
+            kind: _kinds.Kind.BOOLEAN,
+            value: token.value === 'true',
+            loc: this.loc(token)
+          };
+        } else if (token.value === 'null') {
+          this._lexer.advance();
+
+          return {
+            kind: _kinds.Kind.NULL,
+            loc: this.loc(token)
+          };
+        }
+
+        this._lexer.advance();
+
+        return {
+          kind: _kinds.Kind.ENUM,
+          value: token.value,
+          loc: this.loc(token)
+        };
+
+      case _tokenKind.TokenKind.DOLLAR:
+        if (!isConst) {
+          return this.parseVariable();
+        }
+
+        break;
+    }
+
+    throw this.unexpected();
+  };
+
+  _proto.parseStringLiteral = function parseStringLiteral() {
+    var token = this._lexer.token;
+
+    this._lexer.advance();
+
+    return {
+      kind: _kinds.Kind.STRING,
+      value: token.value,
+      block: token.kind === _tokenKind.TokenKind.BLOCK_STRING,
+      loc: this.loc(token)
+    };
+  }
+  /**
+   * ListValue[Const] :
+   *   - [ ]
+   *   - [ Value[?Const]+ ]
+   */
+  ;
+
+  _proto.parseList = function parseList(isConst) {
+    var _this = this;
+
+    var start = this._lexer.token;
+
+    var item = function item() {
+      return _this.parseValueLiteral(isConst);
+    };
+
+    return {
+      kind: _kinds.Kind.LIST,
+      values: this.any(_tokenKind.TokenKind.BRACKET_L, item, _tokenKind.TokenKind.BRACKET_R),
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * ObjectValue[Const] :
+   *   - { }
+   *   - { ObjectField[?Const]+ }
+   */
+  ;
+
+  _proto.parseObject = function parseObject(isConst) {
+    var _this2 = this;
+
+    var start = this._lexer.token;
+
+    var item = function item() {
+      return _this2.parseObjectField(isConst);
+    };
+
+    return {
+      kind: _kinds.Kind.OBJECT,
+      fields: this.any(_tokenKind.TokenKind.BRACE_L, item, _tokenKind.TokenKind.BRACE_R),
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * ObjectField[Const] : Name : Value[?Const]
+   */
+  ;
+
+  _proto.parseObjectField = function parseObjectField(isConst) {
+    var start = this._lexer.token;
+    var name = this.parseName();
+    this.expectToken(_tokenKind.TokenKind.COLON);
+    return {
+      kind: _kinds.Kind.OBJECT_FIELD,
+      name: name,
+      value: this.parseValueLiteral(isConst),
+      loc: this.loc(start)
+    };
+  } // Implements the parsing rules in the Directives section.
+
+  /**
+   * Directives[Const] : Directive[?Const]+
+   */
+  ;
+
+  _proto.parseDirectives = function parseDirectives(isConst) {
+    var directives = [];
+
+    while (this.peek(_tokenKind.TokenKind.AT)) {
+      directives.push(this.parseDirective(isConst));
+    }
+
+    return directives;
+  }
+  /**
+   * Directive[Const] : @ Name Arguments[?Const]?
+   */
+  ;
+
+  _proto.parseDirective = function parseDirective(isConst) {
+    var start = this._lexer.token;
+    this.expectToken(_tokenKind.TokenKind.AT);
+    return {
+      kind: _kinds.Kind.DIRECTIVE,
+      name: this.parseName(),
+      arguments: this.parseArguments(isConst),
+      loc: this.loc(start)
+    };
+  } // Implements the parsing rules in the Types section.
+
+  /**
+   * Type :
+   *   - NamedType
+   *   - ListType
+   *   - NonNullType
+   */
+  ;
+
+  _proto.parseTypeReference = function parseTypeReference() {
+    var start = this._lexer.token;
+    var type;
+
+    if (this.expectOptionalToken(_tokenKind.TokenKind.BRACKET_L)) {
+      type = this.parseTypeReference();
+      this.expectToken(_tokenKind.TokenKind.BRACKET_R);
+      type = {
+        kind: _kinds.Kind.LIST_TYPE,
+        type: type,
+        loc: this.loc(start)
+      };
+    } else {
+      type = this.parseNamedType();
+    }
+
+    if (this.expectOptionalToken(_tokenKind.TokenKind.BANG)) {
+      return {
+        kind: _kinds.Kind.NON_NULL_TYPE,
+        type: type,
+        loc: this.loc(start)
+      };
+    }
+
+    return type;
+  }
+  /**
+   * NamedType : Name
+   */
+  ;
+
+  _proto.parseNamedType = function parseNamedType() {
+    var start = this._lexer.token;
+    return {
+      kind: _kinds.Kind.NAMED_TYPE,
+      name: this.parseName(),
+      loc: this.loc(start)
+    };
+  } // Implements the parsing rules in the Type Definition section.
+
+  /**
+   * TypeSystemDefinition :
+   *   - SchemaDefinition
+   *   - TypeDefinition
+   *   - DirectiveDefinition
+   *
+   * TypeDefinition :
+   *   - ScalarTypeDefinition
+   *   - ObjectTypeDefinition
+   *   - InterfaceTypeDefinition
+   *   - UnionTypeDefinition
+   *   - EnumTypeDefinition
+   *   - InputObjectTypeDefinition
+   */
+  ;
+
+  _proto.parseTypeSystemDefinition = function parseTypeSystemDefinition() {
+    // Many definitions begin with a description and require a lookahead.
+    var keywordToken = this.peekDescription() ? this._lexer.lookahead() : this._lexer.token;
+
+    if (keywordToken.kind === _tokenKind.TokenKind.NAME) {
+      switch (keywordToken.value) {
+        case 'schema':
+          return this.parseSchemaDefinition();
+
+        case 'scalar':
+          return this.parseScalarTypeDefinition();
+
+        case 'type':
+          return this.parseObjectTypeDefinition();
+
+        case 'interface':
+          return this.parseInterfaceTypeDefinition();
+
+        case 'union':
+          return this.parseUnionTypeDefinition();
+
+        case 'enum':
+          return this.parseEnumTypeDefinition();
+
+        case 'input':
+          return this.parseInputObjectTypeDefinition();
+
+        case 'directive':
+          return this.parseDirectiveDefinition();
+      }
+    }
+
+    throw this.unexpected(keywordToken);
+  };
+
+  _proto.peekDescription = function peekDescription() {
+    return this.peek(_tokenKind.TokenKind.STRING) || this.peek(_tokenKind.TokenKind.BLOCK_STRING);
+  }
+  /**
+   * Description : StringValue
+   */
+  ;
+
+  _proto.parseDescription = function parseDescription() {
+    if (this.peekDescription()) {
+      return this.parseStringLiteral();
+    }
+  }
+  /**
+   * SchemaDefinition : schema Directives[Const]? { OperationTypeDefinition+ }
+   */
+  ;
+
+  _proto.parseSchemaDefinition = function parseSchemaDefinition() {
+    var start = this._lexer.token;
+    this.expectKeyword('schema');
+    var directives = this.parseDirectives(true);
+    var operationTypes = this.many(_tokenKind.TokenKind.BRACE_L, this.parseOperationTypeDefinition, _tokenKind.TokenKind.BRACE_R);
+    return {
+      kind: _kinds.Kind.SCHEMA_DEFINITION,
+      directives: directives,
+      operationTypes: operationTypes,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * OperationTypeDefinition : OperationType : NamedType
+   */
+  ;
+
+  _proto.parseOperationTypeDefinition = function parseOperationTypeDefinition() {
+    var start = this._lexer.token;
+    var operation = this.parseOperationType();
+    this.expectToken(_tokenKind.TokenKind.COLON);
+    var type = this.parseNamedType();
+    return {
+      kind: _kinds.Kind.OPERATION_TYPE_DEFINITION,
+      operation: operation,
+      type: type,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * ScalarTypeDefinition : Description? scalar Name Directives[Const]?
+   */
+  ;
+
+  _proto.parseScalarTypeDefinition = function parseScalarTypeDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('scalar');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    return {
+      kind: _kinds.Kind.SCALAR_TYPE_DEFINITION,
+      description: description,
+      name: name,
+      directives: directives,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * ObjectTypeDefinition :
+   *   Description?
+   *   type Name ImplementsInterfaces? Directives[Const]? FieldsDefinition?
+   */
+  ;
+
+  _proto.parseObjectTypeDefinition = function parseObjectTypeDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('type');
+    var name = this.parseName();
+    var interfaces = this.parseImplementsInterfaces();
+    var directives = this.parseDirectives(true);
+    var fields = this.parseFieldsDefinition();
+    return {
+      kind: _kinds.Kind.OBJECT_TYPE_DEFINITION,
+      description: description,
+      name: name,
+      interfaces: interfaces,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * ImplementsInterfaces :
+   *   - implements `&`? NamedType
+   *   - ImplementsInterfaces & NamedType
+   */
+  ;
+
+  _proto.parseImplementsInterfaces = function parseImplementsInterfaces() {
+    var types = [];
+
+    if (this.expectOptionalKeyword('implements')) {
+      // Optional leading ampersand
+      this.expectOptionalToken(_tokenKind.TokenKind.AMP);
+
+      do {
+        types.push(this.parseNamedType());
+      } while (this.expectOptionalToken(_tokenKind.TokenKind.AMP) || // Legacy support for the SDL?
+      this._options.allowLegacySDLImplementsInterfaces && this.peek(_tokenKind.TokenKind.NAME));
+    }
+
+    return types;
+  }
+  /**
+   * FieldsDefinition : { FieldDefinition+ }
+   */
+  ;
+
+  _proto.parseFieldsDefinition = function parseFieldsDefinition() {
+    // Legacy support for the SDL?
+    if (this._options.allowLegacySDLEmptyFields && this.peek(_tokenKind.TokenKind.BRACE_L) && this._lexer.lookahead().kind === _tokenKind.TokenKind.BRACE_R) {
+      this._lexer.advance();
+
+      this._lexer.advance();
+
+      return [];
+    }
+
+    return this.optionalMany(_tokenKind.TokenKind.BRACE_L, this.parseFieldDefinition, _tokenKind.TokenKind.BRACE_R);
+  }
+  /**
+   * FieldDefinition :
+   *   - Description? Name ArgumentsDefinition? : Type Directives[Const]?
+   */
+  ;
+
+  _proto.parseFieldDefinition = function parseFieldDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    var name = this.parseName();
+    var args = this.parseArgumentDefs();
+    this.expectToken(_tokenKind.TokenKind.COLON);
+    var type = this.parseTypeReference();
+    var directives = this.parseDirectives(true);
+    return {
+      kind: _kinds.Kind.FIELD_DEFINITION,
+      description: description,
+      name: name,
+      arguments: args,
+      type: type,
+      directives: directives,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * ArgumentsDefinition : ( InputValueDefinition+ )
+   */
+  ;
+
+  _proto.parseArgumentDefs = function parseArgumentDefs() {
+    return this.optionalMany(_tokenKind.TokenKind.PAREN_L, this.parseInputValueDef, _tokenKind.TokenKind.PAREN_R);
+  }
+  /**
+   * InputValueDefinition :
+   *   - Description? Name : Type DefaultValue? Directives[Const]?
+   */
+  ;
+
+  _proto.parseInputValueDef = function parseInputValueDef() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    var name = this.parseName();
+    this.expectToken(_tokenKind.TokenKind.COLON);
+    var type = this.parseTypeReference();
+    var defaultValue;
+
+    if (this.expectOptionalToken(_tokenKind.TokenKind.EQUALS)) {
+      defaultValue = this.parseValueLiteral(true);
+    }
+
+    var directives = this.parseDirectives(true);
+    return {
+      kind: _kinds.Kind.INPUT_VALUE_DEFINITION,
+      description: description,
+      name: name,
+      type: type,
+      defaultValue: defaultValue,
+      directives: directives,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * InterfaceTypeDefinition :
+   *   - Description? interface Name Directives[Const]? FieldsDefinition?
+   */
+  ;
+
+  _proto.parseInterfaceTypeDefinition = function parseInterfaceTypeDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('interface');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var fields = this.parseFieldsDefinition();
+    return {
+      kind: _kinds.Kind.INTERFACE_TYPE_DEFINITION,
+      description: description,
+      name: name,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * UnionTypeDefinition :
+   *   - Description? union Name Directives[Const]? UnionMemberTypes?
+   */
+  ;
+
+  _proto.parseUnionTypeDefinition = function parseUnionTypeDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('union');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var types = this.parseUnionMemberTypes();
+    return {
+      kind: _kinds.Kind.UNION_TYPE_DEFINITION,
+      description: description,
+      name: name,
+      directives: directives,
+      types: types,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * UnionMemberTypes :
+   *   - = `|`? NamedType
+   *   - UnionMemberTypes | NamedType
+   */
+  ;
+
+  _proto.parseUnionMemberTypes = function parseUnionMemberTypes() {
+    var types = [];
+
+    if (this.expectOptionalToken(_tokenKind.TokenKind.EQUALS)) {
+      // Optional leading pipe
+      this.expectOptionalToken(_tokenKind.TokenKind.PIPE);
+
+      do {
+        types.push(this.parseNamedType());
+      } while (this.expectOptionalToken(_tokenKind.TokenKind.PIPE));
+    }
+
+    return types;
+  }
+  /**
+   * EnumTypeDefinition :
+   *   - Description? enum Name Directives[Const]? EnumValuesDefinition?
+   */
+  ;
+
+  _proto.parseEnumTypeDefinition = function parseEnumTypeDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('enum');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var values = this.parseEnumValuesDefinition();
+    return {
+      kind: _kinds.Kind.ENUM_TYPE_DEFINITION,
+      description: description,
+      name: name,
+      directives: directives,
+      values: values,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * EnumValuesDefinition : { EnumValueDefinition+ }
+   */
+  ;
+
+  _proto.parseEnumValuesDefinition = function parseEnumValuesDefinition() {
+    return this.optionalMany(_tokenKind.TokenKind.BRACE_L, this.parseEnumValueDefinition, _tokenKind.TokenKind.BRACE_R);
+  }
+  /**
+   * EnumValueDefinition : Description? EnumValue Directives[Const]?
+   *
+   * EnumValue : Name
+   */
+  ;
+
+  _proto.parseEnumValueDefinition = function parseEnumValueDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    return {
+      kind: _kinds.Kind.ENUM_VALUE_DEFINITION,
+      description: description,
+      name: name,
+      directives: directives,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * InputObjectTypeDefinition :
+   *   - Description? input Name Directives[Const]? InputFieldsDefinition?
+   */
+  ;
+
+  _proto.parseInputObjectTypeDefinition = function parseInputObjectTypeDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('input');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var fields = this.parseInputFieldsDefinition();
+    return {
+      kind: _kinds.Kind.INPUT_OBJECT_TYPE_DEFINITION,
+      description: description,
+      name: name,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * InputFieldsDefinition : { InputValueDefinition+ }
+   */
+  ;
+
+  _proto.parseInputFieldsDefinition = function parseInputFieldsDefinition() {
+    return this.optionalMany(_tokenKind.TokenKind.BRACE_L, this.parseInputValueDef, _tokenKind.TokenKind.BRACE_R);
+  }
+  /**
+   * TypeSystemExtension :
+   *   - SchemaExtension
+   *   - TypeExtension
+   *
+   * TypeExtension :
+   *   - ScalarTypeExtension
+   *   - ObjectTypeExtension
+   *   - InterfaceTypeExtension
+   *   - UnionTypeExtension
+   *   - EnumTypeExtension
+   *   - InputObjectTypeDefinition
+   */
+  ;
+
+  _proto.parseTypeSystemExtension = function parseTypeSystemExtension() {
+    var keywordToken = this._lexer.lookahead();
+
+    if (keywordToken.kind === _tokenKind.TokenKind.NAME) {
+      switch (keywordToken.value) {
+        case 'schema':
+          return this.parseSchemaExtension();
+
+        case 'scalar':
+          return this.parseScalarTypeExtension();
+
+        case 'type':
+          return this.parseObjectTypeExtension();
+
+        case 'interface':
+          return this.parseInterfaceTypeExtension();
+
+        case 'union':
+          return this.parseUnionTypeExtension();
+
+        case 'enum':
+          return this.parseEnumTypeExtension();
+
+        case 'input':
+          return this.parseInputObjectTypeExtension();
+      }
+    }
+
+    throw this.unexpected(keywordToken);
+  }
+  /**
+   * SchemaExtension :
+   *  - extend schema Directives[Const]? { OperationTypeDefinition+ }
+   *  - extend schema Directives[Const]
+   */
+  ;
+
+  _proto.parseSchemaExtension = function parseSchemaExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('schema');
+    var directives = this.parseDirectives(true);
+    var operationTypes = this.optionalMany(_tokenKind.TokenKind.BRACE_L, this.parseOperationTypeDefinition, _tokenKind.TokenKind.BRACE_R);
+
+    if (directives.length === 0 && operationTypes.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.SCHEMA_EXTENSION,
+      directives: directives,
+      operationTypes: operationTypes,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * ScalarTypeExtension :
+   *   - extend scalar Name Directives[Const]
+   */
+  ;
+
+  _proto.parseScalarTypeExtension = function parseScalarTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('scalar');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+
+    if (directives.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.SCALAR_TYPE_EXTENSION,
+      name: name,
+      directives: directives,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * ObjectTypeExtension :
+   *  - extend type Name ImplementsInterfaces? Directives[Const]? FieldsDefinition
+   *  - extend type Name ImplementsInterfaces? Directives[Const]
+   *  - extend type Name ImplementsInterfaces
+   */
+  ;
+
+  _proto.parseObjectTypeExtension = function parseObjectTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('type');
+    var name = this.parseName();
+    var interfaces = this.parseImplementsInterfaces();
+    var directives = this.parseDirectives(true);
+    var fields = this.parseFieldsDefinition();
+
+    if (interfaces.length === 0 && directives.length === 0 && fields.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.OBJECT_TYPE_EXTENSION,
+      name: name,
+      interfaces: interfaces,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * InterfaceTypeExtension :
+   *   - extend interface Name Directives[Const]? FieldsDefinition
+   *   - extend interface Name Directives[Const]
+   */
+  ;
+
+  _proto.parseInterfaceTypeExtension = function parseInterfaceTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('interface');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var fields = this.parseFieldsDefinition();
+
+    if (directives.length === 0 && fields.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.INTERFACE_TYPE_EXTENSION,
+      name: name,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * UnionTypeExtension :
+   *   - extend union Name Directives[Const]? UnionMemberTypes
+   *   - extend union Name Directives[Const]
+   */
+  ;
+
+  _proto.parseUnionTypeExtension = function parseUnionTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('union');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var types = this.parseUnionMemberTypes();
+
+    if (directives.length === 0 && types.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.UNION_TYPE_EXTENSION,
+      name: name,
+      directives: directives,
+      types: types,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * EnumTypeExtension :
+   *   - extend enum Name Directives[Const]? EnumValuesDefinition
+   *   - extend enum Name Directives[Const]
+   */
+  ;
+
+  _proto.parseEnumTypeExtension = function parseEnumTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('enum');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var values = this.parseEnumValuesDefinition();
+
+    if (directives.length === 0 && values.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.ENUM_TYPE_EXTENSION,
+      name: name,
+      directives: directives,
+      values: values,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * InputObjectTypeExtension :
+   *   - extend input Name Directives[Const]? InputFieldsDefinition
+   *   - extend input Name Directives[Const]
+   */
+  ;
+
+  _proto.parseInputObjectTypeExtension = function parseInputObjectTypeExtension() {
+    var start = this._lexer.token;
+    this.expectKeyword('extend');
+    this.expectKeyword('input');
+    var name = this.parseName();
+    var directives = this.parseDirectives(true);
+    var fields = this.parseInputFieldsDefinition();
+
+    if (directives.length === 0 && fields.length === 0) {
+      throw this.unexpected();
+    }
+
+    return {
+      kind: _kinds.Kind.INPUT_OBJECT_TYPE_EXTENSION,
+      name: name,
+      directives: directives,
+      fields: fields,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * DirectiveDefinition :
+   *   - Description? directive @ Name ArgumentsDefinition? `repeatable`? on DirectiveLocations
+   */
+  ;
+
+  _proto.parseDirectiveDefinition = function parseDirectiveDefinition() {
+    var start = this._lexer.token;
+    var description = this.parseDescription();
+    this.expectKeyword('directive');
+    this.expectToken(_tokenKind.TokenKind.AT);
+    var name = this.parseName();
+    var args = this.parseArgumentDefs();
+    var repeatable = this.expectOptionalKeyword('repeatable');
+    this.expectKeyword('on');
+    var locations = this.parseDirectiveLocations();
+    return {
+      kind: _kinds.Kind.DIRECTIVE_DEFINITION,
+      description: description,
+      name: name,
+      arguments: args,
+      repeatable: repeatable,
+      locations: locations,
+      loc: this.loc(start)
+    };
+  }
+  /**
+   * DirectiveLocations :
+   *   - `|`? DirectiveLocation
+   *   - DirectiveLocations | DirectiveLocation
+   */
+  ;
+
+  _proto.parseDirectiveLocations = function parseDirectiveLocations() {
+    // Optional leading pipe
+    this.expectOptionalToken(_tokenKind.TokenKind.PIPE);
+    var locations = [];
+
+    do {
+      locations.push(this.parseDirectiveLocation());
+    } while (this.expectOptionalToken(_tokenKind.TokenKind.PIPE));
+
+    return locations;
+  }
+  /*
+   * DirectiveLocation :
+   *   - ExecutableDirectiveLocation
+   *   - TypeSystemDirectiveLocation
+   *
+   * ExecutableDirectiveLocation : one of
+   *   `QUERY`
+   *   `MUTATION`
+   *   `SUBSCRIPTION`
+   *   `FIELD`
+   *   `FRAGMENT_DEFINITION`
+   *   `FRAGMENT_SPREAD`
+   *   `INLINE_FRAGMENT`
+   *
+   * TypeSystemDirectiveLocation : one of
+   *   `SCHEMA`
+   *   `SCALAR`
+   *   `OBJECT`
+   *   `FIELD_DEFINITION`
+   *   `ARGUMENT_DEFINITION`
+   *   `INTERFACE`
+   *   `UNION`
+   *   `ENUM`
+   *   `ENUM_VALUE`
+   *   `INPUT_OBJECT`
+   *   `INPUT_FIELD_DEFINITION`
+   */
+  ;
+
+  _proto.parseDirectiveLocation = function parseDirectiveLocation() {
+    var start = this._lexer.token;
+    var name = this.parseName();
+
+    if (_directiveLocation.DirectiveLocation[name.value] !== undefined) {
+      return name;
+    }
+
+    throw this.unexpected(start);
+  } // Core parsing utility functions
+
+  /**
+   * Returns a location object, used to identify the place in
+   * the source that created a given parsed object.
+   */
+  ;
+
+  _proto.loc = function loc(startToken) {
+    if (!this._options.noLocation) {
+      return new Loc(startToken, this._lexer.lastToken, this._lexer.source);
+    }
+  }
+  /**
+   * Determines if the next token is of a given kind
+   */
+  ;
+
+  _proto.peek = function peek(kind) {
+    return this._lexer.token.kind === kind;
+  }
+  /**
+   * If the next token is of the given kind, return that token after advancing
+   * the lexer. Otherwise, do not change the parser state and throw an error.
+   */
+  ;
+
+  _proto.expectToken = function expectToken(kind) {
+    var token = this._lexer.token;
+
+    if (token.kind === kind) {
+      this._lexer.advance();
+
+      return token;
+    }
+
+    throw (0, _syntaxError.syntaxError)(this._lexer.source, token.start, "Expected ".concat(kind, ", found ").concat(getTokenDesc(token)));
+  }
+  /**
+   * If the next token is of the given kind, return that token after advancing
+   * the lexer. Otherwise, do not change the parser state and return undefined.
+   */
+  ;
+
+  _proto.expectOptionalToken = function expectOptionalToken(kind) {
+    var token = this._lexer.token;
+
+    if (token.kind === kind) {
+      this._lexer.advance();
+
+      return token;
+    }
+
+    return undefined;
+  }
+  /**
+   * If the next token is a given keyword, advance the lexer.
+   * Otherwise, do not change the parser state and throw an error.
+   */
+  ;
+
+  _proto.expectKeyword = function expectKeyword(value) {
+    var token = this._lexer.token;
+
+    if (token.kind === _tokenKind.TokenKind.NAME && token.value === value) {
+      this._lexer.advance();
+    } else {
+      throw (0, _syntaxError.syntaxError)(this._lexer.source, token.start, "Expected \"".concat(value, "\", found ").concat(getTokenDesc(token)));
+    }
+  }
+  /**
+   * If the next token is a given keyword, return "true" after advancing
+   * the lexer. Otherwise, do not change the parser state and return "false".
+   */
+  ;
+
+  _proto.expectOptionalKeyword = function expectOptionalKeyword(value) {
+    var token = this._lexer.token;
+
+    if (token.kind === _tokenKind.TokenKind.NAME && token.value === value) {
+      this._lexer.advance();
+
+      return true;
+    }
+
+    return false;
+  }
+  /**
+   * Helper function for creating an error when an unexpected lexed token
+   * is encountered.
+   */
+  ;
+
+  _proto.unexpected = function unexpected(atToken) {
+    var token = atToken || this._lexer.token;
+    return (0, _syntaxError.syntaxError)(this._lexer.source, token.start, "Unexpected ".concat(getTokenDesc(token)));
+  }
+  /**
+   * Returns a possibly empty list of parse nodes, determined by
+   * the parseFn. This list begins with a lex token of openKind
+   * and ends with a lex token of closeKind. Advances the parser
+   * to the next lex token after the closing token.
+   */
+  ;
+
+  _proto.any = function any(openKind, parseFn, closeKind) {
+    this.expectToken(openKind);
+    var nodes = [];
+
+    while (!this.expectOptionalToken(closeKind)) {
+      nodes.push(parseFn.call(this));
+    }
+
+    return nodes;
+  }
+  /**
+   * Returns a list of parse nodes, determined by the parseFn.
+   * It can be empty only if open token is missing otherwise it will always
+   * return non-empty list that begins with a lex token of openKind and ends
+   * with a lex token of closeKind. Advances the parser to the next lex token
+   * after the closing token.
+   */
+  ;
+
+  _proto.optionalMany = function optionalMany(openKind, parseFn, closeKind) {
+    if (this.expectOptionalToken(openKind)) {
+      var nodes = [];
+
+      do {
+        nodes.push(parseFn.call(this));
+      } while (!this.expectOptionalToken(closeKind));
+
+      return nodes;
+    }
+
+    return [];
+  }
+  /**
+   * Returns a non-empty list of parse nodes, determined by
+   * the parseFn. This list begins with a lex token of openKind
+   * and ends with a lex token of closeKind. Advances the parser
+   * to the next lex token after the closing token.
+   */
+  ;
+
+  _proto.many = function many(openKind, parseFn, closeKind) {
+    this.expectToken(openKind);
+    var nodes = [];
+
+    do {
+      nodes.push(parseFn.call(this));
+    } while (!this.expectOptionalToken(closeKind));
+
+    return nodes;
+  };
+
+  return Parser;
+}();
+
+function Loc(startToken, endToken, source) {
+  this.start = startToken.start;
+  this.end = endToken.end;
+  this.startToken = startToken;
+  this.endToken = endToken;
+  this.source = source;
+} // Print a simplified form when appearing in JSON/util.inspect.
+
+
+(0, _defineToJSON.default)(Loc, function () {
+  return {
+    start: this.start,
+    end: this.end
+  };
+});
+/**
+ * A helper function to describe a token as a string for debugging
+ */
+
+function getTokenDesc(token) {
+  var value = token.value;
+  return value ? "".concat(token.kind, " \"").concat(value, "\"") : token.kind;
+}
+},{"../jsutils/inspect":"../node_modules/graphql/jsutils/inspect.js","../jsutils/devAssert":"../node_modules/graphql/jsutils/devAssert.js","../jsutils/defineToJSON":"../node_modules/graphql/jsutils/defineToJSON.js","../error/syntaxError":"../node_modules/graphql/error/syntaxError.js","./kinds":"../node_modules/graphql/language/kinds.js","./source":"../node_modules/graphql/language/source.js","./lexer":"../node_modules/graphql/language/lexer.js","./directiveLocation":"../node_modules/graphql/language/directiveLocation.js","./tokenKind":"../node_modules/graphql/language/tokenKind.js"}],"../node_modules/graphql-tag/src/index.js":[function(require,module,exports) {
+var parser = require('graphql/language/parser');
+
+var parse = parser.parse;
+
+// Strip insignificant whitespace
+// Note that this could do a lot more, such as reorder fields etc.
+function normalize(string) {
+  return string.replace(/[\s,]+/g, ' ').trim();
+}
+
+// A map docString -> graphql document
+var docCache = {};
+
+// A map fragmentName -> [normalized source]
+var fragmentSourceMap = {};
+
+function cacheKeyFromLoc(loc) {
+  return normalize(loc.source.body.substring(loc.start, loc.end));
+}
+
+// For testing.
+function resetCaches() {
+  docCache = {};
+  fragmentSourceMap = {};
+}
+
+// Take a unstripped parsed document (query/mutation or even fragment), and
+// check all fragment definitions, checking for name->source uniqueness.
+// We also want to make sure only unique fragments exist in the document.
+var printFragmentWarnings = true;
+function processFragments(ast) {
+  var astFragmentMap = {};
+  var definitions = [];
+
+  for (var i = 0; i < ast.definitions.length; i++) {
+    var fragmentDefinition = ast.definitions[i];
+
+    if (fragmentDefinition.kind === 'FragmentDefinition') {
+      var fragmentName = fragmentDefinition.name.value;
+      var sourceKey = cacheKeyFromLoc(fragmentDefinition.loc);
+
+      // We know something about this fragment
+      if (fragmentSourceMap.hasOwnProperty(fragmentName) && !fragmentSourceMap[fragmentName][sourceKey]) {
+
+        // this is a problem because the app developer is trying to register another fragment with
+        // the same name as one previously registered. So, we tell them about it.
+        if (printFragmentWarnings) {
+          console.warn("Warning: fragment with name " + fragmentName + " already exists.\n"
+            + "graphql-tag enforces all fragment names across your application to be unique; read more about\n"
+            + "this in the docs: http://dev.apollodata.com/core/fragments.html#unique-names");
+        }
+
+        fragmentSourceMap[fragmentName][sourceKey] = true;
+
+      } else if (!fragmentSourceMap.hasOwnProperty(fragmentName)) {
+        fragmentSourceMap[fragmentName] = {};
+        fragmentSourceMap[fragmentName][sourceKey] = true;
+      }
+
+      if (!astFragmentMap[sourceKey]) {
+        astFragmentMap[sourceKey] = true;
+        definitions.push(fragmentDefinition);
+      }
+    } else {
+      definitions.push(fragmentDefinition);
+    }
+  }
+
+  ast.definitions = definitions;
+  return ast;
+}
+
+function disableFragmentWarnings() {
+  printFragmentWarnings = false;
+}
+
+function stripLoc(doc, removeLocAtThisLevel) {
+  var docType = Object.prototype.toString.call(doc);
+
+  if (docType === '[object Array]') {
+    return doc.map(function (d) {
+      return stripLoc(d, removeLocAtThisLevel);
+    });
+  }
+
+  if (docType !== '[object Object]') {
+    throw new Error('Unexpected input.');
+  }
+
+  // We don't want to remove the root loc field so we can use it
+  // for fragment substitution (see below)
+  if (removeLocAtThisLevel && doc.loc) {
+    delete doc.loc;
+  }
+
+  // https://github.com/apollographql/graphql-tag/issues/40
+  if (doc.loc) {
+    delete doc.loc.startToken;
+    delete doc.loc.endToken;
+  }
+
+  var keys = Object.keys(doc);
+  var key;
+  var value;
+  var valueType;
+
+  for (key in keys) {
+    if (keys.hasOwnProperty(key)) {
+      value = doc[keys[key]];
+      valueType = Object.prototype.toString.call(value);
+
+      if (valueType === '[object Object]' || valueType === '[object Array]') {
+        doc[keys[key]] = stripLoc(value, true);
+      }
+    }
+  }
+
+  return doc;
+}
+
+var experimentalFragmentVariables = false;
+function parseDocument(doc) {
+  var cacheKey = normalize(doc);
+
+  if (docCache[cacheKey]) {
+    return docCache[cacheKey];
+  }
+
+  var parsed = parse(doc, { experimentalFragmentVariables: experimentalFragmentVariables });
+  if (!parsed || parsed.kind !== 'Document') {
+    throw new Error('Not a valid GraphQL document.');
+  }
+
+  // check that all "new" fragments inside the documents are consistent with
+  // existing fragments of the same name
+  parsed = processFragments(parsed);
+  parsed = stripLoc(parsed, false);
+  docCache[cacheKey] = parsed;
+
+  return parsed;
+}
+
+function enableExperimentalFragmentVariables() {
+  experimentalFragmentVariables = true;
+}
+
+function disableExperimentalFragmentVariables() {
+  experimentalFragmentVariables = false;
+}
+
+// XXX This should eventually disallow arbitrary string interpolation, like Relay does
+function gql(/* arguments */) {
+  var args = Array.prototype.slice.call(arguments);
+
+  var literals = args[0];
+
+  // We always get literals[0] and then matching post literals for each arg given
+  var result = (typeof(literals) === "string") ? literals : literals[0];
+
+  for (var i = 1; i < args.length; i++) {
+    if (args[i] && args[i].kind && args[i].kind === 'Document') {
+      result += args[i].loc.source.body;
+    } else {
+      result += args[i];
+    }
+
+    result += literals[i];
+  }
+
+  return parseDocument(result);
+}
+
+// Support typescript, which isn't as nice as Babel about default exports
+gql.default = gql;
+gql.resetCaches = resetCaches;
+gql.disableFragmentWarnings = disableFragmentWarnings;
+gql.enableExperimentalFragmentVariables = enableExperimentalFragmentVariables;
+gql.disableExperimentalFragmentVariables = disableExperimentalFragmentVariables;
+
+module.exports = gql;
+
+},{"graphql/language/parser":"../node_modules/graphql/language/parser.js"}],"../node_modules/@apollo/client/cache/core/utils.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.fragmentFromPojo = fragmentFromPojo;
+exports.queryFromPojo = queryFromPojo;
+
+function queryFromPojo(obj) {
+  return {
+    kind: 'Document',
+    definitions: [{
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: {
+        kind: 'Name',
+        value: 'GeneratedClientQuery'
+      },
+      selectionSet: selectionSetFromObj(obj)
+    }]
+  };
+}
+
+function fragmentFromPojo(obj, typename) {
+  return {
+    kind: 'Document',
+    definitions: [{
+      kind: 'FragmentDefinition',
+      typeCondition: {
+        kind: 'NamedType',
+        name: {
+          kind: 'Name',
+          value: typename || '__FakeType'
+        }
+      },
+      name: {
+        kind: 'Name',
+        value: 'GeneratedClientQuery'
+      },
+      selectionSet: selectionSetFromObj(obj)
+    }]
+  };
+}
+
+function selectionSetFromObj(obj) {
+  if (!obj || Object(obj) !== obj) {
+    return null;
+  }
+
+  if (Array.isArray(obj)) {
+    return selectionSetFromObj(obj[0]);
+  }
+
+  return {
+    kind: 'SelectionSet',
+    selections: Object.keys(obj).map(function (key) {
+      return {
+        kind: 'Field',
+        name: {
+          kind: 'Name',
+          value: key
+        },
+        selectionSet: selectionSetFromObj(obj[key]) || void 0
+      };
+    })
+  };
+}
+},{}],"../node_modules/@apollo/client/cache/core/cache.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.ApolloCache = void 0;
+
+var _tslib = require("tslib");
+
+var _fragments = require("../../utilities/graphql/fragments.js");
+
+var _utils = require("./utils.js");
+
+var _graphqlTag = _interopRequireDefault(require("graphql-tag"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var justTypenameQuery = (0, _graphqlTag.default)(templateObject_1 || (templateObject_1 = (0, _tslib.__makeTemplateObject)(["query { __typename }"], ["query { __typename }"])));
+
+var ApolloCache = function () {
+  function ApolloCache() {}
+
+  ApolloCache.prototype.transformDocument = function (document) {
+    return document;
+  };
+
+  ApolloCache.prototype.transformForLink = function (document) {
+    return document;
+  };
+
+  ApolloCache.prototype.readQuery = function (options, optimistic) {
+    if (optimistic === void 0) {
+      optimistic = false;
+    }
+
+    return this.read({
+      query: options.query,
+      variables: options.variables,
+      optimistic: optimistic
+    });
+  };
+
+  ApolloCache.prototype.readFragment = function (options, optimistic) {
+    if (optimistic === void 0) {
+      optimistic = false;
+    }
+
+    return this.read({
+      query: (0, _fragments.getFragmentQueryDocument)(options.fragment, options.fragmentName),
+      variables: options.variables,
+      rootId: options.id,
+      optimistic: optimistic
+    });
+  };
+
+  ApolloCache.prototype.writeQuery = function (options) {
+    this.write({
+      dataId: 'ROOT_QUERY',
+      result: options.data,
+      query: options.query,
+      variables: options.variables
+    });
+  };
+
+  ApolloCache.prototype.writeFragment = function (options) {
+    this.write({
+      dataId: options.id,
+      result: options.data,
+      variables: options.variables,
+      query: (0, _fragments.getFragmentQueryDocument)(options.fragment, options.fragmentName)
+    });
+  };
+
+  ApolloCache.prototype.writeData = function (_a) {
+    var id = _a.id,
+        data = _a.data;
+
+    if (typeof id !== 'undefined') {
+      var typenameResult = null;
+
+      try {
+        typenameResult = this.read({
+          rootId: id,
+          optimistic: false,
+          query: justTypenameQuery
+        });
+      } catch (e) {}
+
+      var __typename = typenameResult && typenameResult.__typename || '__ClientData';
+
+      var dataToWrite = Object.assign({
+        __typename: __typename
+      }, data);
+      this.writeFragment({
+        id: id,
+        fragment: (0, _utils.fragmentFromPojo)(dataToWrite, __typename),
+        data: dataToWrite
+      });
+    } else {
+      this.writeQuery({
+        query: (0, _utils.queryFromPojo)(data),
+        data: data
+      });
+    }
+  };
+
+  return ApolloCache;
+}();
+
+exports.ApolloCache = ApolloCache;
+var templateObject_1;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","../../utilities/graphql/fragments.js":"../node_modules/@apollo/client/utilities/graphql/fragments.js","./utils.js":"../node_modules/@apollo/client/cache/core/utils.js","graphql-tag":"../node_modules/graphql-tag/src/index.js"}],"../node_modules/@apollo/client/cache/core/types/Cache.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.Cache = void 0;
+var Cache;
+exports.Cache = Cache;
+
+(function (Cache) {})(Cache || (exports.Cache = Cache = {}));
+},{}],"../node_modules/@wry/context/lib/context.esm.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.asyncFromGen = asyncFromGen;
+exports.setTimeout = setTimeoutWithContext;
+exports.wrapYieldingFiberMethods = wrapYieldingFiberMethods;
+exports.noContext = exports.bind = exports.Slot = void 0;
+// This currentContext variable will only be used if the makeSlotClass
+// function is called, which happens only if this is the first copy of the
+// @wry/context package to be imported.
+var currentContext = null; // This unique internal object is used to denote the absence of a value
+// for a given Slot, and is never exposed to outside code.
+
+var MISSING_VALUE = {};
+var idCounter = 1; // Although we can't do anything about the cost of duplicated code from
+// accidentally bundling multiple copies of the @wry/context package, we can
+// avoid creating the Slot class more than once using makeSlotClass.
+
+var makeSlotClass = function () {
+  return (
+    /** @class */
+    function () {
+      function Slot() {
+        // If you have a Slot object, you can find out its slot.id, but you cannot
+        // guess the slot.id of a Slot you don't have access to, thanks to the
+        // randomized suffix.
+        this.id = ["slot", idCounter++, Date.now(), Math.random().toString(36).slice(2)].join(":");
+      }
+
+      Slot.prototype.hasValue = function () {
+        for (var context_1 = currentContext; context_1; context_1 = context_1.parent) {
+          // We use the Slot object iself as a key to its value, which means the
+          // value cannot be obtained without a reference to the Slot object.
+          if (this.id in context_1.slots) {
+            var value = context_1.slots[this.id];
+            if (value === MISSING_VALUE) break;
+
+            if (context_1 !== currentContext) {
+              // Cache the value in currentContext.slots so the next lookup will
+              // be faster. This caching is safe because the tree of contexts and
+              // the values of the slots are logically immutable.
+              currentContext.slots[this.id] = value;
+            }
+
+            return true;
+          }
+        }
+
+        if (currentContext) {
+          // If a value was not found for this Slot, it's never going to be found
+          // no matter how many times we look it up, so we might as well cache
+          // the absence of the value, too.
+          currentContext.slots[this.id] = MISSING_VALUE;
+        }
+
+        return false;
+      };
+
+      Slot.prototype.getValue = function () {
+        if (this.hasValue()) {
+          return currentContext.slots[this.id];
+        }
+      };
+
+      Slot.prototype.withValue = function (value, callback, // Given the prevalence of arrow functions, specifying arguments is likely
+      // to be much more common than specifying `this`, hence this ordering:
+      args, thisArg) {
+        var _a;
+
+        var slots = (_a = {
+          __proto__: null
+        }, _a[this.id] = value, _a);
+        var parent = currentContext;
+        currentContext = {
+          parent: parent,
+          slots: slots
+        };
+
+        try {
+          // Function.prototype.apply allows the arguments array argument to be
+          // omitted or undefined, so args! is fine here.
+          return callback.apply(thisArg, args);
+        } finally {
+          currentContext = parent;
+        }
+      }; // Capture the current context and wrap a callback function so that it
+      // reestablishes the captured context when called.
+
+
+      Slot.bind = function (callback) {
+        var context = currentContext;
+        return function () {
+          var saved = currentContext;
+
+          try {
+            currentContext = context;
+            return callback.apply(this, arguments);
+          } finally {
+            currentContext = saved;
+          }
+        };
+      }; // Immediately run a callback function without any captured context.
+
+
+      Slot.noContext = function (callback, // Given the prevalence of arrow functions, specifying arguments is likely
+      // to be much more common than specifying `this`, hence this ordering:
+      args, thisArg) {
+        if (currentContext) {
+          var saved = currentContext;
+
+          try {
+            currentContext = null; // Function.prototype.apply allows the arguments array argument to be
+            // omitted or undefined, so args! is fine here.
+
+            return callback.apply(thisArg, args);
+          } finally {
+            currentContext = saved;
+          }
+        } else {
+          return callback.apply(thisArg, args);
+        }
+      };
+
+      return Slot;
+    }()
+  );
+}; // We store a single global implementation of the Slot class as a permanent
+// non-enumerable symbol property of the Array constructor. This obfuscation
+// does nothing to prevent access to the Slot class, but at least it ensures
+// the implementation (i.e. currentContext) cannot be tampered with, and all
+// copies of the @wry/context package (hopefully just one) will share the
+// same Slot implementation. Since the first copy of the @wry/context package
+// to be imported wins, this technique imposes a very high cost for any
+// future breaking changes to the Slot class.
+
+
+var globalKey = "@wry/context:Slot";
+var host = Array;
+
+var Slot = host[globalKey] || function () {
+  var Slot = makeSlotClass();
+
+  try {
+    Object.defineProperty(host, globalKey, {
+      value: host[globalKey] = Slot,
+      enumerable: false,
+      writable: false,
+      configurable: false
+    });
+  } finally {
+    return Slot;
+  }
+}();
+
+exports.Slot = Slot;
+var bind = Slot.bind,
+    noContext = Slot.noContext;
+exports.noContext = noContext;
+exports.bind = bind;
+
+function setTimeoutWithContext(callback, delay) {
+  return setTimeout(bind(callback), delay);
+} // Turn any generator function into an async function (using yield instead
+// of await), with context automatically preserved across yields.
+
+
+function asyncFromGen(genFn) {
+  return function () {
+    var gen = genFn.apply(this, arguments);
+    var boundNext = bind(gen.next);
+    var boundThrow = bind(gen.throw);
+    return new Promise(function (resolve, reject) {
+      function invoke(method, argument) {
+        try {
+          var result = method.call(gen, argument);
+        } catch (error) {
+          return reject(error);
+        }
+
+        var next = result.done ? resolve : invokeNext;
+
+        if (isPromiseLike(result.value)) {
+          result.value.then(next, result.done ? reject : invokeThrow);
+        } else {
+          next(result.value);
+        }
+      }
+
+      var invokeNext = function (value) {
+        return invoke(boundNext, value);
+      };
+
+      var invokeThrow = function (error) {
+        return invoke(boundThrow, error);
+      };
+
+      invokeNext();
+    });
+  };
+}
+
+function isPromiseLike(value) {
+  return value && typeof value.then === "function";
+} // If you use the fibers npm package to implement coroutines in Node.js,
+// you should call this function at least once to ensure context management
+// remains coherent across any yields.
+
+
+var wrappedFibers = [];
+
+function wrapYieldingFiberMethods(Fiber) {
+  // There can be only one implementation of Fiber per process, so this array
+  // should never grow longer than one element.
+  if (wrappedFibers.indexOf(Fiber) < 0) {
+    var wrap = function (obj, method) {
+      var fn = obj[method];
+
+      obj[method] = function () {
+        return noContext(fn, arguments, this);
+      };
+    }; // These methods can yield, according to
+    // https://github.com/laverdet/node-fibers/blob/ddebed9b8ae3883e57f822e2108e6943e5c8d2a8/fibers.js#L97-L100
+
+
+    wrap(Fiber, "yield");
+    wrap(Fiber.prototype, "run");
+    wrap(Fiber.prototype, "throwInto");
+    wrappedFibers.push(Fiber);
+  }
+
+  return Fiber;
+}
+},{}],"../node_modules/optimism/lib/bundle.esm.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.defaultMakeCacheKey = defaultMakeCacheKey;
+exports.dep = dep;
+exports.wrap = wrap;
+Object.defineProperty(exports, "asyncFromGen", {
+  enumerable: true,
+  get: function () {
+    return _context.asyncFromGen;
+  }
+});
+Object.defineProperty(exports, "bindContext", {
+  enumerable: true,
+  get: function () {
+    return _context.bind;
+  }
+});
+Object.defineProperty(exports, "noContext", {
+  enumerable: true,
+  get: function () {
+    return _context.noContext;
+  }
+});
+Object.defineProperty(exports, "setTimeout", {
+  enumerable: true,
+  get: function () {
+    return _context.setTimeout;
+  }
+});
+exports.KeyTrie = void 0;
+
+var _context = require("@wry/context");
+
+function defaultDispose() {}
+
+var Cache =
+/** @class */
+function () {
+  function Cache(max, dispose) {
+    if (max === void 0) {
+      max = Infinity;
+    }
+
+    if (dispose === void 0) {
+      dispose = defaultDispose;
+    }
+
+    this.max = max;
+    this.dispose = dispose;
+    this.map = new Map();
+    this.newest = null;
+    this.oldest = null;
+  }
+
+  Cache.prototype.has = function (key) {
+    return this.map.has(key);
+  };
+
+  Cache.prototype.get = function (key) {
+    var entry = this.getEntry(key);
+    return entry && entry.value;
+  };
+
+  Cache.prototype.getEntry = function (key) {
+    var entry = this.map.get(key);
+
+    if (entry && entry !== this.newest) {
+      var older = entry.older,
+          newer = entry.newer;
+
+      if (newer) {
+        newer.older = older;
+      }
+
+      if (older) {
+        older.newer = newer;
+      }
+
+      entry.older = this.newest;
+      entry.older.newer = entry;
+      entry.newer = null;
+      this.newest = entry;
+
+      if (entry === this.oldest) {
+        this.oldest = newer;
+      }
+    }
+
+    return entry;
+  };
+
+  Cache.prototype.set = function (key, value) {
+    var entry = this.getEntry(key);
+
+    if (entry) {
+      return entry.value = value;
+    }
+
+    entry = {
+      key: key,
+      value: value,
+      newer: null,
+      older: this.newest
+    };
+
+    if (this.newest) {
+      this.newest.newer = entry;
+    }
+
+    this.newest = entry;
+    this.oldest = this.oldest || entry;
+    this.map.set(key, entry);
+    return entry.value;
+  };
+
+  Cache.prototype.clean = function () {
+    while (this.oldest && this.map.size > this.max) {
+      this.delete(this.oldest.key);
+    }
+  };
+
+  Cache.prototype.delete = function (key) {
+    var entry = this.map.get(key);
+
+    if (entry) {
+      if (entry === this.newest) {
+        this.newest = entry.older;
+      }
+
+      if (entry === this.oldest) {
+        this.oldest = entry.newer;
+      }
+
+      if (entry.newer) {
+        entry.newer.older = entry.older;
+      }
+
+      if (entry.older) {
+        entry.older.newer = entry.newer;
+      }
+
+      this.map.delete(key);
+      this.dispose(entry.value, key);
+      return true;
+    }
+
+    return false;
+  };
+
+  return Cache;
+}();
+
+var parentEntrySlot = new _context.Slot();
+
+function maybeUnsubscribe(entryOrDep) {
+  var unsubscribe = entryOrDep.unsubscribe;
+
+  if (typeof unsubscribe === "function") {
+    entryOrDep.unsubscribe = void 0;
+    unsubscribe();
+  }
+}
+
+var emptySetPool = [];
+var POOL_TARGET_SIZE = 100; // Since this package might be used browsers, we should avoid using the
+// Node built-in assert module.
+
+function assert(condition, optionalMessage) {
+  if (!condition) {
+    throw new Error(optionalMessage || "assertion failure");
+  }
+}
+
+function valueIs(a, b) {
+  var len = a.length;
+  return (// Unknown values are not equal to each other.
+    len > 0 && // Both values must be ordinary (or both exceptional) to be equal.
+    len === b.length && // The underlying value or exception must be the same.
+    a[len - 1] === b[len - 1]
+  );
+}
+
+function valueGet(value) {
+  switch (value.length) {
+    case 0:
+      throw new Error("unknown value");
+
+    case 1:
+      return value[0];
+
+    case 2:
+      throw value[1];
+  }
+}
+
+function valueCopy(value) {
+  return value.slice(0);
+}
+
+var Entry =
+/** @class */
+function () {
+  function Entry(fn, args) {
+    this.fn = fn;
+    this.args = args;
+    this.parents = new Set();
+    this.childValues = new Map(); // When this Entry has children that are dirty, this property becomes
+    // a Set containing other Entry objects, borrowed from emptySetPool.
+    // When the set becomes empty, it gets recycled back to emptySetPool.
+
+    this.dirtyChildren = null;
+    this.dirty = true;
+    this.recomputing = false;
+    this.value = [];
+    this.deps = null;
+    ++Entry.count;
+  } // This is the most important method of the Entry API, because it
+  // determines whether the cached this.value can be returned immediately,
+  // or must be recomputed. The overall performance of the caching system
+  // depends on the truth of the following observations: (1) this.dirty is
+  // usually false, (2) this.dirtyChildren is usually null/empty, and thus
+  // (3) valueGet(this.value) is usually returned without recomputation.
+
+
+  Entry.prototype.recompute = function () {
+    assert(!this.recomputing, "already recomputing");
+    rememberParent(this);
+    return mightBeDirty(this) ? reallyRecompute(this) : valueGet(this.value);
+  };
+
+  Entry.prototype.setDirty = function () {
+    if (this.dirty) return;
+    this.dirty = true;
+    this.value.length = 0;
+    reportDirty(this);
+    forgetChildren(this); // We can go ahead and unsubscribe here, since any further dirty
+    // notifications we receive will be redundant, and unsubscribing may
+    // free up some resources, e.g. file watchers.
+
+    maybeUnsubscribe(this);
+  };
+
+  Entry.prototype.dispose = function () {
+    var _this = this;
+
+    forgetChildren(this);
+    maybeUnsubscribe(this); // Because this entry has been kicked out of the cache (in index.js),
+    // we've lost the ability to find out if/when this entry becomes dirty,
+    // whether that happens through a subscription, because of a direct call
+    // to entry.setDirty(), or because one of its children becomes dirty.
+    // Because of this loss of future information, we have to assume the
+    // worst (that this entry might have become dirty very soon), so we must
+    // immediately mark this entry's parents as dirty. Normally we could
+    // just call entry.setDirty() rather than calling parent.setDirty() for
+    // each parent, but that would leave this entry in parent.childValues
+    // and parent.dirtyChildren, which would prevent the child from being
+    // truly forgotten.
+
+    this.parents.forEach(function (parent) {
+      parent.setDirty();
+      forgetChild(parent, _this);
+    });
+  };
+
+  Entry.prototype.dependOn = function (dep) {
+    dep.add(this);
+
+    if (!this.deps) {
+      this.deps = emptySetPool.pop() || new Set();
+    }
+
+    this.deps.add(dep);
+  };
+
+  Entry.prototype.forgetDeps = function () {
+    var _this = this;
+
+    if (this.deps) {
+      this.deps.forEach(function (dep) {
+        return dep.delete(_this);
+      });
+      this.deps.clear();
+      emptySetPool.push(this.deps);
+      this.deps = null;
+    }
+  };
+
+  Entry.count = 0;
+  return Entry;
+}();
+
+function rememberParent(child) {
+  var parent = parentEntrySlot.getValue();
+
+  if (parent) {
+    child.parents.add(parent);
+
+    if (!parent.childValues.has(child)) {
+      parent.childValues.set(child, []);
+    }
+
+    if (mightBeDirty(child)) {
+      reportDirtyChild(parent, child);
+    } else {
+      reportCleanChild(parent, child);
+    }
+
+    return parent;
+  }
+}
+
+function reallyRecompute(entry) {
+  forgetChildren(entry); // Set entry as the parent entry while calling recomputeNewValue(entry).
+
+  parentEntrySlot.withValue(entry, recomputeNewValue, [entry]);
+
+  if (maybeSubscribe(entry)) {
+    // If we successfully recomputed entry.value and did not fail to
+    // (re)subscribe, then this Entry is no longer explicitly dirty.
+    setClean(entry);
+  }
+
+  return valueGet(entry.value);
+}
+
+function recomputeNewValue(entry) {
+  entry.recomputing = true; // Set entry.value as unknown.
+
+  entry.value.length = 0;
+
+  try {
+    // If entry.fn succeeds, entry.value will become a normal Value.
+    entry.value[0] = entry.fn.apply(null, entry.args);
+  } catch (e) {
+    // If entry.fn throws, entry.value will become exceptional.
+    entry.value[1] = e;
+  } // Either way, this line is always reached.
+
+
+  entry.recomputing = false;
+}
+
+function mightBeDirty(entry) {
+  return entry.dirty || !!(entry.dirtyChildren && entry.dirtyChildren.size);
+}
+
+function setClean(entry) {
+  entry.dirty = false;
+
+  if (mightBeDirty(entry)) {
+    // This Entry may still have dirty children, in which case we can't
+    // let our parents know we're clean just yet.
+    return;
+  }
+
+  reportClean(entry);
+}
+
+function reportDirty(child) {
+  child.parents.forEach(function (parent) {
+    return reportDirtyChild(parent, child);
+  });
+}
+
+function reportClean(child) {
+  child.parents.forEach(function (parent) {
+    return reportCleanChild(parent, child);
+  });
+} // Let a parent Entry know that one of its children may be dirty.
+
+
+function reportDirtyChild(parent, child) {
+  // Must have called rememberParent(child) before calling
+  // reportDirtyChild(parent, child).
+  assert(parent.childValues.has(child));
+  assert(mightBeDirty(child));
+
+  if (!parent.dirtyChildren) {
+    parent.dirtyChildren = emptySetPool.pop() || new Set();
+  } else if (parent.dirtyChildren.has(child)) {
+    // If we already know this child is dirty, then we must have already
+    // informed our own parents that we are dirty, so we can terminate
+    // the recursion early.
+    return;
+  }
+
+  parent.dirtyChildren.add(child);
+  reportDirty(parent);
+} // Let a parent Entry know that one of its children is no longer dirty.
+
+
+function reportCleanChild(parent, child) {
+  // Must have called rememberChild(child) before calling
+  // reportCleanChild(parent, child).
+  assert(parent.childValues.has(child));
+  assert(!mightBeDirty(child));
+  var childValue = parent.childValues.get(child);
+
+  if (childValue.length === 0) {
+    parent.childValues.set(child, valueCopy(child.value));
+  } else if (!valueIs(childValue, child.value)) {
+    parent.setDirty();
+  }
+
+  removeDirtyChild(parent, child);
+
+  if (mightBeDirty(parent)) {
+    return;
+  }
+
+  reportClean(parent);
+}
+
+function removeDirtyChild(parent, child) {
+  var dc = parent.dirtyChildren;
+
+  if (dc) {
+    dc.delete(child);
+
+    if (dc.size === 0) {
+      if (emptySetPool.length < POOL_TARGET_SIZE) {
+        emptySetPool.push(dc);
+      }
+
+      parent.dirtyChildren = null;
+    }
+  }
+} // Removes all children from this entry and returns an array of the
+// removed children.
+
+
+function forgetChildren(parent) {
+  if (parent.childValues.size > 0) {
+    parent.childValues.forEach(function (_value, child) {
+      forgetChild(parent, child);
+    });
+  } // Remove this parent Entry from any sets to which it was added by the
+  // addToSet method.
+
+
+  parent.forgetDeps(); // After we forget all our children, this.dirtyChildren must be empty
+  // and therefore must have been reset to null.
+
+  assert(parent.dirtyChildren === null);
+}
+
+function forgetChild(parent, child) {
+  child.parents.delete(parent);
+  parent.childValues.delete(child);
+  removeDirtyChild(parent, child);
+}
+
+function maybeSubscribe(entry) {
+  if (typeof entry.subscribe === "function") {
+    try {
+      maybeUnsubscribe(entry); // Prevent double subscriptions.
+
+      entry.unsubscribe = entry.subscribe.apply(null, entry.args);
+    } catch (e) {
+      // If this Entry has a subscribe function and it threw an exception
+      // (or an unsubscribe function it previously returned now throws),
+      // return false to indicate that we were not able to subscribe (or
+      // unsubscribe), and this Entry should remain dirty.
+      entry.setDirty();
+      return false;
+    }
+  } // Returning true indicates either that there was no entry.subscribe
+  // function or that it succeeded.
+
+
+  return true;
+} // A trie data structure that holds object keys weakly, yet can also hold
+// non-object keys, unlike the native `WeakMap`.
+
+
+var KeyTrie =
+/** @class */
+function () {
+  function KeyTrie(weakness) {
+    this.weakness = weakness;
+  }
+
+  KeyTrie.prototype.lookup = function () {
+    var array = [];
+
+    for (var _i = 0; _i < arguments.length; _i++) {
+      array[_i] = arguments[_i];
+    }
+
+    return this.lookupArray(array);
+  };
+
+  KeyTrie.prototype.lookupArray = function (array) {
+    var node = this;
+    array.forEach(function (key) {
+      return node = node.getChildTrie(key);
+    });
+    return node.data || (node.data = Object.create(null));
+  };
+
+  KeyTrie.prototype.getChildTrie = function (key) {
+    var map = this.weakness && isObjRef(key) ? this.weak || (this.weak = new WeakMap()) : this.strong || (this.strong = new Map());
+    var child = map.get(key);
+    if (!child) map.set(key, child = new KeyTrie(this.weakness));
+    return child;
+  };
+
+  return KeyTrie;
+}();
+
+exports.KeyTrie = KeyTrie;
+
+function isObjRef(value) {
+  switch (typeof value) {
+    case "object":
+      if (value === null) break;
+    // Fall through to return true...
+
+    case "function":
+      return true;
+  }
+
+  return false;
+}
+
+function dep(options) {
+  var depsByKey = new Map();
+  var subscribe = options && options.subscribe;
+
+  function depend(key) {
+    var parent = parentEntrySlot.getValue();
+
+    if (parent) {
+      var dep_1 = depsByKey.get(key);
+
+      if (!dep_1) {
+        depsByKey.set(key, dep_1 = new Set());
+      }
+
+      parent.dependOn(dep_1);
+
+      if (typeof subscribe === "function") {
+        maybeUnsubscribe(dep_1);
+        dep_1.unsubscribe = subscribe(key);
+      }
+    }
+  }
+
+  depend.dirty = function dirty(key) {
+    var dep = depsByKey.get(key);
+
+    if (dep) {
+      dep.forEach(function (entry) {
+        return entry.setDirty();
+      });
+      depsByKey.delete(key);
+      maybeUnsubscribe(dep);
+    }
+  };
+
+  return depend;
+} // The defaultMakeCacheKey function is remarkably powerful, because it gives
+// a unique object for any shallow-identical list of arguments. If you need
+// to implement a custom makeCacheKey function, you may find it helpful to
+// delegate the final work to defaultMakeCacheKey, which is why we export it
+// here. However, you may want to avoid defaultMakeCacheKey if your runtime
+// does not support WeakMap, or you have the ability to return a string key.
+// In those cases, just write your own custom makeCacheKey functions.
+
+
+var keyTrie = new KeyTrie(typeof WeakMap === "function");
+
+function defaultMakeCacheKey() {
+  var args = [];
+
+  for (var _i = 0; _i < arguments.length; _i++) {
+    args[_i] = arguments[_i];
+  }
+
+  return keyTrie.lookupArray(args);
+}
+
+var caches = new Set();
+
+function wrap(originalFunction, options) {
+  if (options === void 0) {
+    options = Object.create(null);
+  }
+
+  var cache = new Cache(options.max || Math.pow(2, 16), function (entry) {
+    return entry.dispose();
+  });
+  var makeCacheKey = options.makeCacheKey || defaultMakeCacheKey;
+
+  function optimistic() {
+    var key = makeCacheKey.apply(null, arguments);
+
+    if (key === void 0) {
+      return originalFunction.apply(null, arguments);
+    }
+
+    var args = Array.prototype.slice.call(arguments);
+    var entry = cache.get(key);
+
+    if (entry) {
+      entry.args = args;
+    } else {
+      entry = new Entry(originalFunction, args);
+      cache.set(key, entry);
+      entry.subscribe = options.subscribe;
+    }
+
+    var value = entry.recompute(); // Move this entry to the front of the least-recently used queue,
+    // since we just finished computing its value.
+
+    cache.set(key, entry);
+    caches.add(cache); // Clean up any excess entries in the cache, but only if there is no
+    // active parent entry, meaning we're not in the middle of a larger
+    // computation that might be flummoxed by the cleaning.
+
+    if (!parentEntrySlot.hasValue()) {
+      caches.forEach(function (cache) {
+        return cache.clean();
+      });
+      caches.clear();
+    }
+
+    return value;
+  }
+
+  optimistic.dirty = function () {
+    var key = makeCacheKey.apply(null, arguments);
+    var child = key !== void 0 && cache.get(key);
+
+    if (child) {
+      child.setDirty();
+    }
+  };
+
+  return optimistic;
+}
+},{"@wry/context":"../node_modules/@wry/context/lib/context.esm.js"}],"../node_modules/@apollo/client/utilities/common/environment.js":[function(require,module,exports) {
+var process = require("process");
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.getEnv = getEnv;
+exports.isDevelopment = isDevelopment;
+exports.isEnv = isEnv;
+exports.isTest = isTest;
+
+function getEnv() {
+  if (typeof process !== 'undefined' && "development") {
+    return "development";
+  }
+
+  return 'development';
+}
+
+function isEnv(env) {
+  return getEnv() === env;
+}
+
+function isDevelopment() {
+  return isEnv('development') === true;
+}
+
+function isTest() {
+  return isEnv('test') === true;
+}
+},{"process":"../node_modules/process/browser.js"}],"../node_modules/@apollo/client/utilities/common/maybeDeepFreeze.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.maybeDeepFreeze = maybeDeepFreeze;
+
+var _environment = require("./environment.js");
+
+function isObject(value) {
+  return value !== null && typeof value === "object";
+}
+
+function deepFreeze(value) {
+  var workSet = new Set([value]);
+  workSet.forEach(function (obj) {
+    if (isObject(obj)) {
+      if (!Object.isFrozen(obj)) Object.freeze(obj);
+      Object.getOwnPropertyNames(obj).forEach(function (name) {
+        if (isObject(obj[name])) workSet.add(obj[name]);
+      });
+    }
+  });
+  return value;
+}
+
+function maybeDeepFreeze(obj) {
+  if ((0, _environment.isDevelopment)() || (0, _environment.isTest)()) {
+    deepFreeze(obj);
+  }
+
+  return obj;
+}
+},{"./environment.js":"../node_modules/@apollo/client/utilities/common/environment.js"}],"../node_modules/@apollo/client/cache/inmemory/helpers.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.fieldNameFromStoreName = fieldNameFromStoreName;
+exports.getTypenameFromStoreObject = getTypenameFromStoreObject;
+exports.isFieldValueToBeMerged = isFieldValueToBeMerged;
+exports.makeProcessedFieldsMerger = makeProcessedFieldsMerger;
+
+var _storeUtils = require("../../utilities/graphql/storeUtils.js");
+
+var _mergeDeep = require("../../utilities/common/mergeDeep.js");
+
+function getTypenameFromStoreObject(store, objectOrReference) {
+  return (0, _storeUtils.isReference)(objectOrReference) ? store.get(objectOrReference.__ref, "__typename") : objectOrReference && objectOrReference.__typename;
+}
+
+var FieldNamePattern = /^[_A-Za-z0-9]+/;
+
+function fieldNameFromStoreName(storeFieldName) {
+  var match = storeFieldName.match(FieldNamePattern);
+  return match && match[0];
+}
+
+function isFieldValueToBeMerged(value) {
+  var field = value && value.__field;
+  return field && (0, _storeUtils.isField)(field);
+}
+
+function makeProcessedFieldsMerger() {
+  return new _mergeDeep.DeepMerger(reconcileProcessedFields);
+}
+
+var reconcileProcessedFields = function (existingObject, incomingObject, property) {
+  var existing = existingObject[property];
+  var incoming = incomingObject[property];
+
+  if (isFieldValueToBeMerged(existing)) {
+    existing.__value = this.merge(existing.__value, isFieldValueToBeMerged(incoming) ? incoming.__value : incoming);
+    return existing;
+  }
+
+  if (isFieldValueToBeMerged(incoming)) {
+    incoming.__value = this.merge(existing, incoming.__value);
+    return incoming;
+  }
+
+  return this.merge(existing, incoming);
+};
+},{"../../utilities/graphql/storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js","../../utilities/common/mergeDeep.js":"../node_modules/@apollo/client/utilities/common/mergeDeep.js"}],"../node_modules/@apollo/client/cache/inmemory/policies.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.defaultDataIdFromObject = defaultDataIdFromObject;
+exports.Policies = void 0;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = _interopRequireDefault(require("ts-invariant"));
+
+var _fragments = require("../../utilities/graphql/fragments.js");
+
+var _storeUtils = require("../../utilities/graphql/storeUtils.js");
+
+var _canUse = require("../../utilities/common/canUse.js");
+
+var _optimism = require("optimism");
+
+var _maybeDeepFreeze = require("../../utilities/common/maybeDeepFreeze.js");
+
+var _helpers = require("./helpers.js");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var hasOwn = Object.prototype.hasOwnProperty;
+
+function defaultDataIdFromObject(object) {
+  var __typename = object.__typename,
+      id = object.id,
+      _id = object._id;
+
+  if (typeof __typename === "string") {
+    if (typeof id !== "undefined") return __typename + ":" + id;
+    if (typeof _id !== "undefined") return __typename + ":" + _id;
+  }
+
+  return null;
+}
+
+var nullKeyFieldsFn = function () {
+  return null;
+};
+
+var simpleKeyArgsFn = function (field) {
+  return field.name.value;
+};
+
+var Policies = function () {
+  function Policies(config) {
+    var _this = this;
+
+    if (config === void 0) {
+      config = {};
+    }
+
+    this.config = config;
+    this.typePolicies = Object.create(null);
+    this.rootTypenamesById = {
+      __proto__: null,
+      ROOT_QUERY: "Query",
+      ROOT_MUTATION: "Mutation",
+      ROOT_SUBSCRIPTION: "Subscription"
+    };
+    this.usingPossibleTypes = false;
+
+    this.toReference = function (object, selectionSet, fragmentMap) {
+      var id = _this.identify(object, selectionSet, fragmentMap);
+
+      return id && (0, _storeUtils.makeReference)(id);
+    };
+
+    this.storageTrie = new _optimism.KeyTrie(true);
+    this.fieldDep = (0, _optimism.dep)();
+    this.config = (0, _tslib.__assign)({
+      dataIdFromObject: defaultDataIdFromObject
+    }, config);
+
+    if (config.possibleTypes) {
+      this.addPossibleTypes(config.possibleTypes);
+    }
+
+    if (config.typePolicies) {
+      this.addTypePolicies(config.typePolicies);
+    }
+  }
+
+  Policies.prototype.identify = function (object, selectionSet, fragmentMap) {
+    var typename = selectionSet && fragmentMap ? (0, _storeUtils.getTypenameFromResult)(object, selectionSet, fragmentMap) : object.__typename;
+    var context = {
+      typename: typename,
+      selectionSet: selectionSet,
+      fragmentMap: fragmentMap,
+      policies: this
+    };
+    var id;
+    var policy = this.getTypePolicy(typename, false);
+    var keyFn = policy && policy.keyFn;
+
+    if (keyFn) {
+      id = keyFn(object, context);
+    } else {
+      id = this.config.dataIdFromObject ? this.config.dataIdFromObject(object, context) : null;
+    }
+
+    return id && String(id);
+  };
+
+  Policies.prototype.addTypePolicies = function (typePolicies) {
+    var _this = this;
+
+    Object.keys(typePolicies).forEach(function (typename) {
+      var existing = _this.getTypePolicy(typename, true);
+
+      var incoming = typePolicies[typename];
+      var keyFields = incoming.keyFields,
+          fields = incoming.fields;
+      if (incoming.queryType) _this.setRootTypename("Query", typename);
+      if (incoming.mutationType) _this.setRootTypename("Mutation", typename);
+      if (incoming.subscriptionType) _this.setRootTypename("Subscription", typename);
+      existing.keyFn = keyFields === false ? nullKeyFieldsFn : Array.isArray(keyFields) ? keyFieldsFnFromSpecifier(keyFields) : typeof keyFields === "function" ? keyFields : void 0;
+
+      if (fields) {
+        Object.keys(fields).forEach(function (fieldName) {
+          var existing = _this.getFieldPolicy(typename, fieldName, true);
+
+          var incoming = fields[fieldName];
+
+          if (typeof incoming === "function") {
+            existing.read = incoming;
+          } else {
+            var keyArgs = incoming.keyArgs,
+                read = incoming.read,
+                merge = incoming.merge;
+            existing.keyFn = keyArgs === false ? simpleKeyArgsFn : Array.isArray(keyArgs) ? keyArgsFnFromSpecifier(keyArgs) : typeof keyArgs === "function" ? keyArgs : existing.keyFn;
+            if (typeof read === "function") existing.read = read;
+            if (typeof merge === "function") existing.merge = merge;
+          }
+
+          if (existing.read || existing.merge) {
+            existing.keyFn = existing.keyFn || simpleKeyArgsFn;
+          }
+        });
+      }
+    });
+  };
+
+  Policies.prototype.setRootTypename = function (which, typename) {
+    var rootId = "ROOT_" + which.toUpperCase();
+    var old = this.rootTypenamesById[rootId];
+
+    if (typename !== old) {
+      "development" === "production" ? (0, _tsInvariant.default)(old === which, 38) : (0, _tsInvariant.default)(old === which, "Cannot change root " + which + " __typename more than once");
+      this.rootTypenamesById[rootId] = typename;
+    }
+  };
+
+  Policies.prototype.addPossibleTypes = function (possibleTypes) {
+    var _this = this;
+
+    this.usingPossibleTypes = true;
+    Object.keys(possibleTypes).forEach(function (supertype) {
+      var subtypeSet = _this.getSubtypeSet(supertype, true);
+
+      possibleTypes[supertype].forEach(subtypeSet.add, subtypeSet);
+    });
+  };
+
+  Policies.prototype.getTypePolicy = function (typename, createIfMissing) {
+    var typePolicies = this.typePolicies;
+    return typePolicies[typename] || createIfMissing && (typePolicies[typename] = Object.create(null));
+  };
+
+  Policies.prototype.getSubtypeSet = function (supertype, createIfMissing) {
+    var policy = this.getTypePolicy(supertype, createIfMissing);
+
+    if (policy) {
+      return policy.subtypes || createIfMissing && (policy.subtypes = new Set());
+    }
+  };
+
+  Policies.prototype.getFieldPolicy = function (typename, fieldName, createIfMissing) {
+    var typePolicy = this.getTypePolicy(typename, createIfMissing);
+
+    if (typePolicy) {
+      var fieldPolicies = typePolicy.fields || createIfMissing && (typePolicy.fields = Object.create(null));
+
+      if (fieldPolicies) {
+        return fieldPolicies[fieldName] || createIfMissing && (fieldPolicies[fieldName] = Object.create(null));
+      }
+    }
+  };
+
+  Policies.prototype.fragmentMatches = function (fragment, typename) {
+    var _this = this;
+
+    if (!fragment.typeCondition) return true;
+    if (!typename) return false;
+    var supertype = fragment.typeCondition.name.value;
+    if (typename === supertype) return true;
+
+    if (this.usingPossibleTypes) {
+      var workQueue_1 = [this.getSubtypeSet(supertype, false)];
+
+      for (var i = 0; i < workQueue_1.length; ++i) {
+        var subtypes = workQueue_1[i];
+
+        if (subtypes) {
+          if (subtypes.has(typename)) return true;
+          subtypes.forEach(function (subtype) {
+            var subsubtypes = _this.getSubtypeSet(subtype, false);
+
+            if (subsubtypes && workQueue_1.indexOf(subsubtypes) < 0) {
+              workQueue_1.push(subsubtypes);
+            }
+          });
+        }
+      }
+    }
+
+    return false;
+  };
+
+  Policies.prototype.makeFieldValueGetter = function (store) {
+    var policies = this;
+    return function getFieldValue(objectOrReference, storeFieldName) {
+      var fieldValue;
+
+      if ((0, _storeUtils.isReference)(objectOrReference)) {
+        var dataId = objectOrReference.__ref;
+        fieldValue = store.get(dataId, storeFieldName);
+
+        if (fieldValue === void 0 && storeFieldName === "__typename") {
+          return policies.rootTypenamesById[dataId];
+        }
+      } else {
+        fieldValue = objectOrReference && objectOrReference[storeFieldName];
+      }
+
+      if ("development" !== "production") {
+        (0, _maybeDeepFreeze.maybeDeepFreeze)(fieldValue);
+      }
+
+      return fieldValue;
+    };
+  };
+
+  Policies.prototype.getStoreFieldName = function (typename, field, variables) {
+    var fieldName = field.name.value;
+    var storeFieldName;
+
+    if (typeof typename === "string") {
+      var policy = this.getFieldPolicy(typename, fieldName, false);
+      var keyFn = policy && policy.keyFn;
+
+      if (keyFn) {
+        storeFieldName = keyFn(field, {
+          typename: typename,
+          variables: variables,
+          policies: this
+        }) || fieldName;
+      }
+    }
+
+    if (storeFieldName === void 0) {
+      storeFieldName = (0, _storeUtils.storeKeyNameFromField)(field, variables);
+    }
+
+    return fieldName === (0, _helpers.fieldNameFromStoreName)(storeFieldName) ? storeFieldName : fieldName + ":" + storeFieldName;
+  };
+
+  Policies.prototype.readField = function (objectOrReference, nameOrField, getFieldValue, variables, typename) {
+    if (typename === void 0) {
+      typename = getFieldValue(objectOrReference, "__typename");
+    }
+
+    "development" === "production" ? (0, _tsInvariant.default)(objectOrReference, 39) : (0, _tsInvariant.default)(objectOrReference, "Must provide an object or Reference when calling Policies#readField");
+    var policies = this;
+    var storeFieldName = typeof nameOrField === "string" ? nameOrField : policies.getStoreFieldName(typename, nameOrField, variables);
+    var fieldName = (0, _helpers.fieldNameFromStoreName)(storeFieldName);
+    var existing = getFieldValue(objectOrReference, storeFieldName);
+    var policy = policies.getFieldPolicy(typename, fieldName, false);
+    var read = policy && policy.read;
+
+    if (read) {
+      var storage_1 = policies.storageTrie.lookup((0, _storeUtils.isReference)(objectOrReference) ? objectOrReference.__ref : objectOrReference, storeFieldName);
+      policies.fieldDep(storage_1);
+      return read(existing, {
+        args: typeof nameOrField === "string" ? null : (0, _storeUtils.argumentsObjectFromField)(nameOrField, variables),
+        field: typeof nameOrField === "string" ? null : nameOrField,
+        fieldName: fieldName,
+        variables: variables,
+        policies: policies,
+        isReference: _storeUtils.isReference,
+        toReference: policies.toReference,
+        storage: storage_1,
+        readField: function (nameOrField, foreignObjOrRef) {
+          return policies.readField(foreignObjOrRef || objectOrReference, nameOrField, getFieldValue, variables);
+        },
+        invalidate: function () {
+          policies.fieldDep.dirty(storage_1);
+        }
+      });
+    }
+
+    return existing;
+  };
+
+  Policies.prototype.hasMergeFunction = function (typename, fieldName) {
+    var policy = this.getFieldPolicy(typename, fieldName, false);
+    return !!(policy && policy.merge);
+  };
+
+  Policies.prototype.applyMerges = function (existing, incoming, getFieldValue, variables, storageKeys) {
+    var policies = this;
+
+    if ((0, _helpers.isFieldValueToBeMerged)(incoming)) {
+      var field = incoming.__field;
+      var fieldName = field.name.value;
+      var policy = policies.getFieldPolicy(incoming.__typename, fieldName, false);
+      var applied = policies.applyMerges(existing, incoming.__value, getFieldValue, variables, storageKeys);
+      var merge = policy && policy.merge;
+
+      if (merge) {
+        if ("development" !== "production") {
+          (0, _maybeDeepFreeze.maybeDeepFreeze)(existing);
+        }
+
+        var storage_2 = storageKeys ? policies.storageTrie.lookupArray(storageKeys) : null;
+        return merge(existing, applied, {
+          args: (0, _storeUtils.argumentsObjectFromField)(field, variables),
+          field: field,
+          fieldName: fieldName,
+          variables: variables,
+          policies: policies,
+          isReference: _storeUtils.isReference,
+          toReference: policies.toReference,
+          readField: function (nameOrField, foreignObjOrRef) {
+            return policies.readField(foreignObjOrRef, nameOrField, getFieldValue, variables);
+          },
+          storage: storage_2,
+          invalidate: function () {
+            if (storage_2) {
+              policies.fieldDep.dirty(storage_2);
+            }
+          }
+        });
+      }
+
+      return applied;
+    }
+
+    if (incoming && typeof incoming === "object") {
+      var e_1 = existing;
+      var i_1 = incoming;
+      var firstStorageKey_1 = (0, _storeUtils.isReference)(e_1) ? e_1.__ref : typeof e_1 === "object" && e_1;
+      Object.keys(i_1).forEach(function (storeFieldName) {
+        i_1[storeFieldName] = policies.applyMerges(getFieldValue(e_1, storeFieldName), i_1[storeFieldName], getFieldValue, variables, firstStorageKey_1 && [firstStorageKey_1, storeFieldName]);
+      });
+    }
+
+    return incoming;
+  };
+
+  return Policies;
+}();
+
+exports.Policies = Policies;
+
+function keyArgsFnFromSpecifier(specifier) {
+  var topLevelArgNames = Object.create(null);
+  specifier.forEach(function (name) {
+    if (typeof name === "string") {
+      topLevelArgNames[name] = true;
+    }
+  });
+  return function (field, context) {
+    var fieldName = field.name.value;
+
+    if (field.arguments && field.arguments.length > 0) {
+      var args_1 = Object.create(null);
+      field.arguments.forEach(function (arg) {
+        if (topLevelArgNames[arg.name.value] === true) {
+          (0, _storeUtils.valueToObjectRepresentation)(args_1, arg.name, arg.value, context.variables);
+        }
+      });
+      return fieldName + ":" + JSON.stringify(computeKeyObject(args_1, specifier));
+    }
+
+    return fieldName;
+  };
+}
+
+function keyFieldsFnFromSpecifier(specifier) {
+  var trie = new _optimism.KeyTrie(_canUse.canUseWeakMap);
+  return function (object, context) {
+    var aliasMap;
+
+    if (context.selectionSet && context.fragmentMap) {
+      var info = trie.lookupArray([context.selectionSet, context.fragmentMap]);
+      aliasMap = info.aliasMap || (info.aliasMap = makeAliasMap(context.selectionSet, context.fragmentMap));
+    }
+
+    return context.typename + ":" + JSON.stringify(computeKeyObject(object, specifier, aliasMap));
+  };
+}
+
+function makeAliasMap(selectionSet, fragmentMap) {
+  var map = Object.create(null);
+  var workQueue = new Set([selectionSet]);
+  workQueue.forEach(function (selectionSet) {
+    selectionSet.selections.forEach(function (selection) {
+      if ((0, _storeUtils.isField)(selection)) {
+        if (selection.alias) {
+          var responseKey = selection.alias.value;
+          var storeKey = selection.name.value;
+
+          if (storeKey !== responseKey) {
+            var aliases = map.aliases || (map.aliases = Object.create(null));
+            aliases[storeKey] = responseKey;
+          }
+        }
+
+        if (selection.selectionSet) {
+          var subsets = map.subsets || (map.subsets = Object.create(null));
+          subsets[selection.name.value] = makeAliasMap(selection.selectionSet, fragmentMap);
+        }
+      } else {
+        var fragment = (0, _fragments.getFragmentFromSelection)(selection, fragmentMap);
+        workQueue.add(fragment.selectionSet);
+      }
+    });
+  });
+  return map;
+}
+
+function computeKeyObject(response, specifier, aliasMap) {
+  var keyObj = Object.create(null);
+  var prevKey;
+  specifier.forEach(function (s) {
+    if (Array.isArray(s)) {
+      if (typeof prevKey === "string") {
+        var subsets = aliasMap && aliasMap.subsets;
+        var subset = subsets && subsets[prevKey];
+        keyObj[prevKey] = computeKeyObject(response[prevKey], s, subset);
+      }
+    } else {
+      var aliases = aliasMap && aliasMap.aliases;
+      var responseName = aliases && aliases[s] || s;
+      "development" === "production" ? (0, _tsInvariant.default)(hasOwn.call(response, responseName), 40) : (0, _tsInvariant.default)(hasOwn.call(response, responseName), "Missing field " + responseName + " while computing key fields");
+      keyObj[prevKey = s] = response[responseName];
+    }
+  });
+  return keyObj;
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","../../utilities/graphql/fragments.js":"../node_modules/@apollo/client/utilities/graphql/fragments.js","../../utilities/graphql/storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js","../../utilities/common/canUse.js":"../node_modules/@apollo/client/utilities/common/canUse.js","optimism":"../node_modules/optimism/lib/bundle.esm.js","../../utilities/common/maybeDeepFreeze.js":"../node_modules/@apollo/client/utilities/common/maybeDeepFreeze.js","./helpers.js":"../node_modules/@apollo/client/cache/inmemory/helpers.js"}],"../node_modules/@apollo/client/cache/inmemory/fixPolyfills.js":[function(require,module,exports) {
+var testMap = new Map();
+if (testMap.set(1, 2) !== testMap) {
+    var set_1 = testMap.set;
+    Map.prototype.set = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        set_1.apply(this, args);
+        return this;
+    };
+}
+var testSet = new Set();
+if (testSet.add(3) !== testSet) {
+    var add_1 = testSet.add;
+    Set.prototype.add = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        add_1.apply(this, args);
+        return this;
+    };
+}
+var frozen = {};
+if (typeof Object.freeze === 'function') {
+    Object.freeze(frozen);
+}
+try {
+    testMap.set(frozen, frozen).delete(frozen);
+}
+catch (_a) {
+    var wrap = function (method) {
+        return method && (function (obj) {
+            try {
+                testMap.set(obj, obj).delete(obj);
+            }
+            finally {
+                return method.call(Object, obj);
+            }
+        });
+    };
+    Object.freeze = wrap(Object.freeze);
+    Object.seal = wrap(Object.seal);
+    Object.preventExtensions = wrap(Object.preventExtensions);
+}
+
+
+},{}],"../node_modules/@apollo/client/cache/inmemory/entityStore.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.defaultNormalizedCacheFactory = defaultNormalizedCacheFactory;
+exports.supportsResultCaching = supportsResultCaching;
+exports.EntityStore = void 0;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+var _storeUtils = require("../../utilities/graphql/storeUtils.js");
+
+var _canUse = require("../../utilities/common/canUse.js");
+
+var _equality = require("@wry/equality");
+
+var _mergeDeep = require("../../utilities/common/mergeDeep.js");
+
+var _optimism = require("optimism");
+
+var _helpers = require("./helpers.js");
+
+var hasOwn = Object.prototype.hasOwnProperty;
+
+var EntityStore = function () {
+  function EntityStore() {
+    this.data = Object.create(null);
+    this.rootIds = Object.create(null);
+    this.refs = Object.create(null);
+  }
+
+  EntityStore.prototype.toObject = function () {
+    return (0, _tslib.__assign)({}, this.data);
+  };
+
+  EntityStore.prototype.has = function (dataId, fieldName) {
+    return this.get(dataId, fieldName) !== void 0;
+  };
+
+  EntityStore.prototype.get = function (dataId, fieldName) {
+    this.group.depend(dataId, fieldName);
+
+    if (hasOwn.call(this.data, dataId)) {
+      var storeObject = this.data[dataId];
+      if (!fieldName) return storeObject;
+
+      if (storeObject && hasOwn.call(storeObject, fieldName)) {
+        return storeObject[fieldName];
+      }
+    }
+
+    if (this instanceof Layer) {
+      return this.parent.get(dataId, fieldName);
+    }
+  };
+
+  EntityStore.prototype.merge = function (dataId, incoming) {
+    var _this = this;
+
+    var existing = this.get(dataId);
+    var merged = new _mergeDeep.DeepMerger(storeObjectReconciler).merge(existing, incoming, this);
+
+    if (merged !== existing) {
+      this.data[dataId] = merged;
+      delete this.refs[dataId];
+
+      if (this.group.caching) {
+        this.group.dirty(dataId);
+        Object.keys(incoming).forEach(function (storeFieldName) {
+          if (!existing || incoming[storeFieldName] !== existing[storeFieldName]) {
+            _this.group.dirty(dataId, storeFieldName);
+          }
+        });
+      }
+    }
+  };
+
+  EntityStore.prototype.delete = function (dataId, fieldName) {
+    var _this = this;
+
+    var storeObject = this.get(dataId);
+
+    if (storeObject) {
+      fieldName = fieldName && (0, _helpers.fieldNameFromStoreName)(fieldName);
+      var storeNamesToDelete_1 = [];
+      Object.keys(storeObject).forEach(function (storeFieldName) {
+        if (storeObject[storeFieldName] !== void 0 && (!fieldName || fieldName === (0, _helpers.fieldNameFromStoreName)(storeFieldName))) {
+          storeNamesToDelete_1.push(storeFieldName);
+        }
+      });
+
+      if (storeNamesToDelete_1.length) {
+        var canDelete_1 = this instanceof EntityStore.Root;
+
+        var remove_1 = function (obj, key) {
+          if (canDelete_1) {
+            delete obj[key];
+          } else {
+            obj[key] = void 0;
+          }
+        };
+
+        delete this.refs[dataId];
+        var fieldsToDirty_1 = Object.create(null);
+
+        if (fieldName) {
+          var cleaned_1 = this.data[dataId] = (0, _tslib.__assign)({}, storeObject);
+          storeNamesToDelete_1.forEach(function (storeFieldName) {
+            remove_1(cleaned_1, storeFieldName);
+          });
+          fieldsToDirty_1[fieldName] = true;
+        } else {
+          remove_1(this.data, dataId);
+          storeNamesToDelete_1.forEach(function (storeFieldName) {
+            var fieldName = (0, _helpers.fieldNameFromStoreName)(storeFieldName);
+            fieldsToDirty_1[fieldName] = true;
+          });
+        }
+
+        if (this.group.caching) {
+          this.group.dirty(dataId);
+          Object.keys(fieldsToDirty_1).forEach(function (fieldName) {
+            _this.group.dirty(dataId, fieldName);
+          });
+        }
+
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  EntityStore.prototype.evict = function (dataId, fieldName) {
+    var evicted = this.delete(dataId, fieldName);
+
+    if (this instanceof Layer) {
+      evicted = this.parent.evict(dataId, fieldName) || evicted;
+    }
+
+    return evicted;
+  };
+
+  EntityStore.prototype.clear = function () {
+    this.replace(null);
+  };
+
+  EntityStore.prototype.replace = function (newData) {
+    var _this = this;
+
+    Object.keys(this.data).forEach(function (dataId) {
+      if (!(newData && hasOwn.call(newData, dataId))) {
+        _this.delete(dataId);
+      }
+    });
+
+    if (newData) {
+      Object.keys(newData).forEach(function (dataId) {
+        _this.merge(dataId, newData[dataId]);
+      });
+    }
+  };
+
+  EntityStore.prototype.retain = function (rootId) {
+    return this.rootIds[rootId] = (this.rootIds[rootId] || 0) + 1;
+  };
+
+  EntityStore.prototype.release = function (rootId) {
+    if (this.rootIds[rootId] > 0) {
+      var count = --this.rootIds[rootId];
+      if (!count) delete this.rootIds[rootId];
+      return count;
+    }
+
+    return 0;
+  };
+
+  EntityStore.prototype.getRootIdSet = function (ids) {
+    if (ids === void 0) {
+      ids = new Set();
+    }
+
+    Object.keys(this.rootIds).forEach(ids.add, ids);
+
+    if (this instanceof Layer) {
+      this.parent.getRootIdSet(ids);
+    }
+
+    return ids;
+  };
+
+  EntityStore.prototype.gc = function () {
+    var _this = this;
+
+    var ids = this.getRootIdSet();
+    var snapshot = this.toObject();
+    ids.forEach(function (id) {
+      if (hasOwn.call(snapshot, id)) {
+        Object.keys(_this.findChildRefIds(id)).forEach(ids.add, ids);
+        delete snapshot[id];
+      }
+    });
+    var idsToRemove = Object.keys(snapshot);
+
+    if (idsToRemove.length) {
+      var root_1 = this;
+
+      while (root_1 instanceof Layer) root_1 = root_1.parent;
+
+      idsToRemove.forEach(function (id) {
+        return root_1.delete(id);
+      });
+    }
+
+    return idsToRemove;
+  };
+
+  EntityStore.prototype.findChildRefIds = function (dataId) {
+    if (!hasOwn.call(this.refs, dataId)) {
+      var found_1 = this.refs[dataId] = Object.create(null);
+      var workSet_1 = new Set([this.data[dataId]]);
+
+      var canTraverse_1 = function (obj) {
+        return obj !== null && typeof obj === 'object';
+      };
+
+      workSet_1.forEach(function (obj) {
+        if ((0, _storeUtils.isReference)(obj)) {
+          found_1[obj.__ref] = true;
+        } else if (canTraverse_1(obj)) {
+          Object.values(obj).filter(canTraverse_1).forEach(workSet_1.add, workSet_1);
+        }
+      });
+    }
+
+    return this.refs[dataId];
+  };
+
+  EntityStore.prototype.makeCacheKey = function () {
+    var args = [];
+
+    for (var _i = 0; _i < arguments.length; _i++) {
+      args[_i] = arguments[_i];
+    }
+
+    return this.group.keyMaker.lookupArray(args);
+  };
+
+  return EntityStore;
+}();
+
+exports.EntityStore = EntityStore;
+
+var CacheGroup = function () {
+  function CacheGroup(caching) {
+    this.caching = caching;
+    this.d = null;
+    this.keyMaker = new _optimism.KeyTrie(_canUse.canUseWeakMap);
+    this.d = caching ? (0, _optimism.dep)() : null;
+  }
+
+  CacheGroup.prototype.depend = function (dataId, storeFieldName) {
+    if (this.d) {
+      this.d(makeDepKey(dataId, storeFieldName));
+    }
+  };
+
+  CacheGroup.prototype.dirty = function (dataId, storeFieldName) {
+    if (this.d) {
+      this.d.dirty(makeDepKey(dataId, storeFieldName));
+    }
+  };
+
+  return CacheGroup;
+}();
+
+function makeDepKey(dataId, storeFieldName) {
+  var parts = [dataId];
+
+  if (typeof storeFieldName === "string") {
+    parts.push((0, _helpers.fieldNameFromStoreName)(storeFieldName));
+  }
+
+  return JSON.stringify(parts);
+}
+
+(function (EntityStore) {
+  var Root = function (_super) {
+    (0, _tslib.__extends)(Root, _super);
+
+    function Root(_a) {
+      var _b = _a.resultCaching,
+          resultCaching = _b === void 0 ? true : _b,
+          seed = _a.seed;
+
+      var _this = _super.call(this) || this;
+
+      _this.sharedLayerGroup = null;
+      _this.group = new CacheGroup(resultCaching);
+      _this.sharedLayerGroup = new CacheGroup(resultCaching);
+      if (seed) _this.replace(seed);
+      return _this;
+    }
+
+    Root.prototype.addLayer = function (layerId, replay) {
+      return new Layer(layerId, this, replay, this.sharedLayerGroup);
+    };
+
+    Root.prototype.removeLayer = function (layerId) {
+      return this;
+    };
+
+    return Root;
+  }(EntityStore);
+
+  EntityStore.Root = Root;
+})(EntityStore || (exports.EntityStore = EntityStore = {}));
+
+var Layer = function (_super) {
+  (0, _tslib.__extends)(Layer, _super);
+
+  function Layer(id, parent, replay, group) {
+    var _this = _super.call(this) || this;
+
+    _this.id = id;
+    _this.parent = parent;
+    _this.replay = replay;
+    _this.group = group;
+    replay(_this);
+    return _this;
+  }
+
+  Layer.prototype.addLayer = function (layerId, replay) {
+    return new Layer(layerId, this, replay, this.group);
+  };
+
+  Layer.prototype.removeLayer = function (layerId) {
+    var _this = this;
+
+    var parent = this.parent.removeLayer(layerId);
+
+    if (layerId === this.id) {
+      if (this.group.caching) {
+        Object.keys(this.data).forEach(function (dataId) {
+          return _this.delete(dataId);
+        });
+      }
+
+      return parent;
+    }
+
+    if (parent === this.parent) return this;
+    return parent.addLayer(this.id, this.replay);
+  };
+
+  Layer.prototype.toObject = function () {
+    return (0, _tslib.__assign)((0, _tslib.__assign)({}, this.parent.toObject()), this.data);
+  };
+
+  Layer.prototype.findChildRefIds = function (dataId) {
+    var fromParent = this.parent.findChildRefIds(dataId);
+    return hasOwn.call(this.data, dataId) ? (0, _tslib.__assign)((0, _tslib.__assign)({}, fromParent), _super.prototype.findChildRefIds.call(this, dataId)) : fromParent;
+  };
+
+  return Layer;
+}(EntityStore);
+
+var storeObjectReconciler = function (existingObject, incomingObject, property, store) {
+  var existing = existingObject[property];
+  var incoming = incomingObject[property];
+
+  if (existing !== incoming && this.isObject(existing) && this.isObject(incoming)) {
+    var eType = (0, _helpers.getTypenameFromStoreObject)(store, existing);
+    var iType = (0, _helpers.getTypenameFromStoreObject)(store, incoming);
+
+    if (typeof eType === 'string' && typeof iType === 'string' && eType !== iType) {
+      return incoming;
+    }
+
+    "development" === "production" ? (0, _tsInvariant.invariant)(!(0, _storeUtils.isReference)(existing) || (0, _storeUtils.isReference)(incoming), 54) : (0, _tsInvariant.invariant)(!(0, _storeUtils.isReference)(existing) || (0, _storeUtils.isReference)(incoming), "Store error: the application attempted to write an object with no provided id but the store already contains an id of " + existing.__ref + " for this object.");
+
+    if ((0, _equality.equal)(existing, incoming)) {
+      return existing;
+    }
+  }
+
+  return incoming;
+};
+
+function supportsResultCaching(store) {
+  return !!(store instanceof EntityStore && store.group.caching);
+}
+
+function defaultNormalizedCacheFactory(seed) {
+  return new EntityStore.Root({
+    resultCaching: true,
+    seed: seed
+  });
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","../../utilities/graphql/storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js","../../utilities/common/canUse.js":"../node_modules/@apollo/client/utilities/common/canUse.js","@wry/equality":"../node_modules/@wry/equality/lib/equality.esm.js","../../utilities/common/mergeDeep.js":"../node_modules/@apollo/client/utilities/common/mergeDeep.js","optimism":"../node_modules/optimism/lib/bundle.esm.js","./helpers.js":"../node_modules/@apollo/client/cache/inmemory/helpers.js"}],"../node_modules/@apollo/client/cache/inmemory/readFromStore.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.StoreReader = void 0;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+var _fragments = require("../../utilities/graphql/fragments.js");
+
+var _storeUtils = require("../../utilities/graphql/storeUtils.js");
+
+var _getFromAST = require("../../utilities/graphql/getFromAST.js");
+
+var _directives = require("../../utilities/graphql/directives.js");
+
+var _transform = require("../../utilities/graphql/transform.js");
+
+var _mergeDeep = require("../../utilities/common/mergeDeep.js");
+
+var _optimism = require("optimism");
+
+var _maybeDeepFreeze = require("../../utilities/common/maybeDeepFreeze.js");
+
+var _helpers = require("./helpers.js");
+
+var _entityStore = require("./entityStore.js");
+
+var StoreReader = function () {
+  function StoreReader(config) {
+    var _this = this;
+
+    this.config = config;
+    this.config = (0, _tslib.__assign)({
+      addTypename: true
+    }, config);
+
+    var _a = this,
+        executeSelectionSet = _a.executeSelectionSet,
+        executeSubSelectedArray = _a.executeSubSelectedArray;
+
+    this.executeSelectionSet = (0, _optimism.wrap)(function (options) {
+      return executeSelectionSet.call(_this, options);
+    }, {
+      makeCacheKey: function (_a) {
+        var selectionSet = _a.selectionSet,
+            objectOrReference = _a.objectOrReference,
+            context = _a.context;
+
+        if ((0, _entityStore.supportsResultCaching)(context.store)) {
+          return context.store.makeCacheKey(selectionSet, JSON.stringify(context.variables), (0, _storeUtils.isReference)(objectOrReference) ? objectOrReference.__ref : objectOrReference);
+        }
+      }
+    });
+    this.executeSubSelectedArray = (0, _optimism.wrap)(function (options) {
+      return executeSubSelectedArray.call(_this, options);
+    }, {
+      makeCacheKey: function (_a) {
+        var field = _a.field,
+            array = _a.array,
+            context = _a.context;
+
+        if ((0, _entityStore.supportsResultCaching)(context.store)) {
+          return context.store.makeCacheKey(field, array, JSON.stringify(context.variables));
+        }
+      }
+    });
+  }
+
+  StoreReader.prototype.readQueryFromStore = function (options) {
+    return this.diffQueryAgainstStore((0, _tslib.__assign)((0, _tslib.__assign)({}, options), {
+      returnPartialData: false
+    })).result;
+  };
+
+  StoreReader.prototype.diffQueryAgainstStore = function (_a) {
+    var store = _a.store,
+        query = _a.query,
+        variables = _a.variables,
+        _b = _a.returnPartialData,
+        returnPartialData = _b === void 0 ? true : _b,
+        _c = _a.rootId,
+        rootId = _c === void 0 ? 'ROOT_QUERY' : _c,
+        config = _a.config;
+    var policies = this.config.policies;
+    var execResult = this.executeSelectionSet({
+      selectionSet: (0, _getFromAST.getMainDefinition)(query).selectionSet,
+      objectOrReference: (0, _storeUtils.makeReference)(rootId),
+      context: {
+        store: store,
+        query: query,
+        policies: policies,
+        variables: (0, _tslib.__assign)((0, _tslib.__assign)({}, (0, _getFromAST.getDefaultValues)((0, _getFromAST.getQueryDefinition)(query))), variables),
+        fragmentMap: (0, _fragments.createFragmentMap)((0, _getFromAST.getFragmentDefinitions)(query)),
+        getFieldValue: policies.makeFieldValueGetter(store)
+      }
+    });
+    var hasMissingFields = execResult.missing && execResult.missing.length > 0;
+
+    if (hasMissingFields && !returnPartialData) {
+      execResult.missing.forEach(function (info) {
+        throw "development" === "production" ? new _tsInvariant.InvariantError(51) : new _tsInvariant.InvariantError("Can't find field " + info.fieldName + " on object " + JSON.stringify(info.object, null, 2) + ".");
+      });
+    }
+
+    return {
+      result: execResult.result,
+      complete: !hasMissingFields
+    };
+  };
+
+  StoreReader.prototype.executeSelectionSet = function (_a) {
+    var _this = this;
+
+    var selectionSet = _a.selectionSet,
+        objectOrReference = _a.objectOrReference,
+        context = _a.context;
+    var fragmentMap = context.fragmentMap,
+        variables = context.variables,
+        policies = context.policies,
+        getFieldValue = context.getFieldValue;
+    var objectsToMerge = [];
+    var finalResult = {
+      result: null
+    };
+    var typename = getFieldValue(objectOrReference, "__typename");
+
+    if (this.config.addTypename && typeof typename === "string" && Object.values(policies.rootTypenamesById).indexOf(typename) < 0) {
+      objectsToMerge.push({
+        __typename: typename
+      });
+    }
+
+    function getMissing() {
+      return finalResult.missing || (finalResult.missing = []);
+    }
+
+    function handleMissing(result) {
+      var _a;
+
+      if (result.missing) (_a = getMissing()).push.apply(_a, result.missing);
+      return result.result;
+    }
+
+    selectionSet.selections.forEach(function (selection) {
+      var _a;
+
+      if (!(0, _directives.shouldInclude)(selection, variables)) return;
+
+      if ((0, _storeUtils.isField)(selection)) {
+        var fieldValue = policies.readField(objectOrReference, selection, getFieldValue, variables, typename);
+
+        if (fieldValue === void 0) {
+          if (!_transform.addTypenameToDocument.added(selection)) {
+            getMissing().push({
+              object: objectOrReference,
+              fieldName: selection.name.value
+            });
+          }
+        } else if (Array.isArray(fieldValue)) {
+          fieldValue = handleMissing(_this.executeSubSelectedArray({
+            field: selection,
+            array: fieldValue,
+            context: context
+          }));
+        } else if (!selection.selectionSet) {
+          if ("development" !== 'production') {
+            assertSelectionSetForIdValue(context.store, selection, fieldValue);
+            (0, _maybeDeepFreeze.maybeDeepFreeze)(fieldValue);
+          }
+        } else if (fieldValue != null) {
+          fieldValue = handleMissing(_this.executeSelectionSet({
+            selectionSet: selection.selectionSet,
+            objectOrReference: fieldValue,
+            context: context
+          }));
+        }
+
+        if (fieldValue !== void 0) {
+          objectsToMerge.push((_a = {}, _a[(0, _storeUtils.resultKeyNameFromField)(selection)] = fieldValue, _a));
+        }
+      } else {
+        var fragment = void 0;
+
+        if ((0, _storeUtils.isInlineFragment)(selection)) {
+          fragment = selection;
+        } else {
+          "development" === "production" ? (0, _tsInvariant.invariant)(fragment = fragmentMap[selection.name.value], 52) : (0, _tsInvariant.invariant)(fragment = fragmentMap[selection.name.value], "No fragment named " + selection.name.value);
+        }
+
+        if (policies.fragmentMatches(fragment, typename)) {
+          objectsToMerge.push(handleMissing(_this.executeSelectionSet({
+            selectionSet: fragment.selectionSet,
+            objectOrReference: objectOrReference,
+            context: context
+          })));
+        }
+      }
+    });
+    finalResult.result = (0, _mergeDeep.mergeDeepArray)(objectsToMerge);
+
+    if ("development" !== 'production') {
+      Object.freeze(finalResult.result);
+    }
+
+    return finalResult;
+  };
+
+  StoreReader.prototype.executeSubSelectedArray = function (_a) {
+    var _this = this;
+
+    var field = _a.field,
+        array = _a.array,
+        context = _a.context;
+    var missing;
+
+    function handleMissing(childResult) {
+      if (childResult.missing) {
+        missing = missing || [];
+        missing.push.apply(missing, childResult.missing);
+      }
+
+      return childResult.result;
+    }
+
+    array = array.map(function (item) {
+      if (item === null) {
+        return null;
+      }
+
+      if (Array.isArray(item)) {
+        return handleMissing(_this.executeSubSelectedArray({
+          field: field,
+          array: item,
+          context: context
+        }));
+      }
+
+      if (field.selectionSet) {
+        return handleMissing(_this.executeSelectionSet({
+          selectionSet: field.selectionSet,
+          objectOrReference: item,
+          context: context
+        }));
+      }
+
+      if ("development" !== 'production') {
+        assertSelectionSetForIdValue(context.store, field, item);
+      }
+
+      return item;
+    });
+
+    if ("development" !== 'production') {
+      Object.freeze(array);
+    }
+
+    return {
+      result: array,
+      missing: missing
+    };
+  };
+
+  return StoreReader;
+}();
+
+exports.StoreReader = StoreReader;
+
+function assertSelectionSetForIdValue(store, field, fieldValue) {
+  if (!field.selectionSet) {
+    var workSet_1 = new Set([fieldValue]);
+    workSet_1.forEach(function (value) {
+      if (value && typeof value === "object") {
+        "development" === "production" ? (0, _tsInvariant.invariant)(!(0, _storeUtils.isReference)(value), 53) : (0, _tsInvariant.invariant)(!(0, _storeUtils.isReference)(value), "Missing selection set for object of type " + (0, _helpers.getTypenameFromStoreObject)(store, value) + " returned for query field " + field.name.value);
+        Object.values(value).forEach(workSet_1.add, workSet_1);
+      }
+    });
+  }
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","../../utilities/graphql/fragments.js":"../node_modules/@apollo/client/utilities/graphql/fragments.js","../../utilities/graphql/storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js","../../utilities/graphql/getFromAST.js":"../node_modules/@apollo/client/utilities/graphql/getFromAST.js","../../utilities/graphql/directives.js":"../node_modules/@apollo/client/utilities/graphql/directives.js","../../utilities/graphql/transform.js":"../node_modules/@apollo/client/utilities/graphql/transform.js","../../utilities/common/mergeDeep.js":"../node_modules/@apollo/client/utilities/common/mergeDeep.js","optimism":"../node_modules/optimism/lib/bundle.esm.js","../../utilities/common/maybeDeepFreeze.js":"../node_modules/@apollo/client/utilities/common/maybeDeepFreeze.js","./helpers.js":"../node_modules/@apollo/client/cache/inmemory/helpers.js","./entityStore.js":"../node_modules/@apollo/client/cache/inmemory/entityStore.js"}],"../node_modules/@apollo/client/cache/inmemory/writeToStore.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.StoreWriter = void 0;
+
+var _tslib = require("tslib");
+
+var _tsInvariant = require("ts-invariant");
+
+var _fragments = require("../../utilities/graphql/fragments.js");
+
+var _storeUtils = require("../../utilities/graphql/storeUtils.js");
+
+var _getFromAST = require("../../utilities/graphql/getFromAST.js");
+
+var _directives = require("../../utilities/graphql/directives.js");
+
+var _cloneDeep = require("../../utilities/common/cloneDeep.js");
+
+var _helpers = require("./helpers.js");
+
+var _entityStore = require("./entityStore.js");
+
+var StoreWriter = function () {
+  function StoreWriter(config) {
+    this.policies = config.policies;
+  }
+
+  StoreWriter.prototype.writeQueryToStore = function (_a) {
+    var query = _a.query,
+        result = _a.result,
+        _b = _a.dataId,
+        dataId = _b === void 0 ? 'ROOT_QUERY' : _b,
+        _c = _a.store,
+        store = _c === void 0 ? (0, _entityStore.defaultNormalizedCacheFactory)() : _c,
+        variables = _a.variables;
+    var operationDefinition = (0, _getFromAST.getOperationDefinition)(query);
+    store.retain(dataId);
+    var merger = (0, _helpers.makeProcessedFieldsMerger)();
+    return this.writeSelectionSetToStore({
+      result: result || Object.create(null),
+      dataId: dataId,
+      selectionSet: operationDefinition.selectionSet,
+      context: {
+        store: store,
+        written: Object.create(null),
+        merge: function (existing, incoming) {
+          return merger.merge(existing, incoming);
+        },
+        variables: (0, _tslib.__assign)((0, _tslib.__assign)({}, (0, _getFromAST.getDefaultValues)(operationDefinition)), variables),
+        fragmentMap: (0, _fragments.createFragmentMap)((0, _getFromAST.getFragmentDefinitions)(query)),
+        getFieldValue: this.policies.makeFieldValueGetter(store)
+      }
+    });
+  };
+
+  StoreWriter.prototype.writeSelectionSetToStore = function (_a) {
+    var dataId = _a.dataId,
+        result = _a.result,
+        selectionSet = _a.selectionSet,
+        context = _a.context;
+    var policies = this.policies;
+    var store = context.store,
+        written = context.written;
+    var sets = written[dataId] || (written[dataId] = []);
+    if (sets.indexOf(selectionSet) >= 0) return store;
+    sets.push(selectionSet);
+    var entityRef = (0, _storeUtils.makeReference)(dataId);
+    var typename = (0, _storeUtils.getTypenameFromResult)(result, selectionSet, context.fragmentMap) || context.getFieldValue(entityRef, "__typename");
+    store.merge(dataId, policies.applyMerges(entityRef, this.processSelectionSet({
+      result: result,
+      selectionSet: selectionSet,
+      context: context,
+      typename: typename
+    }), context.getFieldValue, context.variables));
+    return store;
+  };
+
+  StoreWriter.prototype.processSelectionSet = function (_a) {
+    var _this = this;
+
+    var result = _a.result,
+        selectionSet = _a.selectionSet,
+        context = _a.context,
+        typename = _a.typename;
+    var mergedFields = Object.create(null);
+
+    if (typeof typename === "string") {
+      mergedFields.__typename = typename;
+    }
+
+    selectionSet.selections.forEach(function (selection) {
+      var _a;
+
+      if (!(0, _directives.shouldInclude)(selection, context.variables)) {
+        return;
+      }
+
+      var policies = _this.policies;
+
+      if ((0, _storeUtils.isField)(selection)) {
+        var resultFieldKey = (0, _storeUtils.resultKeyNameFromField)(selection);
+        var value = result[resultFieldKey];
+
+        if (typeof value !== 'undefined') {
+          var storeFieldName = policies.getStoreFieldName(typename, selection, context.variables);
+
+          var incomingValue = _this.processFieldValue(value, selection, context);
+
+          mergedFields = context.merge(mergedFields, (_a = {}, _a[storeFieldName] = policies.hasMergeFunction(typename, selection.name.value) ? {
+            __field: selection,
+            __typename: typename,
+            __value: incomingValue
+          } : incomingValue, _a));
+        } else if (policies.usingPossibleTypes && !(selection.directives && selection.directives.some(function (_a) {
+          var name = _a.name;
+          return name && (name.value === 'defer' || name.value === 'client');
+        }))) {
+          "development" === "production" || _tsInvariant.invariant.warn("Missing field " + resultFieldKey + " in " + JSON.stringify(result, null, 2).substring(0, 100));
+        }
+      } else {
+        var fragment = (0, _fragments.getFragmentFromSelection)(selection, context.fragmentMap);
+
+        if (policies.fragmentMatches(fragment, typename)) {
+          mergedFields = context.merge(mergedFields, _this.processSelectionSet({
+            result: result,
+            selectionSet: fragment.selectionSet,
+            context: context,
+            typename: typename
+          }));
+        }
+      }
+    });
+    return mergedFields;
+  };
+
+  StoreWriter.prototype.processFieldValue = function (value, field, context) {
+    var _this = this;
+
+    if (!field.selectionSet || value === null) {
+      return "development" === 'production' ? value : (0, _cloneDeep.cloneDeep)(value);
+    }
+
+    if (Array.isArray(value)) {
+      return value.map(function (item, i) {
+        return _this.processFieldValue(item, field, context);
+      });
+    }
+
+    if (value) {
+      var dataId = this.policies.identify(value, field.selectionSet, context.fragmentMap);
+
+      if (typeof dataId === 'string') {
+        this.writeSelectionSetToStore({
+          dataId: dataId,
+          result: value,
+          selectionSet: field.selectionSet,
+          context: context
+        });
+        return (0, _storeUtils.makeReference)(dataId);
+      }
+    }
+
+    return this.processSelectionSet({
+      result: value,
+      selectionSet: field.selectionSet,
+      context: context,
+      typename: (0, _storeUtils.getTypenameFromResult)(value, field.selectionSet, context.fragmentMap)
+    });
+  };
+
+  return StoreWriter;
+}();
+
+exports.StoreWriter = StoreWriter;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","../../utilities/graphql/fragments.js":"../node_modules/@apollo/client/utilities/graphql/fragments.js","../../utilities/graphql/storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js","../../utilities/graphql/getFromAST.js":"../node_modules/@apollo/client/utilities/graphql/getFromAST.js","../../utilities/graphql/directives.js":"../node_modules/@apollo/client/utilities/graphql/directives.js","../../utilities/common/cloneDeep.js":"../node_modules/@apollo/client/utilities/common/cloneDeep.js","./helpers.js":"../node_modules/@apollo/client/cache/inmemory/helpers.js","./entityStore.js":"../node_modules/@apollo/client/cache/inmemory/entityStore.js"}],"../node_modules/@apollo/client/cache/inmemory/inMemoryCache.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.InMemoryCache = void 0;
+
+var _tslib = require("tslib");
+
+var _transform = require("../../utilities/graphql/transform.js");
+
+var _cache = require("../core/cache.js");
+
+require("./fixPolyfills.js");
+
+var _optimism = require("optimism");
+
+var _entityStore = require("./entityStore.js");
+
+var _readFromStore = require("./readFromStore.js");
+
+var _writeToStore = require("./writeToStore.js");
+
+var _policies = require("./policies.js");
+
+var defaultConfig = {
+  dataIdFromObject: _policies.defaultDataIdFromObject,
+  addTypename: true,
+  resultCaching: true,
+  typePolicies: {}
+};
+
+var InMemoryCache = function (_super) {
+  (0, _tslib.__extends)(InMemoryCache, _super);
+
+  function InMemoryCache(config) {
+    if (config === void 0) {
+      config = {};
+    }
+
+    var _this = _super.call(this) || this;
+
+    _this.watches = new Set();
+    _this.typenameDocumentCache = new Map();
+    _this.silenceBroadcast = false;
+    _this.config = (0, _tslib.__assign)((0, _tslib.__assign)({}, defaultConfig), config);
+    _this.addTypename = !!_this.config.addTypename;
+    _this.policies = new _policies.Policies({
+      dataIdFromObject: _this.config.dataIdFromObject,
+      possibleTypes: _this.config.possibleTypes,
+      typePolicies: _this.config.typePolicies
+    });
+    _this.data = new _entityStore.EntityStore.Root({
+      resultCaching: _this.config.resultCaching
+    });
+    _this.optimisticData = _this.data;
+    _this.storeWriter = new _writeToStore.StoreWriter({
+      policies: _this.policies
+    });
+    _this.storeReader = new _readFromStore.StoreReader({
+      addTypename: _this.addTypename,
+      policies: _this.policies
+    });
+    var cache = _this;
+    var maybeBroadcastWatch = cache.maybeBroadcastWatch;
+    _this.maybeBroadcastWatch = (0, _optimism.wrap)(function (c) {
+      return maybeBroadcastWatch.call(_this, c);
+    }, {
+      makeCacheKey: function (c) {
+        var store = c.optimistic ? cache.optimisticData : cache.data;
+
+        if ((0, _entityStore.supportsResultCaching)(store)) {
+          var optimistic = c.optimistic,
+              rootId = c.rootId,
+              variables = c.variables;
+          return store.makeCacheKey(c.query, c.callback, JSON.stringify({
+            optimistic: optimistic,
+            rootId: rootId,
+            variables: variables
+          }));
+        }
+      }
+    });
+    return _this;
+  }
+
+  InMemoryCache.prototype.restore = function (data) {
+    if (data) this.data.replace(data);
+    return this;
+  };
+
+  InMemoryCache.prototype.extract = function (optimistic) {
+    if (optimistic === void 0) {
+      optimistic = false;
+    }
+
+    return (optimistic ? this.optimisticData : this.data).toObject();
+  };
+
+  InMemoryCache.prototype.read = function (options) {
+    if (typeof options.rootId === 'string' && !this.data.has(options.rootId)) {
+      return null;
+    }
+
+    return this.storeReader.readQueryFromStore({
+      store: options.optimistic ? this.optimisticData : this.data,
+      query: options.query,
+      variables: options.variables,
+      rootId: options.rootId,
+      config: this.config
+    }) || null;
+  };
+
+  InMemoryCache.prototype.write = function (options) {
+    this.storeWriter.writeQueryToStore({
+      store: this.data,
+      query: options.query,
+      result: options.result,
+      dataId: options.dataId,
+      variables: options.variables
+    });
+    this.broadcastWatches();
+  };
+
+  InMemoryCache.prototype.diff = function (options) {
+    return this.storeReader.diffQueryAgainstStore({
+      store: options.optimistic ? this.optimisticData : this.data,
+      query: options.query,
+      variables: options.variables,
+      returnPartialData: options.returnPartialData,
+      config: this.config
+    });
+  };
+
+  InMemoryCache.prototype.watch = function (watch) {
+    var _this = this;
+
+    this.watches.add(watch);
+    return function () {
+      _this.watches.delete(watch);
+    };
+  };
+
+  InMemoryCache.prototype.gc = function () {
+    return this.optimisticData.gc();
+  };
+
+  InMemoryCache.prototype.retain = function (rootId, optimistic) {
+    return (optimistic ? this.optimisticData : this.data).retain(rootId);
+  };
+
+  InMemoryCache.prototype.release = function (rootId, optimistic) {
+    return (optimistic ? this.optimisticData : this.data).release(rootId);
+  };
+
+  InMemoryCache.prototype.identify = function (object) {
+    return this.policies.identify(object);
+  };
+
+  InMemoryCache.prototype.evict = function (dataId, fieldName) {
+    var evicted = this.optimisticData.evict(dataId, fieldName);
+    if (evicted) this.broadcastWatches();
+    return evicted;
+  };
+
+  InMemoryCache.prototype.reset = function () {
+    this.data.clear();
+    this.optimisticData = this.data;
+    this.broadcastWatches();
+    return Promise.resolve();
+  };
+
+  InMemoryCache.prototype.removeOptimistic = function (idToRemove) {
+    var newOptimisticData = this.optimisticData.removeLayer(idToRemove);
+
+    if (newOptimisticData !== this.optimisticData) {
+      this.optimisticData = newOptimisticData;
+      this.broadcastWatches();
+    }
+  };
+
+  InMemoryCache.prototype.performTransaction = function (transaction, optimisticId) {
+    var _this = this;
+
+    var perform = function (layer) {
+      var proxy = Object.create(_this);
+      proxy.silenceBroadcast = true;
+
+      if (layer) {
+        proxy.data = proxy.optimisticData = layer;
+      }
+
+      return transaction(proxy);
+    };
+
+    if (typeof optimisticId === 'string') {
+      this.optimisticData = this.optimisticData.addLayer(optimisticId, perform);
+    } else {
+      perform();
+    }
+
+    this.broadcastWatches();
+  };
+
+  InMemoryCache.prototype.recordOptimisticTransaction = function (transaction, id) {
+    return this.performTransaction(transaction, id);
+  };
+
+  InMemoryCache.prototype.transformDocument = function (document) {
+    if (this.addTypename) {
+      var result = this.typenameDocumentCache.get(document);
+
+      if (!result) {
+        result = (0, _transform.addTypenameToDocument)(document);
+        this.typenameDocumentCache.set(document, result);
+        this.typenameDocumentCache.set(result, result);
+      }
+
+      return result;
+    }
+
+    return document;
+  };
+
+  InMemoryCache.prototype.broadcastWatches = function () {
+    var _this = this;
+
+    if (!this.silenceBroadcast) {
+      this.watches.forEach(function (c) {
+        return _this.maybeBroadcastWatch(c);
+      });
+    }
+  };
+
+  InMemoryCache.prototype.maybeBroadcastWatch = function (c) {
+    c.callback(this.diff({
+      query: c.query,
+      variables: c.variables,
+      optimistic: c.optimistic
+    }));
+  };
+
+  InMemoryCache.prototype.makeLocalVar = function (value) {
+    return function LocalVar(newValue) {
+      if (arguments.length > 0) {
+        if (value !== newValue) {
+          value = newValue;
+          localVarDep.dirty(LocalVar);
+        }
+      } else {
+        localVarDep(LocalVar);
+      }
+
+      return value;
+    };
+  };
+
+  return InMemoryCache;
+}(_cache.ApolloCache);
+
+exports.InMemoryCache = InMemoryCache;
+var localVarDep = (0, _optimism.dep)();
+},{"tslib":"../node_modules/tslib/tslib.es6.js","../../utilities/graphql/transform.js":"../node_modules/@apollo/client/utilities/graphql/transform.js","../core/cache.js":"../node_modules/@apollo/client/cache/core/cache.js","./fixPolyfills.js":"../node_modules/@apollo/client/cache/inmemory/fixPolyfills.js","optimism":"../node_modules/optimism/lib/bundle.esm.js","./entityStore.js":"../node_modules/@apollo/client/cache/inmemory/entityStore.js","./readFromStore.js":"../node_modules/@apollo/client/cache/inmemory/readFromStore.js","./writeToStore.js":"../node_modules/@apollo/client/cache/inmemory/writeToStore.js","./policies.js":"../node_modules/@apollo/client/cache/inmemory/policies.js"}],"../node_modules/@apollo/client/link/core/empty.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.empty = void 0;
+
+var _ApolloLink = require("./ApolloLink.js");
+
+var empty = _ApolloLink.ApolloLink.empty;
+exports.empty = empty;
+},{"./ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js"}],"../node_modules/@apollo/client/link/core/from.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.from = void 0;
+
+var _ApolloLink = require("./ApolloLink.js");
+
+var from = _ApolloLink.ApolloLink.from;
+exports.from = from;
+},{"./ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js"}],"../node_modules/@apollo/client/link/core/split.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.split = void 0;
+
+var _ApolloLink = require("./ApolloLink.js");
+
+var split = _ApolloLink.ApolloLink.split;
+exports.split = split;
+},{"./ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js"}],"../node_modules/@apollo/client/link/core/concat.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.concat = void 0;
+
+var _ApolloLink = require("./ApolloLink.js");
+
+var concat = _ApolloLink.ApolloLink.concat;
+exports.concat = concat;
+},{"./ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js"}],"../node_modules/@apollo/client/react/react.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.requireReactLazily = requireReactLazily;
+var React;
+
+function requireReactLazily() {
+  return React || (React = require('react'));
+}
+},{"react":"../node_modules/react/index.js"}],"../node_modules/@apollo/client/react/context/ApolloContext.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.getApolloContext = getApolloContext;
+exports.resetApolloContext = resetApolloContext;
+
+var _react = require("../react.js");
+
+var contextSymbol = Symbol.for('__APOLLO_CONTEXT__');
+
+function resetApolloContext() {
+  var React = (0, _react.requireReactLazily)();
+  Object.defineProperty(React, contextSymbol, {
+    value: React.createContext({}),
+    enumerable: false,
+    configurable: true,
+    writable: false
+  });
+}
+
+function getApolloContext() {
+  var React = (0, _react.requireReactLazily)();
+
+  if (!React[contextSymbol]) {
+    resetApolloContext();
+  }
+
+  return React[contextSymbol];
+}
+},{"../react.js":"../node_modules/@apollo/client/react/react.js"}],"../node_modules/@apollo/client/react/context/ApolloProvider.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.ApolloProvider = void 0;
+
+var _tsInvariant = require("ts-invariant");
+
+var _react = require("../react.js");
+
+var _ApolloContext = require("./ApolloContext.js");
+
+var ApolloProvider = function (_a) {
+  var client = _a.client,
+      children = _a.children;
+  var React = (0, _react.requireReactLazily)();
+  var ApolloContext = (0, _ApolloContext.getApolloContext)();
+  return React.createElement(ApolloContext.Consumer, null, function (context) {
+    if (context === void 0) {
+      context = {};
+    }
+
+    if (client && context.client !== client) {
+      context = Object.assign({}, context, {
+        client: client
+      });
+    }
+
+    "development" === "production" ? (0, _tsInvariant.invariant)(context.client, 5) : (0, _tsInvariant.invariant)(context.client, 'ApolloProvider was not passed a client instance. Make ' + 'sure you pass in your client via the "client" prop.');
+    return React.createElement(ApolloContext.Provider, {
+      value: context
+    }, children);
+  });
+};
+
+exports.ApolloProvider = ApolloProvider;
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","../react.js":"../node_modules/@apollo/client/react/react.js","./ApolloContext.js":"../node_modules/@apollo/client/react/context/ApolloContext.js"}],"../node_modules/@apollo/client/react/context/ApolloConsumer.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.ApolloConsumer = void 0;
+
+var _tsInvariant = require("ts-invariant");
+
+var _react = require("../react.js");
+
+var _ApolloContext = require("./ApolloContext.js");
+
+var ApolloConsumer = function (props) {
+  var React = (0, _react.requireReactLazily)();
+  var ApolloContext = (0, _ApolloContext.getApolloContext)();
+  return React.createElement(ApolloContext.Consumer, null, function (context) {
+    "development" === "production" ? (0, _tsInvariant.invariant)(context && context.client, 6) : (0, _tsInvariant.invariant)(context && context.client, 'Could not find "client" in the context of ApolloConsumer. ' + 'Wrap the root component in an <ApolloProvider>.');
+    return props.children(context.client);
+  });
+};
+
+exports.ApolloConsumer = ApolloConsumer;
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","../react.js":"../node_modules/@apollo/client/react/react.js","./ApolloContext.js":"../node_modules/@apollo/client/react/context/ApolloContext.js"}],"../node_modules/@apollo/client/react/parser/parser.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.operationName = operationName;
+exports.parser = parser;
+exports.DocumentType = void 0;
+
+var _tsInvariant = require("ts-invariant");
+
+var DocumentType;
+exports.DocumentType = DocumentType;
+
+(function (DocumentType) {
+  DocumentType[DocumentType["Query"] = 0] = "Query";
+  DocumentType[DocumentType["Mutation"] = 1] = "Mutation";
+  DocumentType[DocumentType["Subscription"] = 2] = "Subscription";
+})(DocumentType || (exports.DocumentType = DocumentType = {}));
+
+var cache = new Map();
+
+function operationName(type) {
+  var name;
+
+  switch (type) {
+    case DocumentType.Query:
+      name = 'Query';
+      break;
+
+    case DocumentType.Mutation:
+      name = 'Mutation';
+      break;
+
+    case DocumentType.Subscription:
+      name = 'Subscription';
+      break;
+  }
+
+  return name;
+}
+
+function parser(document) {
+  var cached = cache.get(document);
+  if (cached) return cached;
+  var variables, type, name;
+  "development" === "production" ? (0, _tsInvariant.invariant)(!!document && !!document.kind, 8) : (0, _tsInvariant.invariant)(!!document && !!document.kind, "Argument of " + document + " passed to parser was not a valid GraphQL " + "DocumentNode. You may need to use 'graphql-tag' or another method " + "to convert your operation into a document");
+  var fragments = document.definitions.filter(function (x) {
+    return x.kind === 'FragmentDefinition';
+  });
+  var queries = document.definitions.filter(function (x) {
+    return x.kind === 'OperationDefinition' && x.operation === 'query';
+  });
+  var mutations = document.definitions.filter(function (x) {
+    return x.kind === 'OperationDefinition' && x.operation === 'mutation';
+  });
+  var subscriptions = document.definitions.filter(function (x) {
+    return x.kind === 'OperationDefinition' && x.operation === 'subscription';
+  });
+  "development" === "production" ? (0, _tsInvariant.invariant)(!fragments.length || queries.length || mutations.length || subscriptions.length, 9) : (0, _tsInvariant.invariant)(!fragments.length || queries.length || mutations.length || subscriptions.length, "Passing only a fragment to 'graphql' is not yet supported. " + "You must include a query, subscription or mutation as well");
+  "development" === "production" ? (0, _tsInvariant.invariant)(queries.length + mutations.length + subscriptions.length <= 1, 10) : (0, _tsInvariant.invariant)(queries.length + mutations.length + subscriptions.length <= 1, "react-apollo only supports a query, subscription, or a mutation per HOC. " + (document + " had " + queries.length + " queries, " + subscriptions.length + " ") + ("subscriptions and " + mutations.length + " mutations. ") + "You can use 'compose' to join multiple operation types to a component");
+  type = queries.length ? DocumentType.Query : DocumentType.Mutation;
+  if (!queries.length && !mutations.length) type = DocumentType.Subscription;
+  var definitions = queries.length ? queries : mutations.length ? mutations : subscriptions;
+  "development" === "production" ? (0, _tsInvariant.invariant)(definitions.length === 1, 11) : (0, _tsInvariant.invariant)(definitions.length === 1, "react-apollo only supports one definition per HOC. " + document + " had " + (definitions.length + " definitions. ") + "You can use 'compose' to join multiple operation types to a component");
+  var definition = definitions[0];
+  variables = definition.variableDefinitions || [];
+
+  if (definition.name && definition.name.kind === 'Name') {
+    name = definition.name.value;
+  } else {
+    name = 'data';
+  }
+
+  var payload = {
+    name: name,
+    type: type,
+    variables: variables
+  };
+  cache.set(document, payload);
+  return payload;
+}
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js"}],"../node_modules/@apollo/client/react/data/OperationData.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.OperationData = void 0;
+
+var _tsInvariant = require("ts-invariant");
+
+var _equality = require("@wry/equality");
+
+var _parser = require("../parser/parser.js");
+
+var OperationData = function () {
+  function OperationData(options, context) {
+    this.isMounted = false;
+    this.previousOptions = {};
+    this.context = {};
+    this.options = {};
+    this.options = options || {};
+    this.context = context || {};
+  }
+
+  OperationData.prototype.getOptions = function () {
+    return this.options;
+  };
+
+  OperationData.prototype.setOptions = function (newOptions, storePrevious) {
+    if (storePrevious === void 0) {
+      storePrevious = false;
+    }
+
+    if (storePrevious && !(0, _equality.equal)(this.options, newOptions)) {
+      this.previousOptions = this.options;
+    }
+
+    this.options = newOptions;
+  };
+
+  OperationData.prototype.unmount = function () {
+    this.isMounted = false;
+  };
+
+  OperationData.prototype.refreshClient = function () {
+    var client = this.options && this.options.client || this.context && this.context.client;
+    "development" === "production" ? (0, _tsInvariant.invariant)(!!client, 49) : (0, _tsInvariant.invariant)(!!client, 'Could not find "client" in the context or passed in as an option. ' + 'Wrap the root component in an <ApolloProvider>, or pass an ' + 'ApolloClient instance in via options.');
+    var isNew = false;
+
+    if (client !== this.client) {
+      isNew = true;
+      this.client = client;
+      this.cleanup();
+    }
+
+    return {
+      client: this.client,
+      isNew: isNew
+    };
+  };
+
+  OperationData.prototype.verifyDocumentType = function (document, type) {
+    var operation = (0, _parser.parser)(document);
+    var requiredOperationName = (0, _parser.operationName)(type);
+    var usedOperationName = (0, _parser.operationName)(operation.type);
+    "development" === "production" ? (0, _tsInvariant.invariant)(operation.type === type, 50) : (0, _tsInvariant.invariant)(operation.type === type, "Running a " + requiredOperationName + " requires a graphql " + (requiredOperationName + ", but a " + usedOperationName + " was used instead."));
+  };
+
+  return OperationData;
+}();
+
+exports.OperationData = OperationData;
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","@wry/equality":"../node_modules/@wry/equality/lib/equality.esm.js","../parser/parser.js":"../node_modules/@apollo/client/react/parser/parser.js"}],"../node_modules/@apollo/client/react/data/QueryData.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.QueryData = void 0;
+
+var _tslib = require("tslib");
+
+var _ApolloError = require("../../errors/ApolloError.js");
+
+var _equality = require("@wry/equality");
+
+var _networkStatus = require("../../core/networkStatus.js");
+
+var _parser = require("../parser/parser.js");
+
+var _OperationData = require("./OperationData.js");
+
+var QueryData = function (_super) {
+  (0, _tslib.__extends)(QueryData, _super);
+
+  function QueryData(_a) {
+    var options = _a.options,
+        context = _a.context,
+        forceUpdate = _a.forceUpdate;
+
+    var _this = _super.call(this, options, context) || this;
+
+    _this.previousData = {};
+    _this.currentObservable = {};
+    _this.runLazy = false;
+
+    _this.runLazyQuery = function (options) {
+      _this.cleanup();
+
+      _this.runLazy = true;
+      _this.lazyOptions = options;
+
+      _this.forceUpdate();
+    };
+
+    _this.getQueryResult = function () {
+      var result = _this.observableQueryFields();
+
+      var options = _this.getOptions();
+
+      if (options.skip) {
+        result = (0, _tslib.__assign)((0, _tslib.__assign)({}, result), {
+          data: undefined,
+          error: undefined,
+          loading: false,
+          called: true
+        });
+      } else {
+        var currentResult = _this.currentObservable.query.getCurrentResult();
+
+        var loading = currentResult.loading,
+            partial = currentResult.partial,
+            networkStatus = currentResult.networkStatus,
+            errors = currentResult.errors;
+        var error = currentResult.error,
+            data = currentResult.data;
+
+        if (errors && errors.length > 0) {
+          error = new _ApolloError.ApolloError({
+            graphQLErrors: errors
+          });
+        }
+
+        result = (0, _tslib.__assign)((0, _tslib.__assign)({}, result), {
+          loading: loading,
+          networkStatus: networkStatus,
+          error: error,
+          called: true
+        });
+
+        if (loading) {
+          var previousData = _this.previousData.result && _this.previousData.result.data;
+          result.data = previousData && data ? (0, _tslib.__assign)((0, _tslib.__assign)({}, previousData), data) : previousData || data;
+        } else if (error) {
+          Object.assign(result, {
+            data: (_this.currentObservable.query.getLastResult() || {}).data
+          });
+        } else {
+          var fetchPolicy = _this.currentObservable.query.options.fetchPolicy;
+          var partialRefetch = options.partialRefetch;
+
+          if (partialRefetch && partial && (!data || Object.keys(data).length === 0) && fetchPolicy !== 'cache-only') {
+            Object.assign(result, {
+              loading: true,
+              networkStatus: _networkStatus.NetworkStatus.loading
+            });
+            result.refetch();
+            return result;
+          }
+
+          result.data = data;
+        }
+      }
+
+      result.client = _this.client;
+
+      _this.setOptions(options, true);
+
+      _this.previousData.loading = _this.previousData.result && _this.previousData.result.loading || false;
+      return _this.previousData.result = result;
+    };
+
+    _this.obsRefetch = function (variables) {
+      return _this.currentObservable.query.refetch(variables);
+    };
+
+    _this.obsFetchMore = function (fetchMoreOptions) {
+      return _this.currentObservable.query.fetchMore(fetchMoreOptions);
+    };
+
+    _this.obsUpdateQuery = function (mapFn) {
+      return _this.currentObservable.query.updateQuery(mapFn);
+    };
+
+    _this.obsStartPolling = function (pollInterval) {
+      _this.currentObservable && _this.currentObservable.query && _this.currentObservable.query.startPolling(pollInterval);
+    };
+
+    _this.obsStopPolling = function () {
+      _this.currentObservable && _this.currentObservable.query && _this.currentObservable.query.stopPolling();
+    };
+
+    _this.obsSubscribeToMore = function (options) {
+      return _this.currentObservable.query.subscribeToMore(options);
+    };
+
+    _this.forceUpdate = forceUpdate;
+    return _this;
+  }
+
+  QueryData.prototype.execute = function () {
+    this.refreshClient();
+
+    var _a = this.getOptions(),
+        skip = _a.skip,
+        query = _a.query;
+
+    if (skip || query !== this.previousData.query) {
+      this.removeQuerySubscription();
+      this.previousData.query = query;
+    }
+
+    this.updateObservableQuery();
+    if (this.isMounted) this.startQuerySubscription();
+    return this.getExecuteSsrResult() || this.getExecuteResult();
+  };
+
+  QueryData.prototype.executeLazy = function () {
+    return !this.runLazy ? [this.runLazyQuery, {
+      loading: false,
+      networkStatus: _networkStatus.NetworkStatus.ready,
+      called: false,
+      data: undefined
+    }] : [this.runLazyQuery, this.execute()];
+  };
+
+  QueryData.prototype.fetchData = function () {
+    var _this = this;
+
+    var options = this.getOptions();
+    if (options.skip || options.ssr === false) return false;
+    return new Promise(function (resolve) {
+      return _this.startQuerySubscription(resolve);
+    });
+  };
+
+  QueryData.prototype.afterExecute = function (_a) {
+    var _this = this;
+
+    var queryResult = _a.queryResult,
+        _b = _a.lazy,
+        lazy = _b === void 0 ? false : _b;
+    this.isMounted = true;
+
+    if (!lazy || this.runLazy) {
+      this.handleErrorOrCompleted(queryResult);
+      setTimeout(function () {
+        _this.currentObservable.query && _this.currentObservable.query.resetQueryStoreErrors();
+      });
+    }
+
+    this.previousOptions = this.getOptions();
+    return this.unmount.bind(this);
+  };
+
+  QueryData.prototype.cleanup = function () {
+    this.removeQuerySubscription();
+    delete this.currentObservable.query;
+    delete this.previousData.result;
+  };
+
+  QueryData.prototype.getOptions = function () {
+    var options = _super.prototype.getOptions.call(this);
+
+    if (this.lazyOptions) {
+      options.variables = (0, _tslib.__assign)((0, _tslib.__assign)({}, options.variables), this.lazyOptions.variables);
+      options.context = (0, _tslib.__assign)((0, _tslib.__assign)({}, options.context), this.lazyOptions.context);
+    }
+
+    if (this.runLazy) {
+      delete options.skip;
+    }
+
+    return options;
+  };
+
+  QueryData.prototype.getExecuteResult = function () {
+    var result = this.getQueryResult();
+    this.startQuerySubscription();
+    return result;
+  };
+
+  QueryData.prototype.getExecuteSsrResult = function () {
+    var treeRenderingInitiated = this.context && this.context.renderPromises;
+    var ssrDisabled = this.getOptions().ssr === false;
+    var fetchDisabled = this.refreshClient().client.disableNetworkFetches;
+    var ssrLoading = {
+      loading: true,
+      networkStatus: _networkStatus.NetworkStatus.loading,
+      called: true,
+      data: undefined
+    };
+
+    if (ssrDisabled && (treeRenderingInitiated || fetchDisabled)) {
+      return ssrLoading;
+    }
+
+    var result;
+
+    if (treeRenderingInitiated) {
+      result = this.context.renderPromises.addQueryPromise(this, this.getQueryResult) || ssrLoading;
+    }
+
+    return result;
+  };
+
+  QueryData.prototype.prepareObservableQueryOptions = function () {
+    var options = this.getOptions();
+    this.verifyDocumentType(options.query, _parser.DocumentType.Query);
+    var displayName = options.displayName || 'Query';
+
+    if (this.context && this.context.renderPromises && (options.fetchPolicy === 'network-only' || options.fetchPolicy === 'cache-and-network')) {
+      options.fetchPolicy = 'cache-first';
+    }
+
+    return (0, _tslib.__assign)((0, _tslib.__assign)({}, options), {
+      displayName: displayName,
+      context: options.context,
+      metadata: {
+        reactComponent: {
+          displayName: displayName
+        }
+      }
+    });
+  };
+
+  QueryData.prototype.initializeObservableQuery = function () {
+    if (this.context && this.context.renderPromises) {
+      this.currentObservable.query = this.context.renderPromises.getSSRObservable(this.getOptions());
+    }
+
+    if (!this.currentObservable.query) {
+      var observableQueryOptions = this.prepareObservableQueryOptions();
+      this.previousData.observableQueryOptions = (0, _tslib.__assign)((0, _tslib.__assign)({}, observableQueryOptions), {
+        children: null
+      });
+      this.currentObservable.query = this.refreshClient().client.watchQuery((0, _tslib.__assign)({}, observableQueryOptions));
+
+      if (this.context && this.context.renderPromises) {
+        this.context.renderPromises.registerSSRObservable(this.currentObservable.query, observableQueryOptions);
+      }
+    }
+  };
+
+  QueryData.prototype.updateObservableQuery = function () {
+    if (!this.currentObservable.query) {
+      this.initializeObservableQuery();
+      return;
+    }
+
+    var newObservableQueryOptions = (0, _tslib.__assign)((0, _tslib.__assign)({}, this.prepareObservableQueryOptions()), {
+      children: null
+    });
+
+    if (!(0, _equality.equal)(newObservableQueryOptions, this.previousData.observableQueryOptions)) {
+      this.previousData.observableQueryOptions = newObservableQueryOptions;
+      this.currentObservable.query.setOptions(newObservableQueryOptions).catch(function () {});
+    }
+  };
+
+  QueryData.prototype.startQuerySubscription = function (onNewData) {
+    var _this = this;
+
+    if (onNewData === void 0) {
+      onNewData = this.forceUpdate;
+    }
+
+    if (this.currentObservable.subscription || this.getOptions().skip) return;
+    var obsQuery = this.currentObservable.query;
+    this.currentObservable.subscription = obsQuery.subscribe({
+      next: function (_a) {
+        var loading = _a.loading,
+            networkStatus = _a.networkStatus,
+            data = _a.data;
+        var previousResult = _this.previousData.result;
+
+        if (previousResult && previousResult.loading === loading && previousResult.networkStatus === networkStatus && (0, _equality.equal)(previousResult.data, data)) {
+          return;
+        }
+
+        if (_this.previousOptions.skip) {
+          return;
+        }
+
+        onNewData();
+      },
+      error: function (error) {
+        _this.resubscribeToQuery();
+
+        if (!error.hasOwnProperty('graphQLErrors')) throw error;
+        var previousResult = _this.previousData.result;
+
+        if (previousResult && previousResult.loading || !(0, _equality.equal)(error, _this.previousData.error)) {
+          _this.previousData.error = error;
+          onNewData();
+        }
+      }
+    });
+  };
+
+  QueryData.prototype.resubscribeToQuery = function () {
+    this.removeQuerySubscription();
+    var lastError = this.currentObservable.query.getLastError();
+    var lastResult = this.currentObservable.query.getLastResult();
+    this.currentObservable.query.resetLastResults();
+    this.startQuerySubscription();
+    Object.assign(this.currentObservable.query, {
+      lastError: lastError,
+      lastResult: lastResult
+    });
+  };
+
+  QueryData.prototype.handleErrorOrCompleted = function (_a) {
+    var data = _a.data,
+        loading = _a.loading,
+        error = _a.error;
+
+    if (!loading) {
+      var _b = this.getOptions(),
+          query = _b.query,
+          variables = _b.variables,
+          onCompleted = _b.onCompleted,
+          onError = _b.onError;
+
+      if (this.previousOptions && !this.previousData.loading && (0, _equality.equal)(this.previousOptions.query, query) && (0, _equality.equal)(this.previousOptions.variables, variables)) {
+        return;
+      }
+
+      if (onCompleted && !error) {
+        onCompleted(data);
+      } else if (onError && error) {
+        onError(error);
+      }
+    }
+  };
+
+  QueryData.prototype.removeQuerySubscription = function () {
+    if (this.currentObservable.subscription) {
+      this.currentObservable.subscription.unsubscribe();
+      delete this.currentObservable.subscription;
+    }
+  };
+
+  QueryData.prototype.observableQueryFields = function () {
+    var observable = this.currentObservable.query;
+    return {
+      variables: observable.variables,
+      refetch: this.obsRefetch,
+      fetchMore: this.obsFetchMore,
+      updateQuery: this.obsUpdateQuery,
+      startPolling: this.obsStartPolling,
+      stopPolling: this.obsStopPolling,
+      subscribeToMore: this.obsSubscribeToMore
+    };
+  };
+
+  return QueryData;
+}(_OperationData.OperationData);
+
+exports.QueryData = QueryData;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","../../errors/ApolloError.js":"../node_modules/@apollo/client/errors/ApolloError.js","@wry/equality":"../node_modules/@wry/equality/lib/equality.esm.js","../../core/networkStatus.js":"../node_modules/@apollo/client/core/networkStatus.js","../parser/parser.js":"../node_modules/@apollo/client/react/parser/parser.js","./OperationData.js":"../node_modules/@apollo/client/react/data/OperationData.js"}],"../node_modules/@apollo/client/react/hooks/utils/useDeepMemo.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.useDeepMemo = useDeepMemo;
+
+var _equality = require("@wry/equality");
+
+var _react = require("../../react.js");
+
+function useDeepMemo(memoFn, key) {
+  var React = (0, _react.requireReactLazily)();
+  var useRef = React.useRef;
+  var ref = useRef();
+
+  if (!ref.current || !(0, _equality.equal)(key, ref.current.key)) {
+    ref.current = {
+      key: key,
+      value: memoFn()
+    };
+  }
+
+  return ref.current.value;
+}
+},{"@wry/equality":"../node_modules/@wry/equality/lib/equality.esm.js","../../react.js":"../node_modules/@apollo/client/react/react.js"}],"../node_modules/@apollo/client/react/hooks/utils/useBaseQuery.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.useBaseQuery = useBaseQuery;
+
+var _tslib = require("tslib");
+
+var _react = require("../../react.js");
+
+var _ApolloContext = require("../../context/ApolloContext.js");
+
+var _QueryData = require("../../data/QueryData.js");
+
+var _useDeepMemo = require("./useDeepMemo.js");
+
+function useBaseQuery(query, options, lazy) {
+  if (lazy === void 0) {
+    lazy = false;
+  }
+
+  var React = (0, _react.requireReactLazily)();
+  var useContext = React.useContext,
+      useEffect = React.useEffect,
+      useReducer = React.useReducer,
+      useRef = React.useRef;
+  var context = useContext((0, _ApolloContext.getApolloContext)());
+
+  var _a = useReducer(function (x) {
+    return x + 1;
+  }, 0),
+      tick = _a[0],
+      forceUpdate = _a[1];
+
+  var updatedOptions = options ? (0, _tslib.__assign)((0, _tslib.__assign)({}, options), {
+    query: query
+  }) : {
+    query: query
+  };
+  var queryDataRef = useRef();
+
+  if (!queryDataRef.current) {
+    queryDataRef.current = new _QueryData.QueryData({
+      options: updatedOptions,
+      context: context,
+      forceUpdate: forceUpdate
+    });
+  }
+
+  var queryData = queryDataRef.current;
+  queryData.setOptions(updatedOptions);
+  queryData.context = context;
+  var memo = {
+    options: (0, _tslib.__assign)((0, _tslib.__assign)({}, updatedOptions), {
+      onError: undefined,
+      onCompleted: undefined
+    }),
+    context: context,
+    tick: tick
+  };
+  var result = (0, _useDeepMemo.useDeepMemo)(function () {
+    return lazy ? queryData.executeLazy() : queryData.execute();
+  }, memo);
+  var queryResult = lazy ? result[1] : result;
+  useEffect(function () {
+    return queryData.afterExecute({
+      queryResult: queryResult,
+      lazy: lazy
+    });
+  }, [queryResult.loading, queryResult.networkStatus, queryResult.error, queryResult.data]);
+  useEffect(function () {
+    return function () {
+      return queryData.cleanup();
+    };
+  }, []);
+  return result;
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","../../react.js":"../node_modules/@apollo/client/react/react.js","../../context/ApolloContext.js":"../node_modules/@apollo/client/react/context/ApolloContext.js","../../data/QueryData.js":"../node_modules/@apollo/client/react/data/QueryData.js","./useDeepMemo.js":"../node_modules/@apollo/client/react/hooks/utils/useDeepMemo.js"}],"../node_modules/@apollo/client/react/hooks/useQuery.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.useQuery = useQuery;
+
+var _useBaseQuery = require("./utils/useBaseQuery.js");
+
+function useQuery(query, options) {
+  return (0, _useBaseQuery.useBaseQuery)(query, options, false);
+}
+},{"./utils/useBaseQuery.js":"../node_modules/@apollo/client/react/hooks/utils/useBaseQuery.js"}],"../node_modules/@apollo/client/react/hooks/useLazyQuery.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.useLazyQuery = useLazyQuery;
+
+var _useBaseQuery = require("./utils/useBaseQuery.js");
+
+function useLazyQuery(query, options) {
+  return (0, _useBaseQuery.useBaseQuery)(query, options, true);
+}
+},{"./utils/useBaseQuery.js":"../node_modules/@apollo/client/react/hooks/utils/useBaseQuery.js"}],"../node_modules/@apollo/client/react/data/MutationData.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.MutationData = void 0;
+
+var _tslib = require("tslib");
+
+var _ApolloError = require("../../errors/ApolloError.js");
+
+var _equality = require("@wry/equality");
+
+var _parser = require("../parser/parser.js");
+
+var _OperationData = require("./OperationData.js");
+
+var MutationData = function (_super) {
+  (0, _tslib.__extends)(MutationData, _super);
+
+  function MutationData(_a) {
+    var options = _a.options,
+        context = _a.context,
+        result = _a.result,
+        setResult = _a.setResult;
+
+    var _this = _super.call(this, options, context) || this;
+
+    _this.runMutation = function (mutationFunctionOptions) {
+      if (mutationFunctionOptions === void 0) {
+        mutationFunctionOptions = {};
+      }
+
+      _this.onMutationStart();
+
+      var mutationId = _this.generateNewMutationId();
+
+      return _this.mutate(mutationFunctionOptions).then(function (response) {
+        _this.onMutationCompleted(response, mutationId);
+
+        return response;
+      }).catch(function (error) {
+        _this.onMutationError(error, mutationId);
+
+        if (!_this.getOptions().onError) throw error;
+      });
+    };
+
+    _this.verifyDocumentType(options.mutation, _parser.DocumentType.Mutation);
+
+    _this.result = result;
+    _this.setResult = setResult;
+    _this.mostRecentMutationId = 0;
+    return _this;
+  }
+
+  MutationData.prototype.execute = function (result) {
+    this.isMounted = true;
+    this.verifyDocumentType(this.getOptions().mutation, _parser.DocumentType.Mutation);
+    return [this.runMutation, (0, _tslib.__assign)((0, _tslib.__assign)({}, result), {
+      client: this.refreshClient().client
+    })];
+  };
+
+  MutationData.prototype.afterExecute = function () {
+    this.isMounted = true;
+    return this.unmount.bind(this);
+  };
+
+  MutationData.prototype.cleanup = function () {};
+
+  MutationData.prototype.mutate = function (mutationFunctionOptions) {
+    var _a = this.getOptions(),
+        mutation = _a.mutation,
+        variables = _a.variables,
+        optimisticResponse = _a.optimisticResponse,
+        update = _a.update,
+        _b = _a.context,
+        mutationContext = _b === void 0 ? {} : _b,
+        _c = _a.awaitRefetchQueries,
+        awaitRefetchQueries = _c === void 0 ? false : _c,
+        fetchPolicy = _a.fetchPolicy;
+
+    var mutateOptions = (0, _tslib.__assign)({}, mutationFunctionOptions);
+    var mutateVariables = Object.assign({}, variables, mutateOptions.variables);
+    delete mutateOptions.variables;
+    return this.refreshClient().client.mutate((0, _tslib.__assign)({
+      mutation: mutation,
+      optimisticResponse: optimisticResponse,
+      refetchQueries: mutateOptions.refetchQueries || this.getOptions().refetchQueries,
+      awaitRefetchQueries: awaitRefetchQueries,
+      update: update,
+      context: mutationContext,
+      fetchPolicy: fetchPolicy,
+      variables: mutateVariables
+    }, mutateOptions));
+  };
+
+  MutationData.prototype.onMutationStart = function () {
+    if (!this.result.loading && !this.getOptions().ignoreResults) {
+      this.updateResult({
+        loading: true,
+        error: undefined,
+        data: undefined,
+        called: true
+      });
+    }
+  };
+
+  MutationData.prototype.onMutationCompleted = function (response, mutationId) {
+    var _a = this.getOptions(),
+        onCompleted = _a.onCompleted,
+        ignoreResults = _a.ignoreResults;
+
+    var data = response.data,
+        errors = response.errors;
+    var error = errors && errors.length > 0 ? new _ApolloError.ApolloError({
+      graphQLErrors: errors
+    }) : undefined;
+
+    var callOncomplete = function () {
+      return onCompleted ? onCompleted(data) : null;
+    };
+
+    if (this.isMostRecentMutation(mutationId) && !ignoreResults) {
+      this.updateResult({
+        called: true,
+        loading: false,
+        data: data,
+        error: error
+      });
+    }
+
+    callOncomplete();
+  };
+
+  MutationData.prototype.onMutationError = function (error, mutationId) {
+    var onError = this.getOptions().onError;
+
+    if (this.isMostRecentMutation(mutationId)) {
+      this.updateResult({
+        loading: false,
+        error: error,
+        data: undefined,
+        called: true
+      });
+    }
+
+    if (onError) {
+      onError(error);
+    }
+  };
+
+  MutationData.prototype.generateNewMutationId = function () {
+    return ++this.mostRecentMutationId;
+  };
+
+  MutationData.prototype.isMostRecentMutation = function (mutationId) {
+    return this.mostRecentMutationId === mutationId;
+  };
+
+  MutationData.prototype.updateResult = function (result) {
+    if (this.isMounted && (!this.previousResult || !(0, _equality.equal)(this.previousResult, result))) {
+      this.setResult(result);
+      this.previousResult = result;
+    }
+  };
+
+  return MutationData;
+}(_OperationData.OperationData);
+
+exports.MutationData = MutationData;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","../../errors/ApolloError.js":"../node_modules/@apollo/client/errors/ApolloError.js","@wry/equality":"../node_modules/@wry/equality/lib/equality.esm.js","../parser/parser.js":"../node_modules/@apollo/client/react/parser/parser.js","./OperationData.js":"../node_modules/@apollo/client/react/data/OperationData.js"}],"../node_modules/@apollo/client/react/hooks/useMutation.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.useMutation = useMutation;
+
+var _tslib = require("tslib");
+
+var _react = require("../react.js");
+
+var _ApolloContext = require("../context/ApolloContext.js");
+
+var _MutationData = require("../data/MutationData.js");
+
+function useMutation(mutation, options) {
+  var _a = (0, _react.requireReactLazily)(),
+      useContext = _a.useContext,
+      useState = _a.useState,
+      useRef = _a.useRef,
+      useEffect = _a.useEffect;
+
+  var context = useContext((0, _ApolloContext.getApolloContext)());
+
+  var _b = useState({
+    called: false,
+    loading: false
+  }),
+      result = _b[0],
+      setResult = _b[1];
+
+  var updatedOptions = options ? (0, _tslib.__assign)((0, _tslib.__assign)({}, options), {
+    mutation: mutation
+  }) : {
+    mutation: mutation
+  };
+  var mutationDataRef = useRef();
+
+  function getMutationDataRef() {
+    if (!mutationDataRef.current) {
+      mutationDataRef.current = new _MutationData.MutationData({
+        options: updatedOptions,
+        context: context,
+        result: result,
+        setResult: setResult
+      });
+    }
+
+    return mutationDataRef.current;
+  }
+
+  var mutationData = getMutationDataRef();
+  mutationData.setOptions(updatedOptions);
+  mutationData.context = context;
+  useEffect(function () {
+    return mutationData.afterExecute();
+  });
+  return mutationData.execute(result);
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","../react.js":"../node_modules/@apollo/client/react/react.js","../context/ApolloContext.js":"../node_modules/@apollo/client/react/context/ApolloContext.js","../data/MutationData.js":"../node_modules/@apollo/client/react/data/MutationData.js"}],"../node_modules/@apollo/client/react/data/SubscriptionData.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.SubscriptionData = void 0;
+
+var _tslib = require("tslib");
+
+var _equality = require("@wry/equality");
+
+var _OperationData = require("./OperationData.js");
+
+var SubscriptionData = function (_super) {
+  (0, _tslib.__extends)(SubscriptionData, _super);
+
+  function SubscriptionData(_a) {
+    var options = _a.options,
+        context = _a.context,
+        setResult = _a.setResult;
+
+    var _this = _super.call(this, options, context) || this;
+
+    _this.currentObservable = {};
+    _this.setResult = setResult;
+
+    _this.initialize(options);
+
+    return _this;
+  }
+
+  SubscriptionData.prototype.execute = function (result) {
+    if (this.getOptions().skip === true) {
+      this.cleanup();
+      return {
+        loading: false,
+        error: undefined,
+        data: undefined,
+        variables: this.getOptions().variables
+      };
+    }
+
+    var currentResult = result;
+
+    if (this.refreshClient().isNew) {
+      currentResult = this.getLoadingResult();
+    }
+
+    var shouldResubscribe = this.getOptions().shouldResubscribe;
+
+    if (typeof shouldResubscribe === 'function') {
+      shouldResubscribe = !!shouldResubscribe(this.getOptions());
+    }
+
+    if (shouldResubscribe !== false && this.previousOptions && Object.keys(this.previousOptions).length > 0 && (this.previousOptions.subscription !== this.getOptions().subscription || !(0, _equality.equal)(this.previousOptions.variables, this.getOptions().variables) || this.previousOptions.skip !== this.getOptions().skip)) {
+      this.cleanup();
+      currentResult = this.getLoadingResult();
+    }
+
+    this.initialize(this.getOptions());
+    this.startSubscription();
+    this.previousOptions = this.getOptions();
+    return (0, _tslib.__assign)((0, _tslib.__assign)({}, currentResult), {
+      variables: this.getOptions().variables
+    });
+  };
+
+  SubscriptionData.prototype.afterExecute = function () {
+    this.isMounted = true;
+  };
+
+  SubscriptionData.prototype.cleanup = function () {
+    this.endSubscription();
+    delete this.currentObservable.query;
+  };
+
+  SubscriptionData.prototype.initialize = function (options) {
+    if (this.currentObservable.query || this.getOptions().skip === true) return;
+    this.currentObservable.query = this.refreshClient().client.subscribe({
+      query: options.subscription,
+      variables: options.variables,
+      fetchPolicy: options.fetchPolicy
+    });
+  };
+
+  SubscriptionData.prototype.startSubscription = function () {
+    if (this.currentObservable.subscription) return;
+    this.currentObservable.subscription = this.currentObservable.query.subscribe({
+      next: this.updateCurrentData.bind(this),
+      error: this.updateError.bind(this),
+      complete: this.completeSubscription.bind(this)
+    });
+  };
+
+  SubscriptionData.prototype.getLoadingResult = function () {
+    return {
+      loading: true,
+      error: undefined,
+      data: undefined
+    };
+  };
+
+  SubscriptionData.prototype.updateResult = function (result) {
+    if (this.isMounted) {
+      this.setResult(result);
+    }
+  };
+
+  SubscriptionData.prototype.updateCurrentData = function (result) {
+    var onSubscriptionData = this.getOptions().onSubscriptionData;
+    this.updateResult({
+      data: result.data,
+      loading: false,
+      error: undefined
+    });
+
+    if (onSubscriptionData) {
+      onSubscriptionData({
+        client: this.refreshClient().client,
+        subscriptionData: result
+      });
+    }
+  };
+
+  SubscriptionData.prototype.updateError = function (error) {
+    this.updateResult({
+      error: error,
+      loading: false
+    });
+  };
+
+  SubscriptionData.prototype.completeSubscription = function () {
+    var onSubscriptionComplete = this.getOptions().onSubscriptionComplete;
+    if (onSubscriptionComplete) onSubscriptionComplete();
+    this.endSubscription();
+  };
+
+  SubscriptionData.prototype.endSubscription = function () {
+    if (this.currentObservable.subscription) {
+      this.currentObservable.subscription.unsubscribe();
+      delete this.currentObservable.subscription;
+    }
+  };
+
+  return SubscriptionData;
+}(_OperationData.OperationData);
+
+exports.SubscriptionData = SubscriptionData;
+},{"tslib":"../node_modules/tslib/tslib.es6.js","@wry/equality":"../node_modules/@wry/equality/lib/equality.esm.js","./OperationData.js":"../node_modules/@apollo/client/react/data/OperationData.js"}],"../node_modules/@apollo/client/react/hooks/useSubscription.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.useSubscription = useSubscription;
+
+var _tslib = require("tslib");
+
+var _react = require("../react.js");
+
+var _ApolloContext = require("../context/ApolloContext.js");
+
+var _SubscriptionData = require("../data/SubscriptionData.js");
+
+function useSubscription(subscription, options) {
+  var React = (0, _react.requireReactLazily)();
+  var useContext = React.useContext,
+      useState = React.useState,
+      useRef = React.useRef,
+      useEffect = React.useEffect;
+  var context = useContext((0, _ApolloContext.getApolloContext)());
+  var updatedOptions = options ? (0, _tslib.__assign)((0, _tslib.__assign)({}, options), {
+    subscription: subscription
+  }) : {
+    subscription: subscription
+  };
+
+  var _a = useState({
+    loading: !updatedOptions.skip,
+    error: undefined,
+    data: undefined
+  }),
+      result = _a[0],
+      setResult = _a[1];
+
+  var subscriptionDataRef = useRef();
+
+  function getSubscriptionDataRef() {
+    if (!subscriptionDataRef.current) {
+      subscriptionDataRef.current = new _SubscriptionData.SubscriptionData({
+        options: updatedOptions,
+        context: context,
+        setResult: setResult
+      });
+    }
+
+    return subscriptionDataRef.current;
+  }
+
+  var subscriptionData = getSubscriptionDataRef();
+  subscriptionData.setOptions(updatedOptions, true);
+  subscriptionData.context = context;
+  useEffect(function () {
+    return subscriptionData.afterExecute();
+  });
+  useEffect(function () {
+    return subscriptionData.cleanup.bind(subscriptionData);
+  }, []);
+  return subscriptionData.execute(result);
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","../react.js":"../node_modules/@apollo/client/react/react.js","../context/ApolloContext.js":"../node_modules/@apollo/client/react/context/ApolloContext.js","../data/SubscriptionData.js":"../node_modules/@apollo/client/react/data/SubscriptionData.js"}],"../node_modules/@apollo/client/react/hooks/useApolloClient.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.useApolloClient = useApolloClient;
+
+var _tsInvariant = require("ts-invariant");
+
+var _react = require("../react.js");
+
+var _ApolloContext = require("../context/ApolloContext.js");
+
+function useApolloClient() {
+  var React = (0, _react.requireReactLazily)();
+  var client = React.useContext((0, _ApolloContext.getApolloContext)()).client;
+  "development" === "production" ? (0, _tsInvariant.invariant)(client, 7) : (0, _tsInvariant.invariant)(client, 'No Apollo Client instance can be found. Please ensure that you ' + 'have called `ApolloProvider` higher up in your tree.');
+  return client;
+}
+},{"ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","../react.js":"../node_modules/@apollo/client/react/react.js","../context/ApolloContext.js":"../node_modules/@apollo/client/react/context/ApolloContext.js"}],"../node_modules/@apollo/client/react/ssr/RenderPromises.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.RenderPromises = void 0;
+
+function makeDefaultQueryInfo() {
+  return {
+    seen: false,
+    observable: null
+  };
+}
+
+var RenderPromises = function () {
+  function RenderPromises() {
+    this.queryPromises = new Map();
+    this.queryInfoTrie = new Map();
+  }
+
+  RenderPromises.prototype.registerSSRObservable = function (observable, props) {
+    this.lookupQueryInfo(props).observable = observable;
+  };
+
+  RenderPromises.prototype.getSSRObservable = function (props) {
+    return this.lookupQueryInfo(props).observable;
+  };
+
+  RenderPromises.prototype.addQueryPromise = function (queryInstance, finish) {
+    var info = this.lookupQueryInfo(queryInstance.getOptions());
+
+    if (!info.seen) {
+      this.queryPromises.set(queryInstance.getOptions(), new Promise(function (resolve) {
+        resolve(queryInstance.fetchData());
+      }));
+      return null;
+    }
+
+    return finish();
+  };
+
+  RenderPromises.prototype.hasPromises = function () {
+    return this.queryPromises.size > 0;
+  };
+
+  RenderPromises.prototype.consumeAndAwaitPromises = function () {
+    var _this = this;
+
+    var promises = [];
+    this.queryPromises.forEach(function (promise, queryInstance) {
+      _this.lookupQueryInfo(queryInstance).seen = true;
+      promises.push(promise);
+    });
+    this.queryPromises.clear();
+    return Promise.all(promises);
+  };
+
+  RenderPromises.prototype.lookupQueryInfo = function (props) {
+    var queryInfoTrie = this.queryInfoTrie;
+    var query = props.query,
+        variables = props.variables;
+    var varMap = queryInfoTrie.get(query) || new Map();
+    if (!queryInfoTrie.has(query)) queryInfoTrie.set(query, varMap);
+    var variablesString = JSON.stringify(variables);
+    var info = varMap.get(variablesString) || makeDefaultQueryInfo();
+    if (!varMap.has(variablesString)) varMap.set(variablesString, info);
+    return info;
+  };
+
+  return RenderPromises;
+}();
+
+exports.RenderPromises = RenderPromises;
+},{}],"../node_modules/@apollo/client/index.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+Object.defineProperty(exports, "Observable", {
+  enumerable: true,
+  get: function () {
+    return _zenObservable.default;
+  }
+});
+Object.defineProperty(exports, "isReference", {
+  enumerable: true,
+  get: function () {
+    return _storeUtils.isReference;
+  }
+});
+Object.defineProperty(exports, "makeReference", {
+  enumerable: true,
+  get: function () {
+    return _storeUtils.makeReference;
+  }
+});
+Object.defineProperty(exports, "getMainDefinition", {
+  enumerable: true,
+  get: function () {
+    return _getFromAST.getMainDefinition;
+  }
+});
+Object.defineProperty(exports, "ApolloLink", {
+  enumerable: true,
+  get: function () {
+    return _ApolloLink.ApolloLink;
+  }
+});
+Object.defineProperty(exports, "execute", {
+  enumerable: true,
+  get: function () {
+    return _execute.execute;
+  }
+});
+Object.defineProperty(exports, "ApolloError", {
+  enumerable: true,
+  get: function () {
+    return _ApolloError.ApolloError;
+  }
+});
+Object.defineProperty(exports, "isApolloError", {
+  enumerable: true,
+  get: function () {
+    return _ApolloError.isApolloError;
+  }
+});
+Object.defineProperty(exports, "NetworkStatus", {
+  enumerable: true,
+  get: function () {
+    return _networkStatus.NetworkStatus;
+  }
+});
+Object.defineProperty(exports, "FetchType", {
+  enumerable: true,
+  get: function () {
+    return _types.FetchType;
+  }
+});
+Object.defineProperty(exports, "ObservableQuery", {
+  enumerable: true,
+  get: function () {
+    return _ObservableQuery.ObservableQuery;
+  }
+});
+Object.defineProperty(exports, "serializeFetchParameter", {
+  enumerable: true,
+  get: function () {
+    return _serializeFetchParameter.serializeFetchParameter;
+  }
+});
+Object.defineProperty(exports, "selectURI", {
+  enumerable: true,
+  get: function () {
+    return _selectURI.selectURI;
+  }
+});
+Object.defineProperty(exports, "throwServerError", {
+  enumerable: true,
+  get: function () {
+    return _throwServerError.throwServerError;
+  }
+});
+Object.defineProperty(exports, "parseAndCheckHttpResponse", {
+  enumerable: true,
+  get: function () {
+    return _parseAndCheckHttpResponse.parseAndCheckHttpResponse;
+  }
+});
+Object.defineProperty(exports, "checkFetcher", {
+  enumerable: true,
+  get: function () {
+    return _checkFetcher.checkFetcher;
+  }
+});
+Object.defineProperty(exports, "fallbackHttpConfig", {
+  enumerable: true,
+  get: function () {
+    return _selectHttpOptionsAndBody.fallbackHttpConfig;
+  }
+});
+Object.defineProperty(exports, "selectHttpOptionsAndBody", {
+  enumerable: true,
+  get: function () {
+    return _selectHttpOptionsAndBody.selectHttpOptionsAndBody;
+  }
+});
+Object.defineProperty(exports, "createSignalIfSupported", {
+  enumerable: true,
+  get: function () {
+    return _createSignalIfSupported.createSignalIfSupported;
+  }
+});
+Object.defineProperty(exports, "fromError", {
+  enumerable: true,
+  get: function () {
+    return _fromError.fromError;
+  }
+});
+Object.defineProperty(exports, "createHttpLink", {
+  enumerable: true,
+  get: function () {
+    return _createHttpLink.createHttpLink;
+  }
+});
+Object.defineProperty(exports, "HttpLink", {
+  enumerable: true,
+  get: function () {
+    return _HttpLink.HttpLink;
+  }
+});
+Object.defineProperty(exports, "ApolloClient", {
+  enumerable: true,
+  get: function () {
+    return _ApolloClient.ApolloClient;
+  }
+});
+Object.defineProperty(exports, "gql", {
+  enumerable: true,
+  get: function () {
+    return _graphqlTag.default;
+  }
+});
+Object.defineProperty(exports, "ApolloCache", {
+  enumerable: true,
+  get: function () {
+    return _cache.ApolloCache;
+  }
+});
+Object.defineProperty(exports, "Cache", {
+  enumerable: true,
+  get: function () {
+    return _Cache.Cache;
+  }
+});
+Object.defineProperty(exports, "defaultDataIdFromObject", {
+  enumerable: true,
+  get: function () {
+    return _policies.defaultDataIdFromObject;
+  }
+});
+Object.defineProperty(exports, "InMemoryCache", {
+  enumerable: true,
+  get: function () {
+    return _inMemoryCache.InMemoryCache;
+  }
+});
+Object.defineProperty(exports, "empty", {
+  enumerable: true,
+  get: function () {
+    return _empty.empty;
+  }
+});
+Object.defineProperty(exports, "from", {
+  enumerable: true,
+  get: function () {
+    return _from.from;
+  }
+});
+Object.defineProperty(exports, "split", {
+  enumerable: true,
+  get: function () {
+    return _split.split;
+  }
+});
+Object.defineProperty(exports, "concat", {
+  enumerable: true,
+  get: function () {
+    return _concat.concat;
+  }
+});
+Object.defineProperty(exports, "getApolloContext", {
+  enumerable: true,
+  get: function () {
+    return _ApolloContext.getApolloContext;
+  }
+});
+Object.defineProperty(exports, "resetApolloContext", {
+  enumerable: true,
+  get: function () {
+    return _ApolloContext.resetApolloContext;
+  }
+});
+Object.defineProperty(exports, "ApolloProvider", {
+  enumerable: true,
+  get: function () {
+    return _ApolloProvider.ApolloProvider;
+  }
+});
+Object.defineProperty(exports, "ApolloConsumer", {
+  enumerable: true,
+  get: function () {
+    return _ApolloConsumer.ApolloConsumer;
+  }
+});
+Object.defineProperty(exports, "DocumentType", {
+  enumerable: true,
+  get: function () {
+    return _parser.DocumentType;
+  }
+});
+Object.defineProperty(exports, "operationName", {
+  enumerable: true,
+  get: function () {
+    return _parser.operationName;
+  }
+});
+Object.defineProperty(exports, "parser", {
+  enumerable: true,
+  get: function () {
+    return _parser.parser;
+  }
+});
+Object.defineProperty(exports, "useQuery", {
+  enumerable: true,
+  get: function () {
+    return _useQuery.useQuery;
+  }
+});
+Object.defineProperty(exports, "useLazyQuery", {
+  enumerable: true,
+  get: function () {
+    return _useLazyQuery.useLazyQuery;
+  }
+});
+Object.defineProperty(exports, "useMutation", {
+  enumerable: true,
+  get: function () {
+    return _useMutation.useMutation;
+  }
+});
+Object.defineProperty(exports, "useSubscription", {
+  enumerable: true,
+  get: function () {
+    return _useSubscription.useSubscription;
+  }
+});
+Object.defineProperty(exports, "useApolloClient", {
+  enumerable: true,
+  get: function () {
+    return _useApolloClient.useApolloClient;
+  }
+});
+Object.defineProperty(exports, "RenderPromises", {
+  enumerable: true,
+  get: function () {
+    return _RenderPromises.RenderPromises;
+  }
+});
+
+var _zenObservable = _interopRequireDefault(require("zen-observable"));
+
+var _storeUtils = require("./utilities/graphql/storeUtils.js");
+
+var _getFromAST = require("./utilities/graphql/getFromAST.js");
+
+var _ApolloLink = require("./link/core/ApolloLink.js");
+
+var _execute = require("./link/core/execute.js");
+
+var _ApolloError = require("./errors/ApolloError.js");
+
+var _networkStatus = require("./core/networkStatus.js");
+
+var _types = require("./core/types.js");
+
+var _ObservableQuery = require("./core/ObservableQuery.js");
+
+var _serializeFetchParameter = require("./link/http/serializeFetchParameter.js");
+
+var _selectURI = require("./link/http/selectURI.js");
+
+var _throwServerError = require("./link/utils/throwServerError.js");
+
+var _parseAndCheckHttpResponse = require("./link/http/parseAndCheckHttpResponse.js");
+
+var _checkFetcher = require("./link/http/checkFetcher.js");
+
+var _selectHttpOptionsAndBody = require("./link/http/selectHttpOptionsAndBody.js");
+
+var _createSignalIfSupported = require("./link/http/createSignalIfSupported.js");
+
+var _fromError = require("./link/utils/fromError.js");
+
+var _createHttpLink = require("./link/http/createHttpLink.js");
+
+var _HttpLink = require("./link/http/HttpLink.js");
+
+var _ApolloClient = require("./ApolloClient.js");
+
+var _graphqlTag = _interopRequireDefault(require("graphql-tag"));
+
+var _cache = require("./cache/core/cache.js");
+
+var _Cache = require("./cache/core/types/Cache.js");
+
+var _policies = require("./cache/inmemory/policies.js");
+
+var _inMemoryCache = require("./cache/inmemory/inMemoryCache.js");
+
+var _empty = require("./link/core/empty.js");
+
+var _from = require("./link/core/from.js");
+
+var _split = require("./link/core/split.js");
+
+var _concat = require("./link/core/concat.js");
+
+var _ApolloContext = require("./react/context/ApolloContext.js");
+
+var _ApolloProvider = require("./react/context/ApolloProvider.js");
+
+var _ApolloConsumer = require("./react/context/ApolloConsumer.js");
+
+var _parser = require("./react/parser/parser.js");
+
+var _useQuery = require("./react/hooks/useQuery.js");
+
+var _useLazyQuery = require("./react/hooks/useLazyQuery.js");
+
+var _useMutation = require("./react/hooks/useMutation.js");
+
+var _useSubscription = require("./react/hooks/useSubscription.js");
+
+var _useApolloClient = require("./react/hooks/useApolloClient.js");
+
+var _RenderPromises = require("./react/ssr/RenderPromises.js");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+},{"zen-observable":"../node_modules/zen-observable/index.js","./utilities/graphql/storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js","./utilities/graphql/getFromAST.js":"../node_modules/@apollo/client/utilities/graphql/getFromAST.js","./link/core/ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js","./link/core/execute.js":"../node_modules/@apollo/client/link/core/execute.js","./errors/ApolloError.js":"../node_modules/@apollo/client/errors/ApolloError.js","./core/networkStatus.js":"../node_modules/@apollo/client/core/networkStatus.js","./core/types.js":"../node_modules/@apollo/client/core/types.js","./core/ObservableQuery.js":"../node_modules/@apollo/client/core/ObservableQuery.js","./link/http/serializeFetchParameter.js":"../node_modules/@apollo/client/link/http/serializeFetchParameter.js","./link/http/selectURI.js":"../node_modules/@apollo/client/link/http/selectURI.js","./link/utils/throwServerError.js":"../node_modules/@apollo/client/link/utils/throwServerError.js","./link/http/parseAndCheckHttpResponse.js":"../node_modules/@apollo/client/link/http/parseAndCheckHttpResponse.js","./link/http/checkFetcher.js":"../node_modules/@apollo/client/link/http/checkFetcher.js","./link/http/selectHttpOptionsAndBody.js":"../node_modules/@apollo/client/link/http/selectHttpOptionsAndBody.js","./link/http/createSignalIfSupported.js":"../node_modules/@apollo/client/link/http/createSignalIfSupported.js","./link/utils/fromError.js":"../node_modules/@apollo/client/link/utils/fromError.js","./link/http/createHttpLink.js":"../node_modules/@apollo/client/link/http/createHttpLink.js","./link/http/HttpLink.js":"../node_modules/@apollo/client/link/http/HttpLink.js","./ApolloClient.js":"../node_modules/@apollo/client/ApolloClient.js","graphql-tag":"../node_modules/graphql-tag/src/index.js","./cache/core/cache.js":"../node_modules/@apollo/client/cache/core/cache.js","./cache/core/types/Cache.js":"../node_modules/@apollo/client/cache/core/types/Cache.js","./cache/inmemory/policies.js":"../node_modules/@apollo/client/cache/inmemory/policies.js","./cache/inmemory/inMemoryCache.js":"../node_modules/@apollo/client/cache/inmemory/inMemoryCache.js","./link/core/empty.js":"../node_modules/@apollo/client/link/core/empty.js","./link/core/from.js":"../node_modules/@apollo/client/link/core/from.js","./link/core/split.js":"../node_modules/@apollo/client/link/core/split.js","./link/core/concat.js":"../node_modules/@apollo/client/link/core/concat.js","./react/context/ApolloContext.js":"../node_modules/@apollo/client/react/context/ApolloContext.js","./react/context/ApolloProvider.js":"../node_modules/@apollo/client/react/context/ApolloProvider.js","./react/context/ApolloConsumer.js":"../node_modules/@apollo/client/react/context/ApolloConsumer.js","./react/parser/parser.js":"../node_modules/@apollo/client/react/parser/parser.js","./react/hooks/useQuery.js":"../node_modules/@apollo/client/react/hooks/useQuery.js","./react/hooks/useLazyQuery.js":"../node_modules/@apollo/client/react/hooks/useLazyQuery.js","./react/hooks/useMutation.js":"../node_modules/@apollo/client/react/hooks/useMutation.js","./react/hooks/useSubscription.js":"../node_modules/@apollo/client/react/hooks/useSubscription.js","./react/hooks/useApolloClient.js":"../node_modules/@apollo/client/react/hooks/useApolloClient.js","./react/ssr/RenderPromises.js":"../node_modules/@apollo/client/react/ssr/RenderPromises.js"}],"../node_modules/stylis/stylis.min.js":[function(require,module,exports) {
 var define;
 !function(e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e(null):"function"==typeof define&&define.amd?define(e(null)):window.stylis=e(null)}(function e(a){"use strict";var r=/^\0+/g,c=/[\0\r\f]/g,s=/: */g,t=/zoo|gra/,i=/([,: ])(transform)/g,f=/,+\s*(?![^(]*[)])/g,n=/ +\s*(?![^(]*[)])/g,l=/ *[\0] */g,o=/,\r+?/g,h=/([\t\r\n ])*\f?&/g,u=/:global\(((?:[^\(\)\[\]]*|\[.*\]|\([^\(\)]*\))*)\)/g,d=/\W+/g,b=/@(k\w+)\s*(\S*)\s*/,p=/::(place)/g,k=/:(read-only)/g,g=/\s+(?=[{\];=:>])/g,A=/([[}=:>])\s+/g,C=/(\{[^{]+?);(?=\})/g,w=/\s{2,}/g,v=/([^\(])(:+) */g,m=/[svh]\w+-[tblr]{2}/,x=/\(\s*(.*)\s*\)/g,$=/([\s\S]*?);/g,y=/-self|flex-/g,O=/[^]*?(:[rp][el]a[\w-]+)[^]*/,j=/stretch|:\s*\w+\-(?:conte|avail)/,z=/([^-])(image-set\()/,N="-webkit-",S="-moz-",F="-ms-",W=59,q=125,B=123,D=40,E=41,G=91,H=93,I=10,J=13,K=9,L=64,M=32,P=38,Q=45,R=95,T=42,U=44,V=58,X=39,Y=34,Z=47,_=62,ee=43,ae=126,re=0,ce=12,se=11,te=107,ie=109,fe=115,ne=112,le=111,oe=105,he=99,ue=100,de=112,be=1,pe=1,ke=0,ge=1,Ae=1,Ce=1,we=0,ve=0,me=0,xe=[],$e=[],ye=0,Oe=null,je=-2,ze=-1,Ne=0,Se=1,Fe=2,We=3,qe=0,Be=1,De="",Ee="",Ge="";function He(e,a,s,t,i){for(var f,n,o=0,h=0,u=0,d=0,g=0,A=0,C=0,w=0,m=0,$=0,y=0,O=0,j=0,z=0,R=0,we=0,$e=0,Oe=0,je=0,ze=s.length,Je=ze-1,Re="",Te="",Ue="",Ve="",Xe="",Ye="";R<ze;){if(C=s.charCodeAt(R),R===Je)if(h+d+u+o!==0){if(0!==h)C=h===Z?I:Z;d=u=o=0,ze++,Je++}if(h+d+u+o===0){if(R===Je){if(we>0)Te=Te.replace(c,"");if(Te.trim().length>0){switch(C){case M:case K:case W:case J:case I:break;default:Te+=s.charAt(R)}C=W}}if(1===$e)switch(C){case B:case q:case W:case Y:case X:case D:case E:case U:$e=0;case K:case J:case I:case M:break;default:for($e=0,je=R,g=C,R--,C=W;je<ze;)switch(s.charCodeAt(je++)){case I:case J:case W:++R,C=g,je=ze;break;case V:if(we>0)++R,C=g;case B:je=ze}}switch(C){case B:for(g=(Te=Te.trim()).charCodeAt(0),y=1,je=++R;R<ze;){switch(C=s.charCodeAt(R)){case B:y++;break;case q:y--;break;case Z:switch(A=s.charCodeAt(R+1)){case T:case Z:R=Qe(A,R,Je,s)}break;case G:C++;case D:C++;case Y:case X:for(;R++<Je&&s.charCodeAt(R)!==C;);}if(0===y)break;R++}if(Ue=s.substring(je,R),g===re)g=(Te=Te.replace(r,"").trim()).charCodeAt(0);switch(g){case L:if(we>0)Te=Te.replace(c,"");switch(A=Te.charCodeAt(1)){case ue:case ie:case fe:case Q:f=a;break;default:f=xe}if(je=(Ue=He(a,f,Ue,A,i+1)).length,me>0&&0===je)je=Te.length;if(ye>0)if(f=Ie(xe,Te,Oe),n=Pe(We,Ue,f,a,pe,be,je,A,i,t),Te=f.join(""),void 0!==n)if(0===(je=(Ue=n.trim()).length))A=0,Ue="";if(je>0)switch(A){case fe:Te=Te.replace(x,Me);case ue:case ie:case Q:Ue=Te+"{"+Ue+"}";break;case te:if(Ue=(Te=Te.replace(b,"$1 $2"+(Be>0?De:"")))+"{"+Ue+"}",1===Ae||2===Ae&&Le("@"+Ue,3))Ue="@"+N+Ue+"@"+Ue;else Ue="@"+Ue;break;default:if(Ue=Te+Ue,t===de)Ve+=Ue,Ue=""}else Ue="";break;default:Ue=He(a,Ie(a,Te,Oe),Ue,t,i+1)}Xe+=Ue,O=0,$e=0,z=0,we=0,Oe=0,j=0,Te="",Ue="",C=s.charCodeAt(++R);break;case q:case W:if((je=(Te=(we>0?Te.replace(c,""):Te).trim()).length)>1){if(0===z)if((g=Te.charCodeAt(0))===Q||g>96&&g<123)je=(Te=Te.replace(" ",":")).length;if(ye>0)if(void 0!==(n=Pe(Se,Te,a,e,pe,be,Ve.length,t,i,t)))if(0===(je=(Te=n.trim()).length))Te="\0\0";switch(g=Te.charCodeAt(0),A=Te.charCodeAt(1),g){case re:break;case L:if(A===oe||A===he){Ye+=Te+s.charAt(R);break}default:if(Te.charCodeAt(je-1)===V)break;Ve+=Ke(Te,g,A,Te.charCodeAt(2))}}O=0,$e=0,z=0,we=0,Oe=0,Te="",C=s.charCodeAt(++R)}}switch(C){case J:case I:if(h+d+u+o+ve===0)switch($){case E:case X:case Y:case L:case ae:case _:case T:case ee:case Z:case Q:case V:case U:case W:case B:case q:break;default:if(z>0)$e=1}if(h===Z)h=0;else if(ge+O===0&&t!==te&&Te.length>0)we=1,Te+="\0";if(ye*qe>0)Pe(Ne,Te,a,e,pe,be,Ve.length,t,i,t);be=1,pe++;break;case W:case q:if(h+d+u+o===0){be++;break}default:switch(be++,Re=s.charAt(R),C){case K:case M:if(d+o+h===0)switch(w){case U:case V:case K:case M:Re="";break;default:if(C!==M)Re=" "}break;case re:Re="\\0";break;case ce:Re="\\f";break;case se:Re="\\v";break;case P:if(d+h+o===0&&ge>0)Oe=1,we=1,Re="\f"+Re;break;case 108:if(d+h+o+ke===0&&z>0)switch(R-z){case 2:if(w===ne&&s.charCodeAt(R-3)===V)ke=w;case 8:if(m===le)ke=m}break;case V:if(d+h+o===0)z=R;break;case U:if(h+u+d+o===0)we=1,Re+="\r";break;case Y:case X:if(0===h)d=d===C?0:0===d?C:d;break;case G:if(d+h+u===0)o++;break;case H:if(d+h+u===0)o--;break;case E:if(d+h+o===0)u--;break;case D:if(d+h+o===0){if(0===O)switch(2*w+3*m){case 533:break;default:y=0,O=1}u++}break;case L:if(h+u+d+o+z+j===0)j=1;break;case T:case Z:if(d+o+u>0)break;switch(h){case 0:switch(2*C+3*s.charCodeAt(R+1)){case 235:h=Z;break;case 220:je=R,h=T}break;case T:if(C===Z&&w===T&&je+2!==R){if(33===s.charCodeAt(je+2))Ve+=s.substring(je,R+1);Re="",h=0}}}if(0===h){if(ge+d+o+j===0&&t!==te&&C!==W)switch(C){case U:case ae:case _:case ee:case E:case D:if(0===O){switch(w){case K:case M:case I:case J:Re+="\0";break;default:Re="\0"+Re+(C===U?"":"\0")}we=1}else switch(C){case D:if(z+7===R&&108===w)z=0;O=++y;break;case E:if(0==(O=--y))we=1,Re+="\0"}break;case K:case M:switch(w){case re:case B:case q:case W:case U:case ce:case K:case M:case I:case J:break;default:if(0===O)we=1,Re+="\0"}}if(Te+=Re,C!==M&&C!==K)$=C}}m=w,w=C,R++}if(je=Ve.length,me>0)if(0===je&&0===Xe.length&&0===a[0].length==false)if(t!==ie||1===a.length&&(ge>0?Ee:Ge)===a[0])je=a.join(",").length+2;if(je>0){if(f=0===ge&&t!==te?function(e){for(var a,r,s=0,t=e.length,i=Array(t);s<t;++s){for(var f=e[s].split(l),n="",o=0,h=0,u=0,d=0,b=f.length;o<b;++o){if(0===(h=(r=f[o]).length)&&b>1)continue;if(u=n.charCodeAt(n.length-1),d=r.charCodeAt(0),a="",0!==o)switch(u){case T:case ae:case _:case ee:case M:case D:break;default:a=" "}switch(d){case P:r=a+Ee;case ae:case _:case ee:case M:case E:case D:break;case G:r=a+r+Ee;break;case V:switch(2*r.charCodeAt(1)+3*r.charCodeAt(2)){case 530:if(Ce>0){r=a+r.substring(8,h-1);break}default:if(o<1||f[o-1].length<1)r=a+Ee+r}break;case U:a="";default:if(h>1&&r.indexOf(":")>0)r=a+r.replace(v,"$1"+Ee+"$2");else r=a+r+Ee}n+=r}i[s]=n.replace(c,"").trim()}return i}(a):a,ye>0)if(void 0!==(n=Pe(Fe,Ve,f,e,pe,be,je,t,i,t))&&0===(Ve=n).length)return Ye+Ve+Xe;if(Ve=f.join(",")+"{"+Ve+"}",Ae*ke!=0){if(2===Ae&&!Le(Ve,2))ke=0;switch(ke){case le:Ve=Ve.replace(k,":"+S+"$1")+Ve;break;case ne:Ve=Ve.replace(p,"::"+N+"input-$1")+Ve.replace(p,"::"+S+"$1")+Ve.replace(p,":"+F+"input-$1")+Ve}ke=0}}return Ye+Ve+Xe}function Ie(e,a,r){var c=a.trim().split(o),s=c,t=c.length,i=e.length;switch(i){case 0:case 1:for(var f=0,n=0===i?"":e[0]+" ";f<t;++f)s[f]=Je(n,s[f],r,i).trim();break;default:f=0;var l=0;for(s=[];f<t;++f)for(var h=0;h<i;++h)s[l++]=Je(e[h]+" ",c[f],r,i).trim()}return s}function Je(e,a,r,c){var s=a,t=s.charCodeAt(0);if(t<33)t=(s=s.trim()).charCodeAt(0);switch(t){case P:switch(ge+c){case 0:case 1:if(0===e.trim().length)break;default:return s.replace(h,"$1"+e.trim())}break;case V:switch(s.charCodeAt(1)){case 103:if(Ce>0&&ge>0)return s.replace(u,"$1").replace(h,"$1"+Ge);break;default:return e.trim()+s.replace(h,"$1"+e.trim())}default:if(r*ge>0&&s.indexOf("\f")>0)return s.replace(h,(e.charCodeAt(0)===V?"":"$1")+e.trim())}return e+s}function Ke(e,a,r,c){var l,o=0,h=e+";",u=2*a+3*r+4*c;if(944===u)return function(e){var a=e.length,r=e.indexOf(":",9)+1,c=e.substring(0,r).trim(),s=e.substring(r,a-1).trim();switch(e.charCodeAt(9)*Be){case 0:break;case Q:if(110!==e.charCodeAt(10))break;default:for(var t=s.split((s="",f)),i=0,r=0,a=t.length;i<a;r=0,++i){for(var l=t[i],o=l.split(n);l=o[r];){var h=l.charCodeAt(0);if(1===Be&&(h>L&&h<90||h>96&&h<123||h===R||h===Q&&l.charCodeAt(1)!==Q))switch(isNaN(parseFloat(l))+(-1!==l.indexOf("("))){case 1:switch(l){case"infinite":case"alternate":case"backwards":case"running":case"normal":case"forwards":case"both":case"none":case"linear":case"ease":case"ease-in":case"ease-out":case"ease-in-out":case"paused":case"reverse":case"alternate-reverse":case"inherit":case"initial":case"unset":case"step-start":case"step-end":break;default:l+=De}}o[r++]=l}s+=(0===i?"":",")+o.join(" ")}}if(s=c+s+";",1===Ae||2===Ae&&Le(s,1))return N+s+s;return s}(h);else if(0===Ae||2===Ae&&!Le(h,1))return h;switch(u){case 1015:return 97===h.charCodeAt(10)?N+h+h:h;case 951:return 116===h.charCodeAt(3)?N+h+h:h;case 963:return 110===h.charCodeAt(5)?N+h+h:h;case 1009:if(100!==h.charCodeAt(4))break;case 969:case 942:return N+h+h;case 978:return N+h+S+h+h;case 1019:case 983:return N+h+S+h+F+h+h;case 883:if(h.charCodeAt(8)===Q)return N+h+h;if(h.indexOf("image-set(",11)>0)return h.replace(z,"$1"+N+"$2")+h;return h;case 932:if(h.charCodeAt(4)===Q)switch(h.charCodeAt(5)){case 103:return N+"box-"+h.replace("-grow","")+N+h+F+h.replace("grow","positive")+h;case 115:return N+h+F+h.replace("shrink","negative")+h;case 98:return N+h+F+h.replace("basis","preferred-size")+h}return N+h+F+h+h;case 964:return N+h+F+"flex-"+h+h;case 1023:if(99!==h.charCodeAt(8))break;return l=h.substring(h.indexOf(":",15)).replace("flex-","").replace("space-between","justify"),N+"box-pack"+l+N+h+F+"flex-pack"+l+h;case 1005:return t.test(h)?h.replace(s,":"+N)+h.replace(s,":"+S)+h:h;case 1e3:switch(o=(l=h.substring(13).trim()).indexOf("-")+1,l.charCodeAt(0)+l.charCodeAt(o)){case 226:l=h.replace(m,"tb");break;case 232:l=h.replace(m,"tb-rl");break;case 220:l=h.replace(m,"lr");break;default:return h}return N+h+F+l+h;case 1017:if(-1===h.indexOf("sticky",9))return h;case 975:switch(o=(h=e).length-10,u=(l=(33===h.charCodeAt(o)?h.substring(0,o):h).substring(e.indexOf(":",7)+1).trim()).charCodeAt(0)+(0|l.charCodeAt(7))){case 203:if(l.charCodeAt(8)<111)break;case 115:h=h.replace(l,N+l)+";"+h;break;case 207:case 102:h=h.replace(l,N+(u>102?"inline-":"")+"box")+";"+h.replace(l,N+l)+";"+h.replace(l,F+l+"box")+";"+h}return h+";";case 938:if(h.charCodeAt(5)===Q)switch(h.charCodeAt(6)){case 105:return l=h.replace("-items",""),N+h+N+"box-"+l+F+"flex-"+l+h;case 115:return N+h+F+"flex-item-"+h.replace(y,"")+h;default:return N+h+F+"flex-line-pack"+h.replace("align-content","").replace(y,"")+h}break;case 973:case 989:if(h.charCodeAt(3)!==Q||122===h.charCodeAt(4))break;case 931:case 953:if(true===j.test(e))if(115===(l=e.substring(e.indexOf(":")+1)).charCodeAt(0))return Ke(e.replace("stretch","fill-available"),a,r,c).replace(":fill-available",":stretch");else return h.replace(l,N+l)+h.replace(l,S+l.replace("fill-",""))+h;break;case 962:if(h=N+h+(102===h.charCodeAt(5)?F+h:"")+h,r+c===211&&105===h.charCodeAt(13)&&h.indexOf("transform",10)>0)return h.substring(0,h.indexOf(";",27)+1).replace(i,"$1"+N+"$2")+h}return h}function Le(e,a){var r=e.indexOf(1===a?":":"{"),c=e.substring(0,3!==a?r:10),s=e.substring(r+1,e.length-1);return Oe(2!==a?c:c.replace(O,"$1"),s,a)}function Me(e,a){var r=Ke(a,a.charCodeAt(0),a.charCodeAt(1),a.charCodeAt(2));return r!==a+";"?r.replace($," or ($1)").substring(4):"("+a+")"}function Pe(e,a,r,c,s,t,i,f,n,l){for(var o,h=0,u=a;h<ye;++h)switch(o=$e[h].call(Te,e,u,r,c,s,t,i,f,n,l)){case void 0:case false:case true:case null:break;default:u=o}if(u!==a)return u}function Qe(e,a,r,c){for(var s=a+1;s<r;++s)switch(c.charCodeAt(s)){case Z:if(e===T)if(c.charCodeAt(s-1)===T&&a+2!==s)return s+1;break;case I:if(e===Z)return s+1}return s}function Re(e){for(var a in e){var r=e[a];switch(a){case"keyframe":Be=0|r;break;case"global":Ce=0|r;break;case"cascade":ge=0|r;break;case"compress":we=0|r;break;case"semicolon":ve=0|r;break;case"preserve":me=0|r;break;case"prefix":if(Oe=null,!r)Ae=0;else if("function"!=typeof r)Ae=1;else Ae=2,Oe=r}}return Re}function Te(a,r){if(void 0!==this&&this.constructor===Te)return e(a);var s=a,t=s.charCodeAt(0);if(t<33)t=(s=s.trim()).charCodeAt(0);if(Be>0)De=s.replace(d,t===G?"":"-");if(t=1,1===ge)Ge=s;else Ee=s;var i,f=[Ge];if(ye>0)if(void 0!==(i=Pe(ze,r,f,f,pe,be,0,0,0,0))&&"string"==typeof i)r=i;var n=He(xe,f,r,0,0);if(ye>0)if(void 0!==(i=Pe(je,n,f,f,pe,be,n.length,0,0,0))&&"string"!=typeof(n=i))t=0;return De="",Ge="",Ee="",ke=0,pe=1,be=1,we*t==0?n:n.replace(c,"").replace(g,"").replace(A,"$1").replace(C,"$1").replace(w," ")}if(Te.use=function e(a){switch(a){case void 0:case null:ye=$e.length=0;break;default:if("function"==typeof a)$e[ye++]=a;else if("object"==typeof a)for(var r=0,c=a.length;r<c;++r)e(a[r]);else qe=0|!!a}return e},Te.set=Re,void 0!==a)Re(a);return Te});
 
@@ -33253,216 +48014,7 @@ function concatArrays(originVal, newVal) {
 
 var _default = merge;
 exports.default = _default;
-},{"is-what":"../node_modules/is-what/dist/index.esm.js"}],"../node_modules/process/browser.js":[function(require,module,exports) {
-
-// shim for using process in browser
-var process = module.exports = {}; // cached from whatever global is present so that test runners that stub it
-// don't break things.  But we need to wrap it in a try catch in case it is
-// wrapped in strict mode code which doesn't define any globals.  It's inside a
-// function because try/catches deoptimize in certain engines.
-
-var cachedSetTimeout;
-var cachedClearTimeout;
-
-function defaultSetTimout() {
-  throw new Error('setTimeout has not been defined');
-}
-
-function defaultClearTimeout() {
-  throw new Error('clearTimeout has not been defined');
-}
-
-(function () {
-  try {
-    if (typeof setTimeout === 'function') {
-      cachedSetTimeout = setTimeout;
-    } else {
-      cachedSetTimeout = defaultSetTimout;
-    }
-  } catch (e) {
-    cachedSetTimeout = defaultSetTimout;
-  }
-
-  try {
-    if (typeof clearTimeout === 'function') {
-      cachedClearTimeout = clearTimeout;
-    } else {
-      cachedClearTimeout = defaultClearTimeout;
-    }
-  } catch (e) {
-    cachedClearTimeout = defaultClearTimeout;
-  }
-})();
-
-function runTimeout(fun) {
-  if (cachedSetTimeout === setTimeout) {
-    //normal enviroments in sane situations
-    return setTimeout(fun, 0);
-  } // if setTimeout wasn't available but was latter defined
-
-
-  if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
-    cachedSetTimeout = setTimeout;
-    return setTimeout(fun, 0);
-  }
-
-  try {
-    // when when somebody has screwed with setTimeout but no I.E. maddness
-    return cachedSetTimeout(fun, 0);
-  } catch (e) {
-    try {
-      // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
-      return cachedSetTimeout.call(null, fun, 0);
-    } catch (e) {
-      // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
-      return cachedSetTimeout.call(this, fun, 0);
-    }
-  }
-}
-
-function runClearTimeout(marker) {
-  if (cachedClearTimeout === clearTimeout) {
-    //normal enviroments in sane situations
-    return clearTimeout(marker);
-  } // if clearTimeout wasn't available but was latter defined
-
-
-  if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
-    cachedClearTimeout = clearTimeout;
-    return clearTimeout(marker);
-  }
-
-  try {
-    // when when somebody has screwed with setTimeout but no I.E. maddness
-    return cachedClearTimeout(marker);
-  } catch (e) {
-    try {
-      // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
-      return cachedClearTimeout.call(null, marker);
-    } catch (e) {
-      // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
-      // Some versions of I.E. have different rules for clearTimeout vs setTimeout
-      return cachedClearTimeout.call(this, marker);
-    }
-  }
-}
-
-var queue = [];
-var draining = false;
-var currentQueue;
-var queueIndex = -1;
-
-function cleanUpNextTick() {
-  if (!draining || !currentQueue) {
-    return;
-  }
-
-  draining = false;
-
-  if (currentQueue.length) {
-    queue = currentQueue.concat(queue);
-  } else {
-    queueIndex = -1;
-  }
-
-  if (queue.length) {
-    drainQueue();
-  }
-}
-
-function drainQueue() {
-  if (draining) {
-    return;
-  }
-
-  var timeout = runTimeout(cleanUpNextTick);
-  draining = true;
-  var len = queue.length;
-
-  while (len) {
-    currentQueue = queue;
-    queue = [];
-
-    while (++queueIndex < len) {
-      if (currentQueue) {
-        currentQueue[queueIndex].run();
-      }
-    }
-
-    queueIndex = -1;
-    len = queue.length;
-  }
-
-  currentQueue = null;
-  draining = false;
-  runClearTimeout(timeout);
-}
-
-process.nextTick = function (fun) {
-  var args = new Array(arguments.length - 1);
-
-  if (arguments.length > 1) {
-    for (var i = 1; i < arguments.length; i++) {
-      args[i - 1] = arguments[i];
-    }
-  }
-
-  queue.push(new Item(fun, args));
-
-  if (queue.length === 1 && !draining) {
-    runTimeout(drainQueue);
-  }
-}; // v8 likes predictible objects
-
-
-function Item(fun, array) {
-  this.fun = fun;
-  this.array = array;
-}
-
-Item.prototype.run = function () {
-  this.fun.apply(null, this.array);
-};
-
-process.title = 'browser';
-process.env = {};
-process.argv = [];
-process.version = ''; // empty string to avoid regexp issues
-
-process.versions = {};
-
-function noop() {}
-
-process.on = noop;
-process.addListener = noop;
-process.once = noop;
-process.off = noop;
-process.removeListener = noop;
-process.removeAllListeners = noop;
-process.emit = noop;
-process.prependListener = noop;
-process.prependOnceListener = noop;
-
-process.listeners = function (name) {
-  return [];
-};
-
-process.binding = function (name) {
-  throw new Error('process.binding is not supported');
-};
-
-process.cwd = function () {
-  return '/';
-};
-
-process.chdir = function (dir) {
-  throw new Error('process.chdir is not supported');
-};
-
-process.umask = function () {
-  return 0;
-};
-},{}],"../node_modules/styled-components/dist/styled-components.browser.esm.js":[function(require,module,exports) {
+},{"is-what":"../node_modules/is-what/dist/index.esm.js"}],"../node_modules/styled-components/dist/styled-components.browser.esm.js":[function(require,module,exports) {
 var process = require("process");
 "use strict";
 
@@ -39154,7 +53706,14632 @@ var Button = _styledComponents.default.button.withConfig({
 
 var _default = Button;
 exports.default = _default;
-},{"styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js"}],"pages/home.js":[function(require,module,exports) {
+},{"styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js"}],"../node_modules/xtend/immutable.js":[function(require,module,exports) {
+module.exports = extend;
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+
+function extend() {
+  var target = {};
+
+  for (var i = 0; i < arguments.length; i++) {
+    var source = arguments[i];
+
+    for (var key in source) {
+      if (hasOwnProperty.call(source, key)) {
+        target[key] = source[key];
+      }
+    }
+  }
+
+  return target;
+}
+},{}],"../node_modules/extend/index.js":[function(require,module,exports) {
+'use strict';
+
+var hasOwn = Object.prototype.hasOwnProperty;
+var toStr = Object.prototype.toString;
+var defineProperty = Object.defineProperty;
+var gOPD = Object.getOwnPropertyDescriptor;
+
+var isArray = function isArray(arr) {
+	if (typeof Array.isArray === 'function') {
+		return Array.isArray(arr);
+	}
+
+	return toStr.call(arr) === '[object Array]';
+};
+
+var isPlainObject = function isPlainObject(obj) {
+	if (!obj || toStr.call(obj) !== '[object Object]') {
+		return false;
+	}
+
+	var hasOwnConstructor = hasOwn.call(obj, 'constructor');
+	var hasIsPrototypeOf = obj.constructor && obj.constructor.prototype && hasOwn.call(obj.constructor.prototype, 'isPrototypeOf');
+	// Not own constructor property must be Object
+	if (obj.constructor && !hasOwnConstructor && !hasIsPrototypeOf) {
+		return false;
+	}
+
+	// Own properties are enumerated firstly, so to speed up,
+	// if last one is own, then all properties are own.
+	var key;
+	for (key in obj) { /**/ }
+
+	return typeof key === 'undefined' || hasOwn.call(obj, key);
+};
+
+// If name is '__proto__', and Object.defineProperty is available, define __proto__ as an own property on target
+var setProperty = function setProperty(target, options) {
+	if (defineProperty && options.name === '__proto__') {
+		defineProperty(target, options.name, {
+			enumerable: true,
+			configurable: true,
+			value: options.newValue,
+			writable: true
+		});
+	} else {
+		target[options.name] = options.newValue;
+	}
+};
+
+// Return undefined instead of __proto__ if '__proto__' is not an own property
+var getProperty = function getProperty(obj, name) {
+	if (name === '__proto__') {
+		if (!hasOwn.call(obj, name)) {
+			return void 0;
+		} else if (gOPD) {
+			// In early versions of node, obj['__proto__'] is buggy when obj has
+			// __proto__ as an own property. Object.getOwnPropertyDescriptor() works.
+			return gOPD(obj, name).value;
+		}
+	}
+
+	return obj[name];
+};
+
+module.exports = function extend() {
+	var options, name, src, copy, copyIsArray, clone;
+	var target = arguments[0];
+	var i = 1;
+	var length = arguments.length;
+	var deep = false;
+
+	// Handle a deep copy situation
+	if (typeof target === 'boolean') {
+		deep = target;
+		target = arguments[1] || {};
+		// skip the boolean and the target
+		i = 2;
+	}
+	if (target == null || (typeof target !== 'object' && typeof target !== 'function')) {
+		target = {};
+	}
+
+	for (; i < length; ++i) {
+		options = arguments[i];
+		// Only deal with non-null/undefined values
+		if (options != null) {
+			// Extend the base object
+			for (name in options) {
+				src = getProperty(target, name);
+				copy = getProperty(options, name);
+
+				// Prevent never-ending loop
+				if (target !== copy) {
+					// Recurse if we're merging plain objects or arrays
+					if (deep && copy && (isPlainObject(copy) || (copyIsArray = isArray(copy)))) {
+						if (copyIsArray) {
+							copyIsArray = false;
+							clone = src && isArray(src) ? src : [];
+						} else {
+							clone = src && isPlainObject(src) ? src : {};
+						}
+
+						// Never move original objects, clone them
+						setProperty(target, { name: name, newValue: extend(deep, clone, copy) });
+
+					// Don't bring in undefined values
+					} else if (typeof copy !== 'undefined') {
+						setProperty(target, { name: name, newValue: copy });
+					}
+				}
+			}
+		}
+	}
+
+	// Return the modified object
+	return target;
+};
+
+},{}],"../node_modules/bail/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = bail
+
+function bail(err) {
+  if (err) {
+    throw err
+  }
+}
+
+},{}],"../node_modules/unist-util-stringify-position/index.js":[function(require,module,exports) {
+'use strict'
+
+var own = {}.hasOwnProperty
+
+module.exports = stringify
+
+function stringify(value) {
+  /* Nothing. */
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  /* Node. */
+  if (own.call(value, 'position') || own.call(value, 'type')) {
+    return position(value.position)
+  }
+
+  /* Position. */
+  if (own.call(value, 'start') || own.call(value, 'end')) {
+    return position(value)
+  }
+
+  /* Point. */
+  if (own.call(value, 'line') || own.call(value, 'column')) {
+    return point(value)
+  }
+
+  /* ? */
+  return null
+}
+
+function point(point) {
+  if (!point || typeof point !== 'object') {
+    point = {}
+  }
+
+  return index(point.line) + ':' + index(point.column)
+}
+
+function position(pos) {
+  if (!pos || typeof pos !== 'object') {
+    pos = {}
+  }
+
+  return point(pos.start) + '-' + point(pos.end)
+}
+
+function index(value) {
+  return value && typeof value === 'number' ? value : 1
+}
+
+},{}],"../node_modules/vfile-message/index.js":[function(require,module,exports) {
+'use strict'
+
+var stringify = require('unist-util-stringify-position')
+
+module.exports = VMessage
+
+// Inherit from `Error#`.
+function VMessagePrototype() {}
+VMessagePrototype.prototype = Error.prototype
+VMessage.prototype = new VMessagePrototype()
+
+// Message properties.
+var proto = VMessage.prototype
+
+proto.file = ''
+proto.name = ''
+proto.reason = ''
+proto.message = ''
+proto.stack = ''
+proto.fatal = null
+proto.column = null
+proto.line = null
+
+// Construct a new VMessage.
+//
+// Note: We cannot invoke `Error` on the created context, as that adds readonly
+// `line` and `column` attributes on Safari 9, thus throwing and failing the
+// data.
+function VMessage(reason, position, origin) {
+  var parts
+  var range
+  var location
+
+  if (typeof position === 'string') {
+    origin = position
+    position = null
+  }
+
+  parts = parseOrigin(origin)
+  range = stringify(position) || '1:1'
+
+  location = {
+    start: {line: null, column: null},
+    end: {line: null, column: null}
+  }
+
+  // Node.
+  if (position && position.position) {
+    position = position.position
+  }
+
+  if (position) {
+    // Position.
+    if (position.start) {
+      location = position
+      position = position.start
+    } else {
+      // Point.
+      location.start = position
+    }
+  }
+
+  if (reason.stack) {
+    this.stack = reason.stack
+    reason = reason.message
+  }
+
+  this.message = reason
+  this.name = range
+  this.reason = reason
+  this.line = position ? position.line : null
+  this.column = position ? position.column : null
+  this.location = location
+  this.source = parts[0]
+  this.ruleId = parts[1]
+}
+
+function parseOrigin(origin) {
+  var result = [null, null]
+  var index
+
+  if (typeof origin === 'string') {
+    index = origin.indexOf(':')
+
+    if (index === -1) {
+      result[1] = origin
+    } else {
+      result[0] = origin.slice(0, index)
+      result[1] = origin.slice(index + 1)
+    }
+  }
+
+  return result
+}
+
+},{"unist-util-stringify-position":"../node_modules/unist-util-stringify-position/index.js"}],"../node_modules/path-browserify/index.js":[function(require,module,exports) {
+var process = require("process");
+// .dirname, .basename, and .extname methods are extracted from Node.js v8.11.1,
+// backported and transplited with Babel, with backwards-compat fixes
+
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// resolves . and .. elements in a path array with directory names there
+// must be no slashes, empty elements, or device names (c:\) in the array
+// (so also no leading and trailing slashes - it does not distinguish
+// relative and absolute paths)
+function normalizeArray(parts, allowAboveRoot) {
+  // if the path tries to go above the root, `up` ends up > 0
+  var up = 0;
+  for (var i = parts.length - 1; i >= 0; i--) {
+    var last = parts[i];
+    if (last === '.') {
+      parts.splice(i, 1);
+    } else if (last === '..') {
+      parts.splice(i, 1);
+      up++;
+    } else if (up) {
+      parts.splice(i, 1);
+      up--;
+    }
+  }
+
+  // if the path is allowed to go above the root, restore leading ..s
+  if (allowAboveRoot) {
+    for (; up--; up) {
+      parts.unshift('..');
+    }
+  }
+
+  return parts;
+}
+
+// path.resolve([from ...], to)
+// posix version
+exports.resolve = function() {
+  var resolvedPath = '',
+      resolvedAbsolute = false;
+
+  for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
+    var path = (i >= 0) ? arguments[i] : process.cwd();
+
+    // Skip empty and invalid entries
+    if (typeof path !== 'string') {
+      throw new TypeError('Arguments to path.resolve must be strings');
+    } else if (!path) {
+      continue;
+    }
+
+    resolvedPath = path + '/' + resolvedPath;
+    resolvedAbsolute = path.charAt(0) === '/';
+  }
+
+  // At this point the path should be resolved to a full absolute path, but
+  // handle relative paths to be safe (might happen when process.cwd() fails)
+
+  // Normalize the path
+  resolvedPath = normalizeArray(filter(resolvedPath.split('/'), function(p) {
+    return !!p;
+  }), !resolvedAbsolute).join('/');
+
+  return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
+};
+
+// path.normalize(path)
+// posix version
+exports.normalize = function(path) {
+  var isAbsolute = exports.isAbsolute(path),
+      trailingSlash = substr(path, -1) === '/';
+
+  // Normalize the path
+  path = normalizeArray(filter(path.split('/'), function(p) {
+    return !!p;
+  }), !isAbsolute).join('/');
+
+  if (!path && !isAbsolute) {
+    path = '.';
+  }
+  if (path && trailingSlash) {
+    path += '/';
+  }
+
+  return (isAbsolute ? '/' : '') + path;
+};
+
+// posix version
+exports.isAbsolute = function(path) {
+  return path.charAt(0) === '/';
+};
+
+// posix version
+exports.join = function() {
+  var paths = Array.prototype.slice.call(arguments, 0);
+  return exports.normalize(filter(paths, function(p, index) {
+    if (typeof p !== 'string') {
+      throw new TypeError('Arguments to path.join must be strings');
+    }
+    return p;
+  }).join('/'));
+};
+
+
+// path.relative(from, to)
+// posix version
+exports.relative = function(from, to) {
+  from = exports.resolve(from).substr(1);
+  to = exports.resolve(to).substr(1);
+
+  function trim(arr) {
+    var start = 0;
+    for (; start < arr.length; start++) {
+      if (arr[start] !== '') break;
+    }
+
+    var end = arr.length - 1;
+    for (; end >= 0; end--) {
+      if (arr[end] !== '') break;
+    }
+
+    if (start > end) return [];
+    return arr.slice(start, end - start + 1);
+  }
+
+  var fromParts = trim(from.split('/'));
+  var toParts = trim(to.split('/'));
+
+  var length = Math.min(fromParts.length, toParts.length);
+  var samePartsLength = length;
+  for (var i = 0; i < length; i++) {
+    if (fromParts[i] !== toParts[i]) {
+      samePartsLength = i;
+      break;
+    }
+  }
+
+  var outputParts = [];
+  for (var i = samePartsLength; i < fromParts.length; i++) {
+    outputParts.push('..');
+  }
+
+  outputParts = outputParts.concat(toParts.slice(samePartsLength));
+
+  return outputParts.join('/');
+};
+
+exports.sep = '/';
+exports.delimiter = ':';
+
+exports.dirname = function (path) {
+  if (typeof path !== 'string') path = path + '';
+  if (path.length === 0) return '.';
+  var code = path.charCodeAt(0);
+  var hasRoot = code === 47 /*/*/;
+  var end = -1;
+  var matchedSlash = true;
+  for (var i = path.length - 1; i >= 1; --i) {
+    code = path.charCodeAt(i);
+    if (code === 47 /*/*/) {
+        if (!matchedSlash) {
+          end = i;
+          break;
+        }
+      } else {
+      // We saw the first non-path separator
+      matchedSlash = false;
+    }
+  }
+
+  if (end === -1) return hasRoot ? '/' : '.';
+  if (hasRoot && end === 1) {
+    // return '//';
+    // Backwards-compat fix:
+    return '/';
+  }
+  return path.slice(0, end);
+};
+
+function basename(path) {
+  if (typeof path !== 'string') path = path + '';
+
+  var start = 0;
+  var end = -1;
+  var matchedSlash = true;
+  var i;
+
+  for (i = path.length - 1; i >= 0; --i) {
+    if (path.charCodeAt(i) === 47 /*/*/) {
+        // If we reached a path separator that was not part of a set of path
+        // separators at the end of the string, stop now
+        if (!matchedSlash) {
+          start = i + 1;
+          break;
+        }
+      } else if (end === -1) {
+      // We saw the first non-path separator, mark this as the end of our
+      // path component
+      matchedSlash = false;
+      end = i + 1;
+    }
+  }
+
+  if (end === -1) return '';
+  return path.slice(start, end);
+}
+
+// Uses a mixed approach for backwards-compatibility, as ext behavior changed
+// in new Node.js versions, so only basename() above is backported here
+exports.basename = function (path, ext) {
+  var f = basename(path);
+  if (ext && f.substr(-1 * ext.length) === ext) {
+    f = f.substr(0, f.length - ext.length);
+  }
+  return f;
+};
+
+exports.extname = function (path) {
+  if (typeof path !== 'string') path = path + '';
+  var startDot = -1;
+  var startPart = 0;
+  var end = -1;
+  var matchedSlash = true;
+  // Track the state of characters (if any) we see before our first dot and
+  // after any path separator we find
+  var preDotState = 0;
+  for (var i = path.length - 1; i >= 0; --i) {
+    var code = path.charCodeAt(i);
+    if (code === 47 /*/*/) {
+        // If we reached a path separator that was not part of a set of path
+        // separators at the end of the string, stop now
+        if (!matchedSlash) {
+          startPart = i + 1;
+          break;
+        }
+        continue;
+      }
+    if (end === -1) {
+      // We saw the first non-path separator, mark this as the end of our
+      // extension
+      matchedSlash = false;
+      end = i + 1;
+    }
+    if (code === 46 /*.*/) {
+        // If this is our first dot, mark it as the start of our extension
+        if (startDot === -1)
+          startDot = i;
+        else if (preDotState !== 1)
+          preDotState = 1;
+    } else if (startDot !== -1) {
+      // We saw a non-dot and non-path separator before our dot, so we should
+      // have a good chance at having a non-empty extension
+      preDotState = -1;
+    }
+  }
+
+  if (startDot === -1 || end === -1 ||
+      // We saw a non-dot character immediately before the dot
+      preDotState === 0 ||
+      // The (right-most) trimmed path component is exactly '..'
+      preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
+    return '';
+  }
+  return path.slice(startDot, end);
+};
+
+function filter (xs, f) {
+    if (xs.filter) return xs.filter(f);
+    var res = [];
+    for (var i = 0; i < xs.length; i++) {
+        if (f(xs[i], i, xs)) res.push(xs[i]);
+    }
+    return res;
+}
+
+// String.prototype.substr - negative index don't work in IE8
+var substr = 'ab'.substr(-1) === 'b'
+    ? function (str, start, len) { return str.substr(start, len) }
+    : function (str, start, len) {
+        if (start < 0) start = str.length + start;
+        return str.substr(start, len);
+    }
+;
+
+},{"process":"../node_modules/process/browser.js"}],"../node_modules/replace-ext/index.js":[function(require,module,exports) {
+'use strict';
+
+var path = require('path');
+
+function replaceExt(npath, ext) {
+  if (typeof npath !== 'string') {
+    return npath;
+  }
+
+  if (npath.length === 0) {
+    return npath;
+  }
+
+  var nFileName = path.basename(npath, path.extname(npath)) + ext;
+  return path.join(path.dirname(npath), nFileName);
+}
+
+module.exports = replaceExt;
+},{"path":"../node_modules/path-browserify/index.js"}],"../node_modules/is-buffer/index.js":[function(require,module,exports) {
+/*!
+ * Determine if an object is a Buffer
+ *
+ * @author   Feross Aboukhadijeh <https://feross.org>
+ * @license  MIT
+ */
+
+// The _isBuffer check is for Safari 5-7 support, because it's missing
+// Object.prototype.constructor. Remove this eventually
+module.exports = function (obj) {
+  return obj != null && (isBuffer(obj) || isSlowBuffer(obj) || !!obj._isBuffer)
+}
+
+function isBuffer (obj) {
+  return !!obj.constructor && typeof obj.constructor.isBuffer === 'function' && obj.constructor.isBuffer(obj)
+}
+
+// For Node v0.10 support. Remove this eventually.
+function isSlowBuffer (obj) {
+  return typeof obj.readFloatLE === 'function' && typeof obj.slice === 'function' && isBuffer(obj.slice(0, 0))
+}
+
+},{}],"../node_modules/vfile/core.js":[function(require,module,exports) {
+var process = require("process");
+'use strict';
+
+var path = require('path');
+var replace = require('replace-ext');
+var buffer = require('is-buffer');
+
+module.exports = VFile;
+
+var own = {}.hasOwnProperty;
+var proto = VFile.prototype;
+
+proto.toString = toString;
+
+/* Order of setting (least specific to most), we need this because
+ * otherwise `{stem: 'a', path: '~/b.js'}` would throw, as a path
+ * is needed before a stem can be set. */
+var order = [
+  'history',
+  'path',
+  'basename',
+  'stem',
+  'extname',
+  'dirname'
+];
+
+/* Construct a new file. */
+function VFile(options) {
+  var prop;
+  var index;
+  var length;
+
+  if (!options) {
+    options = {};
+  } else if (typeof options === 'string' || buffer(options)) {
+    options = {contents: options};
+  } else if ('message' in options && 'messages' in options) {
+    return options;
+  }
+
+  if (!(this instanceof VFile)) {
+    return new VFile(options);
+  }
+
+  this.data = {};
+  this.messages = [];
+  this.history = [];
+  this.cwd = process.cwd();
+
+  /* Set path related properties in the correct order. */
+  index = -1;
+  length = order.length;
+
+  while (++index < length) {
+    prop = order[index];
+
+    if (own.call(options, prop)) {
+      this[prop] = options[prop];
+    }
+  }
+
+  /* Set non-path related properties. */
+  for (prop in options) {
+    if (order.indexOf(prop) === -1) {
+      this[prop] = options[prop];
+    }
+  }
+}
+
+/* Access full path (`~/index.min.js`). */
+Object.defineProperty(proto, 'path', {
+  get: function () {
+    return this.history[this.history.length - 1];
+  },
+  set: function (path) {
+    assertNonEmpty(path, 'path');
+
+    if (path !== this.path) {
+      this.history.push(path);
+    }
+  }
+});
+
+/* Access parent path (`~`). */
+Object.defineProperty(proto, 'dirname', {
+  get: function () {
+    return typeof this.path === 'string' ? path.dirname(this.path) : undefined;
+  },
+  set: function (dirname) {
+    assertPath(this.path, 'dirname');
+    this.path = path.join(dirname || '', this.basename);
+  }
+});
+
+/* Access basename (`index.min.js`). */
+Object.defineProperty(proto, 'basename', {
+  get: function () {
+    return typeof this.path === 'string' ? path.basename(this.path) : undefined;
+  },
+  set: function (basename) {
+    assertNonEmpty(basename, 'basename');
+    assertPart(basename, 'basename');
+    this.path = path.join(this.dirname || '', basename);
+  }
+});
+
+/* Access extname (`.js`). */
+Object.defineProperty(proto, 'extname', {
+  get: function () {
+    return typeof this.path === 'string' ? path.extname(this.path) : undefined;
+  },
+  set: function (extname) {
+    var ext = extname || '';
+
+    assertPart(ext, 'extname');
+    assertPath(this.path, 'extname');
+
+    if (ext) {
+      if (ext.charAt(0) !== '.') {
+        throw new Error('`extname` must start with `.`');
+      }
+
+      if (ext.indexOf('.', 1) !== -1) {
+        throw new Error('`extname` cannot contain multiple dots');
+      }
+    }
+
+    this.path = replace(this.path, ext);
+  }
+});
+
+/* Access stem (`index.min`). */
+Object.defineProperty(proto, 'stem', {
+  get: function () {
+    return typeof this.path === 'string' ? path.basename(this.path, this.extname) : undefined;
+  },
+  set: function (stem) {
+    assertNonEmpty(stem, 'stem');
+    assertPart(stem, 'stem');
+    this.path = path.join(this.dirname || '', stem + (this.extname || ''));
+  }
+});
+
+/* Get the value of the file. */
+function toString(encoding) {
+  var value = this.contents || '';
+  return buffer(value) ? value.toString(encoding) : String(value);
+}
+
+/* Assert that `part` is not a path (i.e., does
+ * not contain `path.sep`). */
+function assertPart(part, name) {
+  if (part.indexOf(path.sep) !== -1) {
+    throw new Error('`' + name + '` cannot be a path: did not expect `' + path.sep + '`');
+  }
+}
+
+/* Assert that `part` is not empty. */
+function assertNonEmpty(part, name) {
+  if (!part) {
+    throw new Error('`' + name + '` cannot be empty');
+  }
+}
+
+/* Assert `path` exists. */
+function assertPath(path, name) {
+  if (!path) {
+    throw new Error('Setting `' + name + '` requires `path` to be set too');
+  }
+}
+
+},{"path":"../node_modules/path-browserify/index.js","replace-ext":"../node_modules/replace-ext/index.js","is-buffer":"../node_modules/is-buffer/index.js","process":"../node_modules/process/browser.js"}],"../node_modules/vfile/index.js":[function(require,module,exports) {
+'use strict';
+
+var VMessage = require('vfile-message');
+var VFile = require('./core.js');
+
+module.exports = VFile;
+
+var proto = VFile.prototype;
+
+proto.message = message;
+proto.info = info;
+proto.fail = fail;
+
+/* Slight backwards compatibility.  Remove in the future. */
+proto.warn = message;
+
+/* Create a message with `reason` at `position`.
+ * When an error is passed in as `reason`, copies the stack. */
+function message(reason, position, origin) {
+  var filePath = this.path;
+  var message = new VMessage(reason, position, origin);
+
+  if (filePath) {
+    message.name = filePath + ':' + message.name;
+    message.file = filePath;
+  }
+
+  message.fatal = false;
+
+  this.messages.push(message);
+
+  return message;
+}
+
+/* Fail. Creates a vmessage, associates it with the file,
+ * and throws it. */
+function fail() {
+  var message = this.message.apply(this, arguments);
+
+  message.fatal = true;
+
+  throw message;
+}
+
+/* Info. Creates a vmessage, associates it with the file,
+ * and marks the fatality as null. */
+function info() {
+  var message = this.message.apply(this, arguments);
+
+  message.fatal = null;
+
+  return message;
+}
+
+},{"vfile-message":"../node_modules/vfile-message/index.js","./core.js":"../node_modules/vfile/core.js"}],"../node_modules/trough/wrap.js":[function(require,module,exports) {
+'use strict'
+
+var slice = [].slice
+
+module.exports = wrap
+
+// Wrap `fn`.
+// Can be sync or async; return a promise, receive a completion handler, return
+// new values and errors.
+function wrap(fn, callback) {
+  var invoked
+
+  return wrapped
+
+  function wrapped() {
+    var params = slice.call(arguments, 0)
+    var callback = fn.length > params.length
+    var result
+
+    if (callback) {
+      params.push(done)
+    }
+
+    try {
+      result = fn.apply(null, params)
+    } catch (error) {
+      // Well, this is quite the pickle.
+      // `fn` received a callback and invoked it (thus continuing the pipeline),
+      // but later also threw an error.
+      // We’re not about to restart the pipeline again, so the only thing left
+      // to do is to throw the thing instead.
+      if (callback && invoked) {
+        throw error
+      }
+
+      return done(error)
+    }
+
+    if (!callback) {
+      if (result && typeof result.then === 'function') {
+        result.then(then, done)
+      } else if (result instanceof Error) {
+        done(result)
+      } else {
+        then(result)
+      }
+    }
+  }
+
+  // Invoke `next`, only once.
+  function done() {
+    if (!invoked) {
+      invoked = true
+
+      callback.apply(null, arguments)
+    }
+  }
+
+  // Invoke `done` with one value.
+  // Tracks if an error is passed, too.
+  function then(value) {
+    done(null, value)
+  }
+}
+
+},{}],"../node_modules/trough/index.js":[function(require,module,exports) {
+'use strict'
+
+var wrap = require('./wrap.js')
+
+module.exports = trough
+
+trough.wrap = wrap
+
+var slice = [].slice
+
+// Create new middleware.
+function trough() {
+  var fns = []
+  var middleware = {}
+
+  middleware.run = run
+  middleware.use = use
+
+  return middleware
+
+  // Run `fns`.  Last argument must be a completion handler.
+  function run() {
+    var index = -1
+    var input = slice.call(arguments, 0, -1)
+    var done = arguments[arguments.length - 1]
+
+    if (typeof done !== 'function') {
+      throw new Error('Expected function as last argument, not ' + done)
+    }
+
+    next.apply(null, [null].concat(input))
+
+    // Run the next `fn`, if any.
+    function next(err) {
+      var fn = fns[++index]
+      var params = slice.call(arguments, 0)
+      var values = params.slice(1)
+      var length = input.length
+      var pos = -1
+
+      if (err) {
+        done(err)
+        return
+      }
+
+      // Copy non-nully input into values.
+      while (++pos < length) {
+        if (values[pos] === null || values[pos] === undefined) {
+          values[pos] = input[pos]
+        }
+      }
+
+      input = values
+
+      // Next or done.
+      if (fn) {
+        wrap(fn, next).apply(null, input)
+      } else {
+        done.apply(null, [null].concat(input))
+      }
+    }
+  }
+
+  // Add `fn` to the list.
+  function use(fn) {
+    if (typeof fn !== 'function') {
+      throw new Error('Expected `fn` to be a function, not ' + fn)
+    }
+
+    fns.push(fn)
+
+    return middleware
+  }
+}
+
+},{"./wrap.js":"../node_modules/trough/wrap.js"}],"../node_modules/x-is-string/index.js":[function(require,module,exports) {
+var toString = Object.prototype.toString
+
+module.exports = isString
+
+function isString(obj) {
+    return toString.call(obj) === "[object String]"
+}
+
+},{}],"../node_modules/is-plain-obj/index.js":[function(require,module,exports) {
+'use strict';
+
+var toString = Object.prototype.toString;
+
+module.exports = function (x) {
+  var prototype;
+  return toString.call(x) === '[object Object]' && (prototype = Object.getPrototypeOf(x), prototype === null || prototype === Object.getPrototypeOf({}));
+};
+},{}],"../node_modules/unified/index.js":[function(require,module,exports) {
+var process = require("process");
+'use strict'
+
+/* Dependencies. */
+var extend = require('extend')
+var bail = require('bail')
+var vfile = require('vfile')
+var trough = require('trough')
+var string = require('x-is-string')
+var plain = require('is-plain-obj')
+
+/* Expose a frozen processor. */
+module.exports = unified().freeze()
+
+var slice = [].slice
+var own = {}.hasOwnProperty
+
+/* Process pipeline. */
+var pipeline = trough()
+  .use(pipelineParse)
+  .use(pipelineRun)
+  .use(pipelineStringify)
+
+function pipelineParse(p, ctx) {
+  ctx.tree = p.parse(ctx.file)
+}
+
+function pipelineRun(p, ctx, next) {
+  p.run(ctx.tree, ctx.file, done)
+
+  function done(err, tree, file) {
+    if (err) {
+      next(err)
+    } else {
+      ctx.tree = tree
+      ctx.file = file
+      next()
+    }
+  }
+}
+
+function pipelineStringify(p, ctx) {
+  ctx.file.contents = p.stringify(ctx.tree, ctx.file)
+}
+
+/* Function to create the first processor. */
+function unified() {
+  var attachers = []
+  var transformers = trough()
+  var namespace = {}
+  var frozen = false
+  var freezeIndex = -1
+
+  /* Data management. */
+  processor.data = data
+
+  /* Lock. */
+  processor.freeze = freeze
+
+  /* Plug-ins. */
+  processor.attachers = attachers
+  processor.use = use
+
+  /* API. */
+  processor.parse = parse
+  processor.stringify = stringify
+  processor.run = run
+  processor.runSync = runSync
+  processor.process = process
+  processor.processSync = processSync
+
+  /* Expose. */
+  return processor
+
+  /* Create a new processor based on the processor
+   * in the current scope. */
+  function processor() {
+    var destination = unified()
+    var length = attachers.length
+    var index = -1
+
+    while (++index < length) {
+      destination.use.apply(null, attachers[index])
+    }
+
+    destination.data(extend(true, {}, namespace))
+
+    return destination
+  }
+
+  /* Freeze: used to signal a processor that has finished
+   * configuration.
+   *
+   * For example, take unified itself.  It’s frozen.
+   * Plug-ins should not be added to it.  Rather, it should
+   * be extended, by invoking it, before modifying it.
+   *
+   * In essence, always invoke this when exporting a
+   * processor. */
+  function freeze() {
+    var values
+    var plugin
+    var options
+    var transformer
+
+    if (frozen) {
+      return processor
+    }
+
+    while (++freezeIndex < attachers.length) {
+      values = attachers[freezeIndex]
+      plugin = values[0]
+      options = values[1]
+      transformer = null
+
+      if (options === false) {
+        continue
+      }
+
+      if (options === true) {
+        values[1] = undefined
+      }
+
+      transformer = plugin.apply(processor, values.slice(1))
+
+      if (typeof transformer === 'function') {
+        transformers.use(transformer)
+      }
+    }
+
+    frozen = true
+    freezeIndex = Infinity
+
+    return processor
+  }
+
+  /* Data management.
+   * Getter / setter for processor-specific informtion. */
+  function data(key, value) {
+    if (string(key)) {
+      /* Set `key`. */
+      if (arguments.length === 2) {
+        assertUnfrozen('data', frozen)
+
+        namespace[key] = value
+
+        return processor
+      }
+
+      /* Get `key`. */
+      return (own.call(namespace, key) && namespace[key]) || null
+    }
+
+    /* Set space. */
+    if (key) {
+      assertUnfrozen('data', frozen)
+      namespace = key
+      return processor
+    }
+
+    /* Get space. */
+    return namespace
+  }
+
+  /* Plug-in management.
+   *
+   * Pass it:
+   * *   an attacher and options,
+   * *   a preset,
+   * *   a list of presets, attachers, and arguments (list
+   *     of attachers and options). */
+  function use(value) {
+    var settings
+
+    assertUnfrozen('use', frozen)
+
+    if (value === null || value === undefined) {
+      /* Empty */
+    } else if (typeof value === 'function') {
+      addPlugin.apply(null, arguments)
+    } else if (typeof value === 'object') {
+      if ('length' in value) {
+        addList(value)
+      } else {
+        addPreset(value)
+      }
+    } else {
+      throw new Error('Expected usable value, not `' + value + '`')
+    }
+
+    if (settings) {
+      namespace.settings = extend(namespace.settings || {}, settings)
+    }
+
+    return processor
+
+    function addPreset(result) {
+      addList(result.plugins)
+
+      if (result.settings) {
+        settings = extend(settings || {}, result.settings)
+      }
+    }
+
+    function add(value) {
+      if (typeof value === 'function') {
+        addPlugin(value)
+      } else if (typeof value === 'object') {
+        if ('length' in value) {
+          addPlugin.apply(null, value)
+        } else {
+          addPreset(value)
+        }
+      } else {
+        throw new Error('Expected usable value, not `' + value + '`')
+      }
+    }
+
+    function addList(plugins) {
+      var length
+      var index
+
+      if (plugins === null || plugins === undefined) {
+        /* Empty */
+      } else if (typeof plugins === 'object' && 'length' in plugins) {
+        length = plugins.length
+        index = -1
+
+        while (++index < length) {
+          add(plugins[index])
+        }
+      } else {
+        throw new Error('Expected a list of plugins, not `' + plugins + '`')
+      }
+    }
+
+    function addPlugin(plugin, value) {
+      var entry = find(plugin)
+
+      if (entry) {
+        if (plain(entry[1]) && plain(value)) {
+          value = extend(entry[1], value)
+        }
+
+        entry[1] = value
+      } else {
+        attachers.push(slice.call(arguments))
+      }
+    }
+  }
+
+  function find(plugin) {
+    var length = attachers.length
+    var index = -1
+    var entry
+
+    while (++index < length) {
+      entry = attachers[index]
+
+      if (entry[0] === plugin) {
+        return entry
+      }
+    }
+  }
+
+  /* Parse a file (in string or VFile representation)
+   * into a Unist node using the `Parser` on the
+   * processor. */
+  function parse(doc) {
+    var file = vfile(doc)
+    var Parser
+
+    freeze()
+    Parser = processor.Parser
+    assertParser('parse', Parser)
+
+    if (newable(Parser)) {
+      return new Parser(String(file), file).parse()
+    }
+
+    return Parser(String(file), file) // eslint-disable-line new-cap
+  }
+
+  /* Run transforms on a Unist node representation of a file
+   * (in string or VFile representation), async. */
+  function run(node, file, cb) {
+    assertNode(node)
+    freeze()
+
+    if (!cb && typeof file === 'function') {
+      cb = file
+      file = null
+    }
+
+    if (!cb) {
+      return new Promise(executor)
+    }
+
+    executor(null, cb)
+
+    function executor(resolve, reject) {
+      transformers.run(node, vfile(file), done)
+
+      function done(err, tree, file) {
+        tree = tree || node
+        if (err) {
+          reject(err)
+        } else if (resolve) {
+          resolve(tree)
+        } else {
+          cb(null, tree, file)
+        }
+      }
+    }
+  }
+
+  /* Run transforms on a Unist node representation of a file
+   * (in string or VFile representation), sync. */
+  function runSync(node, file) {
+    var complete = false
+    var result
+
+    run(node, file, done)
+
+    assertDone('runSync', 'run', complete)
+
+    return result
+
+    function done(err, tree) {
+      complete = true
+      bail(err)
+      result = tree
+    }
+  }
+
+  /* Stringify a Unist node representation of a file
+   * (in string or VFile representation) into a string
+   * using the `Compiler` on the processor. */
+  function stringify(node, doc) {
+    var file = vfile(doc)
+    var Compiler
+
+    freeze()
+    Compiler = processor.Compiler
+    assertCompiler('stringify', Compiler)
+    assertNode(node)
+
+    if (newable(Compiler)) {
+      return new Compiler(node, file).compile()
+    }
+
+    return Compiler(node, file) // eslint-disable-line new-cap
+  }
+
+  /* Parse a file (in string or VFile representation)
+   * into a Unist node using the `Parser` on the processor,
+   * then run transforms on that node, and compile the
+   * resulting node using the `Compiler` on the processor,
+   * and store that result on the VFile. */
+  function process(doc, cb) {
+    freeze()
+    assertParser('process', processor.Parser)
+    assertCompiler('process', processor.Compiler)
+
+    if (!cb) {
+      return new Promise(executor)
+    }
+
+    executor(null, cb)
+
+    function executor(resolve, reject) {
+      var file = vfile(doc)
+
+      pipeline.run(processor, {file: file}, done)
+
+      function done(err) {
+        if (err) {
+          reject(err)
+        } else if (resolve) {
+          resolve(file)
+        } else {
+          cb(null, file)
+        }
+      }
+    }
+  }
+
+  /* Process the given document (in string or VFile
+   * representation), sync. */
+  function processSync(doc) {
+    var complete = false
+    var file
+
+    freeze()
+    assertParser('processSync', processor.Parser)
+    assertCompiler('processSync', processor.Compiler)
+    file = vfile(doc)
+
+    process(file, done)
+
+    assertDone('processSync', 'process', complete)
+
+    return file
+
+    function done(err) {
+      complete = true
+      bail(err)
+    }
+  }
+}
+
+/* Check if `func` is a constructor. */
+function newable(value) {
+  return typeof value === 'function' && keys(value.prototype)
+}
+
+/* Check if `value` is an object with keys. */
+function keys(value) {
+  var key
+  for (key in value) {
+    return true
+  }
+  return false
+}
+
+/* Assert a parser is available. */
+function assertParser(name, Parser) {
+  if (typeof Parser !== 'function') {
+    throw new Error('Cannot `' + name + '` without `Parser`')
+  }
+}
+
+/* Assert a compiler is available. */
+function assertCompiler(name, Compiler) {
+  if (typeof Compiler !== 'function') {
+    throw new Error('Cannot `' + name + '` without `Compiler`')
+  }
+}
+
+/* Assert the processor is not frozen. */
+function assertUnfrozen(name, frozen) {
+  if (frozen) {
+    throw new Error(
+      [
+        'Cannot invoke `' + name + '` on a frozen processor.\nCreate a new ',
+        'processor first, by invoking it: use `processor()` instead of ',
+        '`processor`.'
+      ].join('')
+    )
+  }
+}
+
+/* Assert `node` is a Unist node. */
+function assertNode(node) {
+  if (!node || !string(node.type)) {
+    throw new Error('Expected node, got `' + node + '`')
+  }
+}
+
+/* Assert that `complete` is `true`. */
+function assertDone(name, asyncName, complete) {
+  if (!complete) {
+    throw new Error(
+      '`' + name + '` finished async. Use `' + asyncName + '` instead'
+    )
+  }
+}
+
+},{"extend":"../node_modules/extend/index.js","bail":"../node_modules/bail/index.js","vfile":"../node_modules/vfile/index.js","trough":"../node_modules/trough/index.js","x-is-string":"../node_modules/x-is-string/index.js","is-plain-obj":"../node_modules/is-plain-obj/index.js","process":"../node_modules/process/browser.js"}],"../node_modules/inherits/inherits_browser.js":[function(require,module,exports) {
+if (typeof Object.create === 'function') {
+  // implementation from standard node.js 'util' module
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor
+    ctor.prototype = Object.create(superCtor.prototype, {
+      constructor: {
+        value: ctor,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      }
+    });
+  };
+} else {
+  // old school shim for old browsers
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor
+    var TempCtor = function () {}
+    TempCtor.prototype = superCtor.prototype
+    ctor.prototype = new TempCtor()
+    ctor.prototype.constructor = ctor
+  }
+}
+
+},{}],"../node_modules/unherit/index.js":[function(require,module,exports) {
+'use strict'
+
+var xtend = require('xtend')
+var inherits = require('inherits')
+
+module.exports = unherit
+
+// Create a custom constructor which can be modified without affecting the
+// original class.
+function unherit(Super) {
+  var result
+  var key
+  var value
+
+  inherits(Of, Super)
+  inherits(From, Of)
+
+  // Clone values.
+  result = Of.prototype
+
+  for (key in result) {
+    value = result[key]
+
+    if (value && typeof value === 'object') {
+      result[key] = 'concat' in value ? value.concat() : xtend(value)
+    }
+  }
+
+  return Of
+
+  // Constructor accepting a single argument, which itself is an `arguments`
+  // object.
+  function From(parameters) {
+    return Super.apply(this, parameters)
+  }
+
+  // Constructor accepting variadic arguments.
+  function Of() {
+    if (!(this instanceof Of)) {
+      return new From(arguments)
+    }
+
+    return Super.apply(this, arguments)
+  }
+}
+
+},{"xtend":"../node_modules/xtend/immutable.js","inherits":"../node_modules/inherits/inherits_browser.js"}],"../node_modules/state-toggle/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = factory
+
+// Construct a state `toggler`: a function which inverses `property` in context
+// based on its current value.
+// The by `toggler` returned function restores that value.
+function factory(key, state, ctx) {
+  return enter
+
+  function enter() {
+    var context = ctx || this
+    var current = context[key]
+
+    context[key] = !state
+
+    return exit
+
+    function exit() {
+      context[key] = current
+    }
+  }
+}
+
+},{}],"../node_modules/vfile-location/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = factory
+
+function factory(file) {
+  var contents = indices(String(file))
+
+  return {
+    toPosition: offsetToPositionFactory(contents),
+    toOffset: positionToOffsetFactory(contents)
+  }
+}
+
+// Factory to get the line and column-based `position` for `offset` in the bound
+// indices.
+function offsetToPositionFactory(indices) {
+  return offsetToPosition
+
+  // Get the line and column-based `position` for `offset` in the bound indices.
+  function offsetToPosition(offset) {
+    var index = -1
+    var length = indices.length
+
+    if (offset < 0) {
+      return {}
+    }
+
+    while (++index < length) {
+      if (indices[index] > offset) {
+        return {
+          line: index + 1,
+          column: offset - (indices[index - 1] || 0) + 1,
+          offset: offset
+        }
+      }
+    }
+
+    return {}
+  }
+}
+
+// Factory to get the `offset` for a line and column-based `position` in the
+// bound indices.
+function positionToOffsetFactory(indices) {
+  return positionToOffset
+
+  // Get the `offset` for a line and column-based `position` in the bound
+  // indices.
+  function positionToOffset(position) {
+    var line = position && position.line
+    var column = position && position.column
+
+    if (!isNaN(line) && !isNaN(column) && line - 1 in indices) {
+      return (indices[line - 2] || 0) + column - 1 || 0
+    }
+
+    return -1
+  }
+}
+
+// Get indices of line-breaks in `value`.
+function indices(value) {
+  var result = []
+  var index = value.indexOf('\n')
+
+  while (index !== -1) {
+    result.push(index + 1)
+    index = value.indexOf('\n', index + 1)
+  }
+
+  result.push(value.length + 1)
+
+  return result
+}
+
+},{}],"../node_modules/remark-parse/lib/unescape.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = factory;
+
+/* Factory to de-escape a value, based on a list at `key`
+ * in `ctx`. */
+function factory(ctx, key) {
+  return unescape;
+
+  /* De-escape a string using the expression at `key`
+   * in `ctx`. */
+  function unescape(value) {
+    var prev = 0;
+    var index = value.indexOf('\\');
+    var escape = ctx[key];
+    var queue = [];
+    var character;
+
+    while (index !== -1) {
+      queue.push(value.slice(prev, index));
+      prev = index + 1;
+      character = value.charAt(prev);
+
+      /* If the following character is not a valid escape,
+       * add the slash. */
+      if (!character || escape.indexOf(character) === -1) {
+        queue.push('\\');
+      }
+
+      index = value.indexOf('\\', prev);
+    }
+
+    queue.push(value.slice(prev));
+
+    return queue.join('');
+  }
+}
+
+},{}],"../node_modules/character-entities-legacy/index.json":[function(require,module,exports) {
+module.exports = {
+  "AElig": "Æ",
+  "AMP": "&",
+  "Aacute": "Á",
+  "Acirc": "Â",
+  "Agrave": "À",
+  "Aring": "Å",
+  "Atilde": "Ã",
+  "Auml": "Ä",
+  "COPY": "©",
+  "Ccedil": "Ç",
+  "ETH": "Ð",
+  "Eacute": "É",
+  "Ecirc": "Ê",
+  "Egrave": "È",
+  "Euml": "Ë",
+  "GT": ">",
+  "Iacute": "Í",
+  "Icirc": "Î",
+  "Igrave": "Ì",
+  "Iuml": "Ï",
+  "LT": "<",
+  "Ntilde": "Ñ",
+  "Oacute": "Ó",
+  "Ocirc": "Ô",
+  "Ograve": "Ò",
+  "Oslash": "Ø",
+  "Otilde": "Õ",
+  "Ouml": "Ö",
+  "QUOT": "\"",
+  "REG": "®",
+  "THORN": "Þ",
+  "Uacute": "Ú",
+  "Ucirc": "Û",
+  "Ugrave": "Ù",
+  "Uuml": "Ü",
+  "Yacute": "Ý",
+  "aacute": "á",
+  "acirc": "â",
+  "acute": "´",
+  "aelig": "æ",
+  "agrave": "à",
+  "amp": "&",
+  "aring": "å",
+  "atilde": "ã",
+  "auml": "ä",
+  "brvbar": "¦",
+  "ccedil": "ç",
+  "cedil": "¸",
+  "cent": "¢",
+  "copy": "©",
+  "curren": "¤",
+  "deg": "°",
+  "divide": "÷",
+  "eacute": "é",
+  "ecirc": "ê",
+  "egrave": "è",
+  "eth": "ð",
+  "euml": "ë",
+  "frac12": "½",
+  "frac14": "¼",
+  "frac34": "¾",
+  "gt": ">",
+  "iacute": "í",
+  "icirc": "î",
+  "iexcl": "¡",
+  "igrave": "ì",
+  "iquest": "¿",
+  "iuml": "ï",
+  "laquo": "«",
+  "lt": "<",
+  "macr": "¯",
+  "micro": "µ",
+  "middot": "·",
+  "nbsp": " ",
+  "not": "¬",
+  "ntilde": "ñ",
+  "oacute": "ó",
+  "ocirc": "ô",
+  "ograve": "ò",
+  "ordf": "ª",
+  "ordm": "º",
+  "oslash": "ø",
+  "otilde": "õ",
+  "ouml": "ö",
+  "para": "¶",
+  "plusmn": "±",
+  "pound": "£",
+  "quot": "\"",
+  "raquo": "»",
+  "reg": "®",
+  "sect": "§",
+  "shy": "­",
+  "sup1": "¹",
+  "sup2": "²",
+  "sup3": "³",
+  "szlig": "ß",
+  "thorn": "þ",
+  "times": "×",
+  "uacute": "ú",
+  "ucirc": "û",
+  "ugrave": "ù",
+  "uml": "¨",
+  "uuml": "ü",
+  "yacute": "ý",
+  "yen": "¥",
+  "yuml": "ÿ"
+}
+;
+},{}],"../node_modules/character-reference-invalid/index.json":[function(require,module,exports) {
+module.exports = {
+  "0": "�",
+  "128": "€",
+  "130": "‚",
+  "131": "ƒ",
+  "132": "„",
+  "133": "…",
+  "134": "†",
+  "135": "‡",
+  "136": "ˆ",
+  "137": "‰",
+  "138": "Š",
+  "139": "‹",
+  "140": "Œ",
+  "142": "Ž",
+  "145": "‘",
+  "146": "’",
+  "147": "“",
+  "148": "”",
+  "149": "•",
+  "150": "–",
+  "151": "—",
+  "152": "˜",
+  "153": "™",
+  "154": "š",
+  "155": "›",
+  "156": "œ",
+  "158": "ž",
+  "159": "Ÿ"
+}
+;
+},{}],"../node_modules/is-decimal/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = decimal
+
+// Check if the given character code, or the character code at the first
+// character, is decimal.
+function decimal(character) {
+  var code = typeof character === 'string' ? character.charCodeAt(0) : character
+
+  return code >= 48 && code <= 57 /* 0-9 */
+}
+
+},{}],"../node_modules/is-hexadecimal/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = hexadecimal
+
+// Check if the given character code, or the character code at the first
+// character, is hexadecimal.
+function hexadecimal(character) {
+  var code = typeof character === 'string' ? character.charCodeAt(0) : character
+
+  return (
+    (code >= 97 /* a */ && code <= 102) /* z */ ||
+    (code >= 65 /* A */ && code <= 70) /* Z */ ||
+    (code >= 48 /* A */ && code <= 57) /* Z */
+  )
+}
+
+},{}],"../node_modules/is-alphabetical/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = alphabetical
+
+// Check if the given character code, or the character code at the first
+// character, is alphabetical.
+function alphabetical(character) {
+  var code = typeof character === 'string' ? character.charCodeAt(0) : character
+
+  return (
+    (code >= 97 && code <= 122) /* a-z */ ||
+    (code >= 65 && code <= 90) /* A-Z */
+  )
+}
+
+},{}],"../node_modules/is-alphanumerical/index.js":[function(require,module,exports) {
+'use strict'
+
+var alphabetical = require('is-alphabetical')
+var decimal = require('is-decimal')
+
+module.exports = alphanumerical
+
+// Check if the given character code, or the character code at the first
+// character, is alphanumerical.
+function alphanumerical(character) {
+  return alphabetical(character) || decimal(character)
+}
+
+},{"is-alphabetical":"../node_modules/is-alphabetical/index.js","is-decimal":"../node_modules/is-decimal/index.js"}],"../node_modules/parse-entities/decode-entity.browser.js":[function(require,module,exports) {
+'use strict'
+
+/* eslint-env browser */
+
+var el
+
+var semicolon = 59 //  ';'
+
+module.exports = decodeEntity
+
+function decodeEntity(characters) {
+  var entity = '&' + characters + ';'
+  var char
+
+  el = el || document.createElement('i')
+  el.innerHTML = entity
+  char = el.textContent
+
+  // Some entities do not require the closing semicolon (`&not` - for instance),
+  // which leads to situations where parsing the assumed entity of &notit; will
+  // result in the string `¬it;`.  When we encounter a trailing semicolon after
+  // parsing and the entity to decode was not a semicolon (`&semi;`), we can
+  // assume that the matching was incomplete
+  if (char.charCodeAt(char.length - 1) === semicolon && characters !== 'semi') {
+    return false
+  }
+
+  // If the decoded string is equal to the input, the entity was not valid
+  return char === entity ? false : char
+}
+
+},{}],"../node_modules/parse-entities/index.js":[function(require,module,exports) {
+'use strict'
+
+var legacy = require('character-entities-legacy')
+var invalid = require('character-reference-invalid')
+var decimal = require('is-decimal')
+var hexadecimal = require('is-hexadecimal')
+var alphanumerical = require('is-alphanumerical')
+var decodeEntity = require('./decode-entity')
+
+module.exports = parseEntities
+
+var own = {}.hasOwnProperty
+var fromCharCode = String.fromCharCode
+var noop = Function.prototype
+
+// Default settings.
+var defaults = {
+  warning: null,
+  reference: null,
+  text: null,
+  warningContext: null,
+  referenceContext: null,
+  textContext: null,
+  position: {},
+  additional: null,
+  attribute: false,
+  nonTerminated: true
+}
+
+// Characters.
+var tab = 9 // '\t'
+var lineFeed = 10 // '\n'
+var formFeed = 12 //  '\f'
+var space = 32 // ' '
+var ampersand = 38 //  '&'
+var semicolon = 59 //  ';'
+var lessThan = 60 //  '<'
+var equalsTo = 61 //  '='
+var numberSign = 35 //  '#'
+var uppercaseX = 88 //  'X'
+var lowercaseX = 120 //  'x'
+var replacementCharacter = 65533 // '�'
+
+// Reference types.
+var name = 'named'
+var hexa = 'hexadecimal'
+var deci = 'decimal'
+
+// Map of bases.
+var bases = {}
+
+bases[hexa] = 16
+bases[deci] = 10
+
+// Map of types to tests.
+// Each type of character reference accepts different characters.
+// This test is used to detect whether a reference has ended (as the semicolon
+// is not strictly needed).
+var tests = {}
+
+tests[name] = alphanumerical
+tests[deci] = decimal
+tests[hexa] = hexadecimal
+
+// Warning types.
+var namedNotTerminated = 1
+var numericNotTerminated = 2
+var namedEmpty = 3
+var numericEmpty = 4
+var namedUnknown = 5
+var numericDisallowed = 6
+var numericProhibited = 7
+
+// Warning messages.
+var messages = {}
+
+messages[namedNotTerminated] =
+  'Named character references must be terminated by a semicolon'
+messages[numericNotTerminated] =
+  'Numeric character references must be terminated by a semicolon'
+messages[namedEmpty] = 'Named character references cannot be empty'
+messages[numericEmpty] = 'Numeric character references cannot be empty'
+messages[namedUnknown] = 'Named character references must be known'
+messages[numericDisallowed] =
+  'Numeric character references cannot be disallowed'
+messages[numericProhibited] =
+  'Numeric character references cannot be outside the permissible Unicode range'
+
+// Wrap to ensure clean parameters are given to `parse`.
+function parseEntities(value, options) {
+  var settings = {}
+  var option
+  var key
+
+  if (!options) {
+    options = {}
+  }
+
+  for (key in defaults) {
+    option = options[key]
+    settings[key] =
+      option === null || option === undefined ? defaults[key] : option
+  }
+
+  if (settings.position.indent || settings.position.start) {
+    settings.indent = settings.position.indent || []
+    settings.position = settings.position.start
+  }
+
+  return parse(value, settings)
+}
+
+// Parse entities.
+// eslint-disable-next-line complexity
+function parse(value, settings) {
+  var additional = settings.additional
+  var nonTerminated = settings.nonTerminated
+  var handleText = settings.text
+  var handleReference = settings.reference
+  var handleWarning = settings.warning
+  var textContext = settings.textContext
+  var referenceContext = settings.referenceContext
+  var warningContext = settings.warningContext
+  var pos = settings.position
+  var indent = settings.indent || []
+  var length = value.length
+  var index = 0
+  var lines = -1
+  var column = pos.column || 1
+  var line = pos.line || 1
+  var queue = ''
+  var result = []
+  var entityCharacters
+  var namedEntity
+  var terminated
+  var characters
+  var character
+  var reference
+  var following
+  var warning
+  var reason
+  var output
+  var entity
+  var begin
+  var start
+  var type
+  var test
+  var prev
+  var next
+  var diff
+  var end
+
+  if (typeof additional === 'string') {
+    additional = additional.charCodeAt(0)
+  }
+
+  // Cache the current point.
+  prev = now()
+
+  // Wrap `handleWarning`.
+  warning = handleWarning ? parseError : noop
+
+  // Ensure the algorithm walks over the first character and the end (inclusive).
+  index--
+  length++
+
+  while (++index < length) {
+    // If the previous character was a newline.
+    if (character === lineFeed) {
+      column = indent[lines] || 1
+    }
+
+    character = value.charCodeAt(index)
+
+    if (character === ampersand) {
+      following = value.charCodeAt(index + 1)
+
+      // The behaviour depends on the identity of the next character.
+      if (
+        following === tab ||
+        following === lineFeed ||
+        following === formFeed ||
+        following === space ||
+        following === ampersand ||
+        following === lessThan ||
+        following !== following ||
+        (additional && following === additional)
+      ) {
+        // Not a character reference.
+        // No characters are consumed, and nothing is returned.
+        // This is not an error, either.
+        queue += fromCharCode(character)
+        column++
+
+        continue
+      }
+
+      start = index + 1
+      begin = start
+      end = start
+
+      if (following === numberSign) {
+        // Numerical entity.
+        end = ++begin
+
+        // The behaviour further depends on the next character.
+        following = value.charCodeAt(end)
+
+        if (following === uppercaseX || following === lowercaseX) {
+          // ASCII hex digits.
+          type = hexa
+          end = ++begin
+        } else {
+          // ASCII digits.
+          type = deci
+        }
+      } else {
+        // Named entity.
+        type = name
+      }
+
+      entityCharacters = ''
+      entity = ''
+      characters = ''
+      test = tests[type]
+      end--
+
+      while (++end < length) {
+        following = value.charCodeAt(end)
+
+        if (!test(following)) {
+          break
+        }
+
+        characters += fromCharCode(following)
+
+        // Check if we can match a legacy named reference.
+        // If so, we cache that as the last viable named reference.
+        // This ensures we do not need to walk backwards later.
+        if (type === name && own.call(legacy, characters)) {
+          entityCharacters = characters
+          entity = legacy[characters]
+        }
+      }
+
+      terminated = value.charCodeAt(end) === semicolon
+
+      if (terminated) {
+        end++
+
+        namedEntity = type === name ? decodeEntity(characters) : false
+
+        if (namedEntity) {
+          entityCharacters = characters
+          entity = namedEntity
+        }
+      }
+
+      diff = 1 + end - start
+
+      if (!terminated && !nonTerminated) {
+        // Empty.
+      } else if (!characters) {
+        // An empty (possible) entity is valid, unless it’s numeric (thus an
+        // ampersand followed by an octothorp).
+        if (type !== name) {
+          warning(numericEmpty, diff)
+        }
+      } else if (type === name) {
+        // An ampersand followed by anything unknown, and not terminated, is
+        // invalid.
+        if (terminated && !entity) {
+          warning(namedUnknown, 1)
+        } else {
+          // If theres something after an entity name which is not known, cap
+          // the reference.
+          if (entityCharacters !== characters) {
+            end = begin + entityCharacters.length
+            diff = 1 + end - begin
+            terminated = false
+          }
+
+          // If the reference is not terminated, warn.
+          if (!terminated) {
+            reason = entityCharacters ? namedNotTerminated : namedEmpty
+
+            if (settings.attribute) {
+              following = value.charCodeAt(end)
+
+              if (following === equalsTo) {
+                warning(reason, diff)
+                entity = null
+              } else if (alphanumerical(following)) {
+                entity = null
+              } else {
+                warning(reason, diff)
+              }
+            } else {
+              warning(reason, diff)
+            }
+          }
+        }
+
+        reference = entity
+      } else {
+        if (!terminated) {
+          // All non-terminated numeric entities are not rendered, and trigger a
+          // warning.
+          warning(numericNotTerminated, diff)
+        }
+
+        // When terminated and number, parse as either hexadecimal or decimal.
+        reference = parseInt(characters, bases[type])
+
+        // Trigger a warning when the parsed number is prohibited, and replace
+        // with replacement character.
+        if (prohibited(reference)) {
+          warning(numericProhibited, diff)
+          reference = fromCharCode(replacementCharacter)
+        } else if (reference in invalid) {
+          // Trigger a warning when the parsed number is disallowed, and replace
+          // by an alternative.
+          warning(numericDisallowed, diff)
+          reference = invalid[reference]
+        } else {
+          // Parse the number.
+          output = ''
+
+          // Trigger a warning when the parsed number should not be used.
+          if (disallowed(reference)) {
+            warning(numericDisallowed, diff)
+          }
+
+          // Stringify the number.
+          if (reference > 0xffff) {
+            reference -= 0x10000
+            output += fromCharCode((reference >>> (10 & 0x3ff)) | 0xd800)
+            reference = 0xdc00 | (reference & 0x3ff)
+          }
+
+          reference = output + fromCharCode(reference)
+        }
+      }
+
+      // Found it!
+      // First eat the queued characters as normal text, then eat an entity.
+      if (reference) {
+        flush()
+
+        prev = now()
+        index = end - 1
+        column += end - start + 1
+        result.push(reference)
+        next = now()
+        next.offset++
+
+        if (handleReference) {
+          handleReference.call(
+            referenceContext,
+            reference,
+            {start: prev, end: next},
+            value.slice(start - 1, end)
+          )
+        }
+
+        prev = next
+      } else {
+        // If we could not find a reference, queue the checked characters (as
+        // normal characters), and move the pointer to their end.
+        // This is possible because we can be certain neither newlines nor
+        // ampersands are included.
+        characters = value.slice(start - 1, end)
+        queue += characters
+        column += characters.length
+        index = end - 1
+      }
+    } else {
+      // Handle anything other than an ampersand, including newlines and EOF.
+      if (
+        character === 10 // Line feed
+      ) {
+        line++
+        lines++
+        column = 0
+      }
+
+      if (character === character) {
+        queue += fromCharCode(character)
+        column++
+      } else {
+        flush()
+      }
+    }
+  }
+
+  // Return the reduced nodes, and any possible warnings.
+  return result.join('')
+
+  // Get current position.
+  function now() {
+    return {
+      line: line,
+      column: column,
+      offset: index + (pos.offset || 0)
+    }
+  }
+
+  // “Throw” a parse-error: a warning.
+  function parseError(code, offset) {
+    var position = now()
+
+    position.column += offset
+    position.offset += offset
+
+    handleWarning.call(warningContext, messages[code], position, code)
+  }
+
+  // Flush `queue` (normal text).
+  // Macro invoked before each entity and at the end of `value`.
+  // Does nothing when `queue` is empty.
+  function flush() {
+    if (queue) {
+      result.push(queue)
+
+      if (handleText) {
+        handleText.call(textContext, queue, {start: prev, end: now()})
+      }
+
+      queue = ''
+    }
+  }
+}
+
+// Check if `character` is outside the permissible unicode range.
+function prohibited(code) {
+  return (code >= 0xd800 && code <= 0xdfff) || code > 0x10ffff
+}
+
+// Check if `character` is disallowed.
+function disallowed(code) {
+  return (
+    (code >= 0x0001 && code <= 0x0008) ||
+    code === 0x000b ||
+    (code >= 0x000d && code <= 0x001f) ||
+    (code >= 0x007f && code <= 0x009f) ||
+    (code >= 0xfdd0 && code <= 0xfdef) ||
+    (code & 0xffff) === 0xffff ||
+    (code & 0xffff) === 0xfffe
+  )
+}
+
+},{"character-entities-legacy":"../node_modules/character-entities-legacy/index.json","character-reference-invalid":"../node_modules/character-reference-invalid/index.json","is-decimal":"../node_modules/is-decimal/index.js","is-hexadecimal":"../node_modules/is-hexadecimal/index.js","is-alphanumerical":"../node_modules/is-alphanumerical/index.js","./decode-entity":"../node_modules/parse-entities/decode-entity.browser.js"}],"../node_modules/remark-parse/lib/decode.js":[function(require,module,exports) {
+'use strict';
+
+var xtend = require('xtend');
+var entities = require('parse-entities');
+
+module.exports = factory;
+
+/* Factory to create an entity decoder. */
+function factory(ctx) {
+  decoder.raw = decodeRaw;
+
+  return decoder;
+
+  /* Normalize `position` to add an `indent`. */
+  function normalize(position) {
+    var offsets = ctx.offset;
+    var line = position.line;
+    var result = [];
+
+    while (++line) {
+      if (!(line in offsets)) {
+        break;
+      }
+
+      result.push((offsets[line] || 0) + 1);
+    }
+
+    return {
+      start: position,
+      indent: result
+    };
+  }
+
+  /* Handle a warning.
+   * See https://github.com/wooorm/parse-entities
+   * for the warnings. */
+  function handleWarning(reason, position, code) {
+    if (code === 3) {
+      return;
+    }
+
+    ctx.file.message(reason, position);
+  }
+
+  /* Decode `value` (at `position`) into text-nodes. */
+  function decoder(value, position, handler) {
+    entities(value, {
+      position: normalize(position),
+      warning: handleWarning,
+      text: handler,
+      reference: handler,
+      textContext: ctx,
+      referenceContext: ctx
+    });
+  }
+
+  /* Decode `value` (at `position`) into a string. */
+  function decodeRaw(value, position, options) {
+    return entities(value, xtend(options, {
+      position: normalize(position),
+      warning: handleWarning
+    }));
+  }
+}
+
+},{"xtend":"../node_modules/xtend/immutable.js","parse-entities":"../node_modules/parse-entities/index.js"}],"../node_modules/remark-parse/lib/tokenizer.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = factory;
+
+var MERGEABLE_NODES = {
+  text: mergeText,
+  blockquote: mergeBlockquote
+};
+
+/* Check whether a node is mergeable with adjacent nodes. */
+function mergeable(node) {
+  var start;
+  var end;
+
+  if (node.type !== 'text' || !node.position) {
+    return true;
+  }
+
+  start = node.position.start;
+  end = node.position.end;
+
+  /* Only merge nodes which occupy the same size as their
+   * `value`. */
+  return start.line !== end.line ||
+      end.column - start.column === node.value.length;
+}
+
+/* Merge two text nodes: `node` into `prev`. */
+function mergeText(prev, node) {
+  prev.value += node.value;
+
+  return prev;
+}
+
+/* Merge two blockquotes: `node` into `prev`, unless in
+ * CommonMark mode. */
+function mergeBlockquote(prev, node) {
+  if (this.options.commonmark) {
+    return node;
+  }
+
+  prev.children = prev.children.concat(node.children);
+
+  return prev;
+}
+
+/* Construct a tokenizer.  This creates both
+ * `tokenizeInline` and `tokenizeBlock`. */
+function factory(type) {
+  return tokenize;
+
+  /* Tokenizer for a bound `type`. */
+  function tokenize(value, location) {
+    var self = this;
+    var offset = self.offset;
+    var tokens = [];
+    var methods = self[type + 'Methods'];
+    var tokenizers = self[type + 'Tokenizers'];
+    var line = location.line;
+    var column = location.column;
+    var index;
+    var length;
+    var method;
+    var name;
+    var matched;
+    var valueLength;
+
+    /* Trim white space only lines. */
+    if (!value) {
+      return tokens;
+    }
+
+    /* Expose on `eat`. */
+    eat.now = now;
+    eat.file = self.file;
+
+    /* Sync initial offset. */
+    updatePosition('');
+
+    /* Iterate over `value`, and iterate over all
+     * tokenizers.  When one eats something, re-iterate
+     * with the remaining value.  If no tokenizer eats,
+     * something failed (should not happen) and an
+     * exception is thrown. */
+    while (value) {
+      index = -1;
+      length = methods.length;
+      matched = false;
+
+      while (++index < length) {
+        name = methods[index];
+        method = tokenizers[name];
+
+        if (
+          method &&
+          /* istanbul ignore next */ (!method.onlyAtStart || self.atStart) &&
+          (!method.notInList || !self.inList) &&
+          (!method.notInBlock || !self.inBlock) &&
+          (!method.notInLink || !self.inLink)
+        ) {
+          valueLength = value.length;
+
+          method.apply(self, [eat, value]);
+
+          matched = valueLength !== value.length;
+
+          if (matched) {
+            break;
+          }
+        }
+      }
+
+      /* istanbul ignore if */
+      if (!matched) {
+        self.file.fail(new Error('Infinite loop'), eat.now());
+      }
+    }
+
+    self.eof = now();
+
+    return tokens;
+
+    /* Update line, column, and offset based on
+     * `value`. */
+    function updatePosition(subvalue) {
+      var lastIndex = -1;
+      var index = subvalue.indexOf('\n');
+
+      while (index !== -1) {
+        line++;
+        lastIndex = index;
+        index = subvalue.indexOf('\n', index + 1);
+      }
+
+      if (lastIndex === -1) {
+        column += subvalue.length;
+      } else {
+        column = subvalue.length - lastIndex;
+      }
+
+      if (line in offset) {
+        if (lastIndex !== -1) {
+          column += offset[line];
+        } else if (column <= offset[line]) {
+          column = offset[line] + 1;
+        }
+      }
+    }
+
+    /* Get offset.  Called before the first character is
+     * eaten to retrieve the range's offsets. */
+    function getOffset() {
+      var indentation = [];
+      var pos = line + 1;
+
+      /* Done.  Called when the last character is
+       * eaten to retrieve the range’s offsets. */
+      return function () {
+        var last = line + 1;
+
+        while (pos < last) {
+          indentation.push((offset[pos] || 0) + 1);
+
+          pos++;
+        }
+
+        return indentation;
+      };
+    }
+
+    /* Get the current position. */
+    function now() {
+      var pos = {line: line, column: column};
+
+      pos.offset = self.toOffset(pos);
+
+      return pos;
+    }
+
+    /* Store position information for a node. */
+    function Position(start) {
+      this.start = start;
+      this.end = now();
+    }
+
+    /* Throw when a value is incorrectly eaten.
+     * This shouldn’t happen but will throw on new,
+     * incorrect rules. */
+    function validateEat(subvalue) {
+      /* istanbul ignore if */
+      if (value.substring(0, subvalue.length) !== subvalue) {
+        /* Capture stack-trace. */
+        self.file.fail(
+          new Error(
+            'Incorrectly eaten value: please report this ' +
+            'warning on http://git.io/vg5Ft'
+          ),
+          now()
+        );
+      }
+    }
+
+    /* Mark position and patch `node.position`. */
+    function position() {
+      var before = now();
+
+      return update;
+
+      /* Add the position to a node. */
+      function update(node, indent) {
+        var prev = node.position;
+        var start = prev ? prev.start : before;
+        var combined = [];
+        var n = prev && prev.end.line;
+        var l = before.line;
+
+        node.position = new Position(start);
+
+        /* If there was already a `position`, this
+         * node was merged.  Fixing `start` wasn’t
+         * hard, but the indent is different.
+         * Especially because some information, the
+         * indent between `n` and `l` wasn’t
+         * tracked.  Luckily, that space is
+         * (should be?) empty, so we can safely
+         * check for it now. */
+        if (prev && indent && prev.indent) {
+          combined = prev.indent;
+
+          if (n < l) {
+            while (++n < l) {
+              combined.push((offset[n] || 0) + 1);
+            }
+
+            combined.push(before.column);
+          }
+
+          indent = combined.concat(indent);
+        }
+
+        node.position.indent = indent || [];
+
+        return node;
+      }
+    }
+
+    /* Add `node` to `parent`s children or to `tokens`.
+     * Performs merges where possible. */
+    function add(node, parent) {
+      var children = parent ? parent.children : tokens;
+      var prev = children[children.length - 1];
+
+      if (
+        prev &&
+        node.type === prev.type &&
+        node.type in MERGEABLE_NODES &&
+        mergeable(prev) &&
+        mergeable(node)
+      ) {
+        node = MERGEABLE_NODES[node.type].call(self, prev, node);
+      }
+
+      if (node !== prev) {
+        children.push(node);
+      }
+
+      if (self.atStart && tokens.length !== 0) {
+        self.exitStart();
+      }
+
+      return node;
+    }
+
+    /* Remove `subvalue` from `value`.
+     * `subvalue` must be at the start of `value`. */
+    function eat(subvalue) {
+      var indent = getOffset();
+      var pos = position();
+      var current = now();
+
+      validateEat(subvalue);
+
+      apply.reset = reset;
+      reset.test = test;
+      apply.test = test;
+
+      value = value.substring(subvalue.length);
+
+      updatePosition(subvalue);
+
+      indent = indent();
+
+      return apply;
+
+      /* Add the given arguments, add `position` to
+       * the returned node, and return the node. */
+      function apply(node, parent) {
+        return pos(add(pos(node), parent), indent);
+      }
+
+      /* Functions just like apply, but resets the
+       * content:  the line and column are reversed,
+       * and the eaten value is re-added.
+       * This is useful for nodes with a single
+       * type of content, such as lists and tables.
+       * See `apply` above for what parameters are
+       * expected. */
+      function reset() {
+        var node = apply.apply(null, arguments);
+
+        line = current.line;
+        column = current.column;
+        value = subvalue + value;
+
+        return node;
+      }
+
+      /* Test the position, after eating, and reverse
+       * to a not-eaten state. */
+      function test() {
+        var result = pos({});
+
+        line = current.line;
+        column = current.column;
+        value = subvalue + value;
+
+        return result.position;
+      }
+    }
+  }
+}
+
+},{}],"../node_modules/markdown-escapes/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = escapes
+
+var defaults = [
+  '\\',
+  '`',
+  '*',
+  '{',
+  '}',
+  '[',
+  ']',
+  '(',
+  ')',
+  '#',
+  '+',
+  '-',
+  '.',
+  '!',
+  '_',
+  '>'
+]
+
+var gfm = defaults.concat(['~', '|'])
+
+var commonmark = gfm.concat([
+  '\n',
+  '"',
+  '$',
+  '%',
+  '&',
+  "'",
+  ',',
+  '/',
+  ':',
+  ';',
+  '<',
+  '=',
+  '?',
+  '@',
+  '^'
+])
+
+escapes.default = defaults
+escapes.gfm = gfm
+escapes.commonmark = commonmark
+
+// Get markdown escapes.
+function escapes(options) {
+  var settings = options || {}
+
+  if (settings.commonmark) {
+    return commonmark
+  }
+
+  return settings.gfm ? gfm : defaults
+}
+
+},{}],"../node_modules/remark-parse/lib/block-elements.json":[function(require,module,exports) {
+module.exports = [
+  "address",
+  "article",
+  "aside",
+  "base",
+  "basefont",
+  "blockquote",
+  "body",
+  "caption",
+  "center",
+  "col",
+  "colgroup",
+  "dd",
+  "details",
+  "dialog",
+  "dir",
+  "div",
+  "dl",
+  "dt",
+  "fieldset",
+  "figcaption",
+  "figure",
+  "footer",
+  "form",
+  "frame",
+  "frameset",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "head",
+  "header",
+  "hgroup",
+  "hr",
+  "html",
+  "iframe",
+  "legend",
+  "li",
+  "link",
+  "main",
+  "menu",
+  "menuitem",
+  "meta",
+  "nav",
+  "noframes",
+  "ol",
+  "optgroup",
+  "option",
+  "p",
+  "param",
+  "pre",
+  "section",
+  "source",
+  "title",
+  "summary",
+  "table",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "title",
+  "tr",
+  "track",
+  "ul"
+]
+;
+},{}],"../node_modules/remark-parse/lib/defaults.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = {
+  position: true,
+  gfm: true,
+  commonmark: false,
+  footnotes: false,
+  pedantic: false,
+  blocks: require('./block-elements.json')
+};
+
+},{"./block-elements.json":"../node_modules/remark-parse/lib/block-elements.json"}],"../node_modules/remark-parse/lib/set-options.js":[function(require,module,exports) {
+'use strict';
+
+var xtend = require('xtend');
+var escapes = require('markdown-escapes');
+var defaults = require('./defaults');
+
+module.exports = setOptions;
+
+function setOptions(options) {
+  var self = this;
+  var current = self.options;
+  var key;
+  var value;
+
+  if (options == null) {
+    options = {};
+  } else if (typeof options === 'object') {
+    options = xtend(options);
+  } else {
+    throw new Error(
+      'Invalid value `' + options + '` ' +
+      'for setting `options`'
+    );
+  }
+
+  for (key in defaults) {
+    value = options[key];
+
+    if (value == null) {
+      value = current[key];
+    }
+
+    if (
+      (key !== 'blocks' && typeof value !== 'boolean') ||
+      (key === 'blocks' && typeof value !== 'object')
+    ) {
+      throw new Error('Invalid value `' + value + '` for setting `options.' + key + '`');
+    }
+
+    options[key] = value;
+  }
+
+  self.options = options;
+  self.escape = escapes(options);
+
+  return self;
+}
+
+},{"xtend":"../node_modules/xtend/immutable.js","markdown-escapes":"../node_modules/markdown-escapes/index.js","./defaults":"../node_modules/remark-parse/lib/defaults.js"}],"../node_modules/unist-util-is/convert.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = convert
+
+function convert(test) {
+  if (typeof test === 'string') {
+    return typeFactory(test)
+  }
+
+  if (test === null || test === undefined) {
+    return ok
+  }
+
+  if (typeof test === 'object') {
+    return ('length' in test ? anyFactory : matchesFactory)(test)
+  }
+
+  if (typeof test === 'function') {
+    return test
+  }
+
+  throw new Error('Expected function, string, or object as test')
+}
+
+function convertAll(tests) {
+  var results = []
+  var length = tests.length
+  var index = -1
+
+  while (++index < length) {
+    results[index] = convert(tests[index])
+  }
+
+  return results
+}
+
+// Utility assert each property in `test` is represented in `node`, and each
+// values are strictly equal.
+function matchesFactory(test) {
+  return matches
+
+  function matches(node) {
+    var key
+
+    for (key in test) {
+      if (node[key] !== test[key]) {
+        return false
+      }
+    }
+
+    return true
+  }
+}
+
+function anyFactory(tests) {
+  var checks = convertAll(tests)
+  var length = checks.length
+
+  return matches
+
+  function matches() {
+    var index = -1
+
+    while (++index < length) {
+      if (checks[index].apply(this, arguments)) {
+        return true
+      }
+    }
+
+    return false
+  }
+}
+
+// Utility to convert a string into a function which checks a given node’s type
+// for said string.
+function typeFactory(test) {
+  return type
+
+  function type(node) {
+    return Boolean(node && node.type === test)
+  }
+}
+
+// Utility to return true.
+function ok() {
+  return true
+}
+
+},{}],"../node_modules/unist-util-visit/node_modules/unist-util-visit-parents/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = visitParents
+
+var convert = require('unist-util-is/convert')
+
+var CONTINUE = true
+var SKIP = 'skip'
+var EXIT = false
+
+visitParents.CONTINUE = CONTINUE
+visitParents.SKIP = SKIP
+visitParents.EXIT = EXIT
+
+function visitParents(tree, test, visitor, reverse) {
+  var is
+
+  if (typeof test === 'function' && typeof visitor !== 'function') {
+    reverse = visitor
+    visitor = test
+    test = null
+  }
+
+  is = convert(test)
+
+  one(tree, null, [])
+
+  // Visit a single node.
+  function one(node, index, parents) {
+    var result = []
+    var subresult
+
+    if (!test || is(node, index, parents[parents.length - 1] || null)) {
+      result = toResult(visitor(node, parents))
+
+      if (result[0] === EXIT) {
+        return result
+      }
+    }
+
+    if (node.children && result[0] !== SKIP) {
+      subresult = toResult(all(node.children, parents.concat(node)))
+      return subresult[0] === EXIT ? subresult : result
+    }
+
+    return result
+  }
+
+  // Visit children in `parent`.
+  function all(children, parents) {
+    var min = -1
+    var step = reverse ? -1 : 1
+    var index = (reverse ? children.length : min) + step
+    var result
+
+    while (index > min && index < children.length) {
+      result = one(children[index], index, parents)
+
+      if (result[0] === EXIT) {
+        return result
+      }
+
+      index = typeof result[1] === 'number' ? result[1] : index + step
+    }
+  }
+}
+
+function toResult(value) {
+  if (value !== null && typeof value === 'object' && 'length' in value) {
+    return value
+  }
+
+  if (typeof value === 'number') {
+    return [CONTINUE, value]
+  }
+
+  return [value]
+}
+
+},{"unist-util-is/convert":"../node_modules/unist-util-is/convert.js"}],"../node_modules/unist-util-visit/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = visit
+
+var visitParents = require('unist-util-visit-parents')
+
+var CONTINUE = visitParents.CONTINUE
+var SKIP = visitParents.SKIP
+var EXIT = visitParents.EXIT
+
+visit.CONTINUE = CONTINUE
+visit.SKIP = SKIP
+visit.EXIT = EXIT
+
+function visit(tree, test, visitor, reverse) {
+  if (typeof test === 'function' && typeof visitor !== 'function') {
+    reverse = visitor
+    visitor = test
+    test = null
+  }
+
+  visitParents(tree, test, overload, reverse)
+
+  function overload(node, parents) {
+    var parent = parents[parents.length - 1]
+    var index = parent ? parent.children.indexOf(node) : null
+    return visitor(node, index, parent)
+  }
+}
+
+},{"unist-util-visit-parents":"../node_modules/unist-util-visit/node_modules/unist-util-visit-parents/index.js"}],"../node_modules/unist-util-remove-position/index.js":[function(require,module,exports) {
+'use strict'
+
+var visit = require('unist-util-visit')
+
+module.exports = removePosition
+
+function removePosition(node, force) {
+  visit(node, force ? hard : soft)
+  return node
+}
+
+function hard(node) {
+  delete node.position
+}
+
+function soft(node) {
+  node.position = undefined
+}
+
+},{"unist-util-visit":"../node_modules/unist-util-visit/index.js"}],"../node_modules/remark-parse/lib/parse.js":[function(require,module,exports) {
+'use strict';
+
+var xtend = require('xtend');
+var removePosition = require('unist-util-remove-position');
+
+module.exports = parse;
+
+var C_NEWLINE = '\n';
+var EXPRESSION_LINE_BREAKS = /\r\n|\r/g;
+
+/* Parse the bound file. */
+function parse() {
+  var self = this;
+  var value = String(self.file);
+  var start = {line: 1, column: 1, offset: 0};
+  var content = xtend(start);
+  var node;
+
+  /* Clean non-unix newlines: `\r\n` and `\r` are all
+   * changed to `\n`.  This should not affect positional
+   * information. */
+  value = value.replace(EXPRESSION_LINE_BREAKS, C_NEWLINE);
+
+  if (value.charCodeAt(0) === 0xFEFF) {
+    value = value.slice(1);
+
+    content.column++;
+    content.offset++;
+  }
+
+  node = {
+    type: 'root',
+    children: self.tokenizeBlock(value, content),
+    position: {
+      start: start,
+      end: self.eof || xtend(start)
+    }
+  };
+
+  if (!self.options.position) {
+    removePosition(node, true);
+  }
+
+  return node;
+}
+
+},{"xtend":"../node_modules/xtend/immutable.js","unist-util-remove-position":"../node_modules/unist-util-remove-position/index.js"}],"../node_modules/is-whitespace-character/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = whitespace
+
+var fromCode = String.fromCharCode
+var re = /\s/
+
+// Check if the given character code, or the character code at the first
+// character, is a whitespace character.
+function whitespace(character) {
+  return re.test(
+    typeof character === 'number' ? fromCode(character) : character.charAt(0)
+  )
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/newline.js":[function(require,module,exports) {
+'use strict';
+
+var whitespace = require('is-whitespace-character');
+
+module.exports = newline;
+
+/* Tokenise newline. */
+function newline(eat, value, silent) {
+  var character = value.charAt(0);
+  var length;
+  var subvalue;
+  var queue;
+  var index;
+
+  if (character !== '\n') {
+    return;
+  }
+
+  /* istanbul ignore if - never used (yet) */
+  if (silent) {
+    return true;
+  }
+
+  index = 1;
+  length = value.length;
+  subvalue = character;
+  queue = '';
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (!whitespace(character)) {
+      break;
+    }
+
+    queue += character;
+
+    if (character === '\n') {
+      subvalue += queue;
+      queue = '';
+    }
+
+    index++;
+  }
+
+  eat(subvalue);
+}
+
+},{"is-whitespace-character":"../node_modules/is-whitespace-character/index.js"}],"../node_modules/repeat-string/index.js":[function(require,module,exports) {
+/*!
+ * repeat-string <https://github.com/jonschlinkert/repeat-string>
+ *
+ * Copyright (c) 2014-2015, Jon Schlinkert.
+ * Licensed under the MIT License.
+ */
+'use strict';
+/**
+ * Results cache
+ */
+
+var res = '';
+var cache;
+/**
+ * Expose `repeat`
+ */
+
+module.exports = repeat;
+/**
+ * Repeat the given `string` the specified `number`
+ * of times.
+ *
+ * **Example:**
+ *
+ * ```js
+ * var repeat = require('repeat-string');
+ * repeat('A', 5);
+ * //=> AAAAA
+ * ```
+ *
+ * @param {String} `string` The string to repeat
+ * @param {Number} `number` The number of times to repeat the string
+ * @return {String} Repeated string
+ * @api public
+ */
+
+function repeat(str, num) {
+  if (typeof str !== 'string') {
+    throw new TypeError('expected a string');
+  } // cover common, quick use cases
+
+
+  if (num === 1) return str;
+  if (num === 2) return str + str;
+  var max = str.length * num;
+
+  if (cache !== str || typeof cache === 'undefined') {
+    cache = str;
+    res = '';
+  } else if (res.length >= max) {
+    return res.substr(0, max);
+  }
+
+  while (max > res.length && num > 1) {
+    if (num & 1) {
+      res += str;
+    }
+
+    num >>= 1;
+    str += str;
+  }
+
+  res += str;
+  res = res.substr(0, max);
+  return res;
+}
+},{}],"../node_modules/trim-trailing-lines/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = trimTrailingLines
+
+var line = '\n'
+
+// Remove final newline characters from `value`.
+function trimTrailingLines(value) {
+  var val = String(value)
+  var index = val.length
+
+  while (val.charAt(--index) === line) {
+    // Empty
+  }
+
+  return val.slice(0, index + 1)
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/code-indented.js":[function(require,module,exports) {
+'use strict';
+
+var repeat = require('repeat-string');
+var trim = require('trim-trailing-lines');
+
+module.exports = indentedCode;
+
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+var C_SPACE = ' ';
+
+var CODE_INDENT_COUNT = 4;
+var CODE_INDENT = repeat(C_SPACE, CODE_INDENT_COUNT);
+
+/* Tokenise indented code. */
+function indentedCode(eat, value, silent) {
+  var index = -1;
+  var length = value.length;
+  var subvalue = '';
+  var content = '';
+  var subvalueQueue = '';
+  var contentQueue = '';
+  var character;
+  var blankQueue;
+  var indent;
+
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (indent) {
+      indent = false;
+
+      subvalue += subvalueQueue;
+      content += contentQueue;
+      subvalueQueue = '';
+      contentQueue = '';
+
+      if (character === C_NEWLINE) {
+        subvalueQueue = character;
+        contentQueue = character;
+      } else {
+        subvalue += character;
+        content += character;
+
+        while (++index < length) {
+          character = value.charAt(index);
+
+          if (!character || character === C_NEWLINE) {
+            contentQueue = character;
+            subvalueQueue = character;
+            break;
+          }
+
+          subvalue += character;
+          content += character;
+        }
+      }
+    } else if (
+      character === C_SPACE &&
+      value.charAt(index + 1) === character &&
+      value.charAt(index + 2) === character &&
+      value.charAt(index + 3) === character
+    ) {
+      subvalueQueue += CODE_INDENT;
+      index += 3;
+      indent = true;
+    } else if (character === C_TAB) {
+      subvalueQueue += character;
+      indent = true;
+    } else {
+      blankQueue = '';
+
+      while (character === C_TAB || character === C_SPACE) {
+        blankQueue += character;
+        character = value.charAt(++index);
+      }
+
+      if (character !== C_NEWLINE) {
+        break;
+      }
+
+      subvalueQueue += blankQueue + character;
+      contentQueue += character;
+    }
+  }
+
+  if (content) {
+    if (silent) {
+      return true;
+    }
+
+    return eat(subvalue)({
+      type: 'code',
+      lang: null,
+      value: trim(content)
+    });
+  }
+}
+
+},{"repeat-string":"../node_modules/repeat-string/index.js","trim-trailing-lines":"../node_modules/trim-trailing-lines/index.js"}],"../node_modules/remark-parse/lib/tokenize/code-fenced.js":[function(require,module,exports) {
+'use strict';
+
+var trim = require('trim-trailing-lines');
+
+module.exports = fencedCode;
+
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+var C_SPACE = ' ';
+var C_TILDE = '~';
+var C_TICK = '`';
+
+var MIN_FENCE_COUNT = 3;
+var CODE_INDENT_COUNT = 4;
+
+function fencedCode(eat, value, silent) {
+  var self = this;
+  var settings = self.options;
+  var length = value.length + 1;
+  var index = 0;
+  var subvalue = '';
+  var fenceCount;
+  var marker;
+  var character;
+  var flag;
+  var queue;
+  var content;
+  var exdentedContent;
+  var closing;
+  var exdentedClosing;
+  var indent;
+  var now;
+
+  if (!settings.gfm) {
+    return;
+  }
+
+  /* Eat initial spacing. */
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_SPACE && character !== C_TAB) {
+      break;
+    }
+
+    subvalue += character;
+    index++;
+  }
+
+  indent = index;
+
+  /* Eat the fence. */
+  character = value.charAt(index);
+
+  if (character !== C_TILDE && character !== C_TICK) {
+    return;
+  }
+
+  index++;
+  marker = character;
+  fenceCount = 1;
+  subvalue += character;
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character !== marker) {
+      break;
+    }
+
+    subvalue += character;
+    fenceCount++;
+    index++;
+  }
+
+  if (fenceCount < MIN_FENCE_COUNT) {
+    return;
+  }
+
+  /* Eat spacing before flag. */
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_SPACE && character !== C_TAB) {
+      break;
+    }
+
+    subvalue += character;
+    index++;
+  }
+
+  /* Eat flag. */
+  flag = '';
+  queue = '';
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (
+      character === C_NEWLINE ||
+      character === C_TILDE ||
+      character === C_TICK
+    ) {
+      break;
+    }
+
+    if (character === C_SPACE || character === C_TAB) {
+      queue += character;
+    } else {
+      flag += queue + character;
+      queue = '';
+    }
+
+    index++;
+  }
+
+  character = value.charAt(index);
+
+  if (character && character !== C_NEWLINE) {
+    return;
+  }
+
+  if (silent) {
+    return true;
+  }
+
+  now = eat.now();
+  now.column += subvalue.length;
+  now.offset += subvalue.length;
+
+  subvalue += flag;
+  flag = self.decode.raw(self.unescape(flag), now);
+
+  if (queue) {
+    subvalue += queue;
+  }
+
+  queue = '';
+  closing = '';
+  exdentedClosing = '';
+  content = '';
+  exdentedContent = '';
+
+  /* Eat content. */
+  while (index < length) {
+    character = value.charAt(index);
+    content += closing;
+    exdentedContent += exdentedClosing;
+    closing = '';
+    exdentedClosing = '';
+
+    if (character !== C_NEWLINE) {
+      content += character;
+      exdentedClosing += character;
+      index++;
+      continue;
+    }
+
+    /* Add the newline to `subvalue` if its the first
+     * character.  Otherwise, add it to the `closing`
+     * queue. */
+    if (content) {
+      closing += character;
+      exdentedClosing += character;
+    } else {
+      subvalue += character;
+    }
+
+    queue = '';
+    index++;
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (character !== C_SPACE) {
+        break;
+      }
+
+      queue += character;
+      index++;
+    }
+
+    closing += queue;
+    exdentedClosing += queue.slice(indent);
+
+    if (queue.length >= CODE_INDENT_COUNT) {
+      continue;
+    }
+
+    queue = '';
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (character !== marker) {
+        break;
+      }
+
+      queue += character;
+      index++;
+    }
+
+    closing += queue;
+    exdentedClosing += queue;
+
+    if (queue.length < fenceCount) {
+      continue;
+    }
+
+    queue = '';
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (character !== C_SPACE && character !== C_TAB) {
+        break;
+      }
+
+      closing += character;
+      exdentedClosing += character;
+      index++;
+    }
+
+    if (!character || character === C_NEWLINE) {
+      break;
+    }
+  }
+
+  subvalue += content + closing;
+
+  return eat(subvalue)({
+    type: 'code',
+    lang: flag || null,
+    value: trim(exdentedContent)
+  });
+}
+
+},{"trim-trailing-lines":"../node_modules/trim-trailing-lines/index.js"}],"../node_modules/trim/index.js":[function(require,module,exports) {
+
+exports = module.exports = trim;
+
+function trim(str){
+  return str.replace(/^\s*|\s*$/g, '');
+}
+
+exports.left = function(str){
+  return str.replace(/^\s*/, '');
+};
+
+exports.right = function(str){
+  return str.replace(/\s*$/, '');
+};
+
+},{}],"../node_modules/remark-parse/lib/util/interrupt.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = interrupt;
+
+function interrupt(interruptors, tokenizers, ctx, params) {
+  var bools = ['pedantic', 'commonmark'];
+  var count = bools.length;
+  var length = interruptors.length;
+  var index = -1;
+  var interruptor;
+  var config;
+  var fn;
+  var offset;
+  var bool;
+  var ignore;
+
+  while (++index < length) {
+    interruptor = interruptors[index];
+    config = interruptor[1] || {};
+    fn = interruptor[0];
+    offset = -1;
+    ignore = false;
+
+    while (++offset < count) {
+      bool = bools[offset];
+
+      if (config[bool] !== undefined && config[bool] !== ctx.options[bool]) {
+        ignore = true;
+        break;
+      }
+    }
+
+    if (ignore) {
+      continue;
+    }
+
+    if (tokenizers[fn].apply(ctx, params)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/blockquote.js":[function(require,module,exports) {
+'use strict';
+
+var trim = require('trim');
+var interrupt = require('../util/interrupt');
+
+module.exports = blockquote;
+
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+var C_SPACE = ' ';
+var C_GT = '>';
+
+/* Tokenise a blockquote. */
+function blockquote(eat, value, silent) {
+  var self = this;
+  var offsets = self.offset;
+  var tokenizers = self.blockTokenizers;
+  var interruptors = self.interruptBlockquote;
+  var now = eat.now();
+  var currentLine = now.line;
+  var length = value.length;
+  var values = [];
+  var contents = [];
+  var indents = [];
+  var add;
+  var index = 0;
+  var character;
+  var rest;
+  var nextIndex;
+  var content;
+  var line;
+  var startIndex;
+  var prefixed;
+  var exit;
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_SPACE && character !== C_TAB) {
+      break;
+    }
+
+    index++;
+  }
+
+  if (value.charAt(index) !== C_GT) {
+    return;
+  }
+
+  if (silent) {
+    return true;
+  }
+
+  index = 0;
+
+  while (index < length) {
+    nextIndex = value.indexOf(C_NEWLINE, index);
+    startIndex = index;
+    prefixed = false;
+
+    if (nextIndex === -1) {
+      nextIndex = length;
+    }
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (character !== C_SPACE && character !== C_TAB) {
+        break;
+      }
+
+      index++;
+    }
+
+    if (value.charAt(index) === C_GT) {
+      index++;
+      prefixed = true;
+
+      if (value.charAt(index) === C_SPACE) {
+        index++;
+      }
+    } else {
+      index = startIndex;
+    }
+
+    content = value.slice(index, nextIndex);
+
+    if (!prefixed && !trim(content)) {
+      index = startIndex;
+      break;
+    }
+
+    if (!prefixed) {
+      rest = value.slice(index);
+
+      /* Check if the following code contains a possible
+       * block. */
+      if (interrupt(interruptors, tokenizers, self, [eat, rest, true])) {
+        break;
+      }
+    }
+
+    line = startIndex === index ? content : value.slice(startIndex, nextIndex);
+
+    indents.push(index - startIndex);
+    values.push(line);
+    contents.push(content);
+
+    index = nextIndex + 1;
+  }
+
+  index = -1;
+  length = indents.length;
+  add = eat(values.join(C_NEWLINE));
+
+  while (++index < length) {
+    offsets[currentLine] = (offsets[currentLine] || 0) + indents[index];
+    currentLine++;
+  }
+
+  exit = self.enterBlock();
+  contents = self.tokenizeBlock(contents.join(C_NEWLINE), now);
+  exit();
+
+  return add({
+    type: 'blockquote',
+    children: contents
+  });
+}
+
+},{"trim":"../node_modules/trim/index.js","../util/interrupt":"../node_modules/remark-parse/lib/util/interrupt.js"}],"../node_modules/remark-parse/lib/tokenize/heading-atx.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = atxHeading;
+
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+var C_SPACE = ' ';
+var C_HASH = '#';
+
+var MAX_ATX_COUNT = 6;
+
+function atxHeading(eat, value, silent) {
+  var self = this;
+  var settings = self.options;
+  var length = value.length + 1;
+  var index = -1;
+  var now = eat.now();
+  var subvalue = '';
+  var content = '';
+  var character;
+  var queue;
+  var depth;
+
+  /* Eat initial spacing. */
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_SPACE && character !== C_TAB) {
+      index--;
+      break;
+    }
+
+    subvalue += character;
+  }
+
+  /* Eat hashes. */
+  depth = 0;
+
+  while (++index <= length) {
+    character = value.charAt(index);
+
+    if (character !== C_HASH) {
+      index--;
+      break;
+    }
+
+    subvalue += character;
+    depth++;
+  }
+
+  if (depth > MAX_ATX_COUNT) {
+    return;
+  }
+
+  if (
+    !depth ||
+    (!settings.pedantic && value.charAt(index + 1) === C_HASH)
+  ) {
+    return;
+  }
+
+  length = value.length + 1;
+
+  /* Eat intermediate white-space. */
+  queue = '';
+
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_SPACE && character !== C_TAB) {
+      index--;
+      break;
+    }
+
+    queue += character;
+  }
+
+  /* Exit when not in pedantic mode without spacing. */
+  if (
+    !settings.pedantic &&
+    queue.length === 0 &&
+    character &&
+    character !== C_NEWLINE
+  ) {
+    return;
+  }
+
+  if (silent) {
+    return true;
+  }
+
+  /* Eat content. */
+  subvalue += queue;
+  queue = '';
+  content = '';
+
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (!character || character === C_NEWLINE) {
+      break;
+    }
+
+    if (
+      character !== C_SPACE &&
+      character !== C_TAB &&
+      character !== C_HASH
+    ) {
+      content += queue + character;
+      queue = '';
+      continue;
+    }
+
+    while (character === C_SPACE || character === C_TAB) {
+      queue += character;
+      character = value.charAt(++index);
+    }
+
+    while (character === C_HASH) {
+      queue += character;
+      character = value.charAt(++index);
+    }
+
+    while (character === C_SPACE || character === C_TAB) {
+      queue += character;
+      character = value.charAt(++index);
+    }
+
+    index--;
+  }
+
+  now.column += subvalue.length;
+  now.offset += subvalue.length;
+  subvalue += content + queue;
+
+  return eat(subvalue)({
+    type: 'heading',
+    depth: depth,
+    children: self.tokenizeInline(content, now)
+  });
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/thematic-break.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = thematicBreak;
+
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+var C_SPACE = ' ';
+var C_ASTERISK = '*';
+var C_UNDERSCORE = '_';
+var C_DASH = '-';
+
+var THEMATIC_BREAK_MARKER_COUNT = 3;
+
+function thematicBreak(eat, value, silent) {
+  var index = -1;
+  var length = value.length + 1;
+  var subvalue = '';
+  var character;
+  var marker;
+  var markerCount;
+  var queue;
+
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_TAB && character !== C_SPACE) {
+      break;
+    }
+
+    subvalue += character;
+  }
+
+  if (
+    character !== C_ASTERISK &&
+    character !== C_DASH &&
+    character !== C_UNDERSCORE
+  ) {
+    return;
+  }
+
+  marker = character;
+  subvalue += character;
+  markerCount = 1;
+  queue = '';
+
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (character === marker) {
+      markerCount++;
+      subvalue += queue + marker;
+      queue = '';
+    } else if (character === C_SPACE) {
+      queue += character;
+    } else if (
+      markerCount >= THEMATIC_BREAK_MARKER_COUNT &&
+      (!character || character === C_NEWLINE)
+    ) {
+      subvalue += queue;
+
+      if (silent) {
+        return true;
+      }
+
+      return eat(subvalue)({type: 'thematicBreak'});
+    } else {
+      return;
+    }
+  }
+}
+
+},{}],"../node_modules/remark-parse/lib/util/get-indentation.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = indentation;
+
+/* Map of characters, and their column length,
+ * which can be used as indentation. */
+var characters = {' ': 1, '\t': 4};
+
+/* Gets indentation information for a line. */
+function indentation(value) {
+  var index = 0;
+  var indent = 0;
+  var character = value.charAt(index);
+  var stops = {};
+  var size;
+
+  while (character in characters) {
+    size = characters[character];
+
+    indent += size;
+
+    if (size > 1) {
+      indent = Math.floor(indent / size) * size;
+    }
+
+    stops[indent] = index;
+
+    character = value.charAt(++index);
+  }
+
+  return {indent: indent, stops: stops};
+}
+
+},{}],"../node_modules/remark-parse/lib/util/remove-indentation.js":[function(require,module,exports) {
+'use strict';
+
+var trim = require('trim');
+var repeat = require('repeat-string');
+var getIndent = require('./get-indentation');
+
+module.exports = indentation;
+
+var C_SPACE = ' ';
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+
+/* Remove the minimum indent from every line in `value`.
+ * Supports both tab, spaced, and mixed indentation (as
+ * well as possible). */
+function indentation(value, maximum) {
+  var values = value.split(C_NEWLINE);
+  var position = values.length + 1;
+  var minIndent = Infinity;
+  var matrix = [];
+  var index;
+  var indentation;
+  var stops;
+  var padding;
+
+  values.unshift(repeat(C_SPACE, maximum) + '!');
+
+  while (position--) {
+    indentation = getIndent(values[position]);
+
+    matrix[position] = indentation.stops;
+
+    if (trim(values[position]).length === 0) {
+      continue;
+    }
+
+    if (indentation.indent) {
+      if (indentation.indent > 0 && indentation.indent < minIndent) {
+        minIndent = indentation.indent;
+      }
+    } else {
+      minIndent = Infinity;
+
+      break;
+    }
+  }
+
+  if (minIndent !== Infinity) {
+    position = values.length;
+
+    while (position--) {
+      stops = matrix[position];
+      index = minIndent;
+
+      while (index && !(index in stops)) {
+        index--;
+      }
+
+      if (
+        trim(values[position]).length !== 0 &&
+        minIndent &&
+        index !== minIndent
+      ) {
+        padding = C_TAB;
+      } else {
+        padding = '';
+      }
+
+      values[position] = padding + values[position].slice(
+        index in stops ? stops[index] + 1 : 0
+      );
+    }
+  }
+
+  values.shift();
+
+  return values.join(C_NEWLINE);
+}
+
+},{"trim":"../node_modules/trim/index.js","repeat-string":"../node_modules/repeat-string/index.js","./get-indentation":"../node_modules/remark-parse/lib/util/get-indentation.js"}],"../node_modules/remark-parse/lib/tokenize/list.js":[function(require,module,exports) {
+'use strict';
+
+/* eslint-disable max-params */
+
+var trim = require('trim');
+var repeat = require('repeat-string');
+var decimal = require('is-decimal');
+var getIndent = require('../util/get-indentation');
+var removeIndent = require('../util/remove-indentation');
+var interrupt = require('../util/interrupt');
+
+module.exports = list;
+
+var C_ASTERISK = '*';
+var C_UNDERSCORE = '_';
+var C_PLUS = '+';
+var C_DASH = '-';
+var C_DOT = '.';
+var C_SPACE = ' ';
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+var C_PAREN_CLOSE = ')';
+var C_X_LOWER = 'x';
+
+var TAB_SIZE = 4;
+var EXPRESSION_LOOSE_LIST_ITEM = /\n\n(?!\s*$)/;
+var EXPRESSION_TASK_ITEM = /^\[([ \t]|x|X)][ \t]/;
+var EXPRESSION_BULLET = /^([ \t]*)([*+-]|\d+[.)])( {1,4}(?! )| |\t|$|(?=\n))([^\n]*)/;
+var EXPRESSION_PEDANTIC_BULLET = /^([ \t]*)([*+-]|\d+[.)])([ \t]+)/;
+var EXPRESSION_INITIAL_INDENT = /^( {1,4}|\t)?/gm;
+
+/* Map of characters which can be used to mark
+ * list-items. */
+var LIST_UNORDERED_MARKERS = {};
+
+LIST_UNORDERED_MARKERS[C_ASTERISK] = true;
+LIST_UNORDERED_MARKERS[C_PLUS] = true;
+LIST_UNORDERED_MARKERS[C_DASH] = true;
+
+/* Map of characters which can be used to mark
+ * list-items after a digit. */
+var LIST_ORDERED_MARKERS = {};
+
+LIST_ORDERED_MARKERS[C_DOT] = true;
+
+/* Map of characters which can be used to mark
+ * list-items after a digit. */
+var LIST_ORDERED_COMMONMARK_MARKERS = {};
+
+LIST_ORDERED_COMMONMARK_MARKERS[C_DOT] = true;
+LIST_ORDERED_COMMONMARK_MARKERS[C_PAREN_CLOSE] = true;
+
+function list(eat, value, silent) {
+  var self = this;
+  var commonmark = self.options.commonmark;
+  var pedantic = self.options.pedantic;
+  var tokenizers = self.blockTokenizers;
+  var interuptors = self.interruptList;
+  var markers;
+  var index = 0;
+  var length = value.length;
+  var start = null;
+  var size = 0;
+  var queue;
+  var ordered;
+  var character;
+  var marker;
+  var nextIndex;
+  var startIndex;
+  var prefixed;
+  var currentMarker;
+  var content;
+  var line;
+  var prevEmpty;
+  var empty;
+  var items;
+  var allLines;
+  var emptyLines;
+  var item;
+  var enterTop;
+  var exitBlockquote;
+  var isLoose;
+  var node;
+  var now;
+  var end;
+  var indented;
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character === C_TAB) {
+      size += TAB_SIZE - (size % TAB_SIZE);
+    } else if (character === C_SPACE) {
+      size++;
+    } else {
+      break;
+    }
+
+    index++;
+  }
+
+  if (size >= TAB_SIZE) {
+    return;
+  }
+
+  character = value.charAt(index);
+
+  markers = commonmark ?
+    LIST_ORDERED_COMMONMARK_MARKERS :
+    LIST_ORDERED_MARKERS;
+
+  if (LIST_UNORDERED_MARKERS[character] === true) {
+    marker = character;
+    ordered = false;
+  } else {
+    ordered = true;
+    queue = '';
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (!decimal(character)) {
+        break;
+      }
+
+      queue += character;
+      index++;
+    }
+
+    character = value.charAt(index);
+
+    if (!queue || markers[character] !== true) {
+      return;
+    }
+
+    start = parseInt(queue, 10);
+    marker = character;
+  }
+
+  character = value.charAt(++index);
+
+  if (character !== C_SPACE && character !== C_TAB) {
+    return;
+  }
+
+  if (silent) {
+    return true;
+  }
+
+  index = 0;
+  items = [];
+  allLines = [];
+  emptyLines = [];
+
+  while (index < length) {
+    nextIndex = value.indexOf(C_NEWLINE, index);
+    startIndex = index;
+    prefixed = false;
+    indented = false;
+
+    if (nextIndex === -1) {
+      nextIndex = length;
+    }
+
+    end = index + TAB_SIZE;
+    size = 0;
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (character === C_TAB) {
+        size += TAB_SIZE - (size % TAB_SIZE);
+      } else if (character === C_SPACE) {
+        size++;
+      } else {
+        break;
+      }
+
+      index++;
+    }
+
+    if (size >= TAB_SIZE) {
+      indented = true;
+    }
+
+    if (item && size >= item.indent) {
+      indented = true;
+    }
+
+    character = value.charAt(index);
+    currentMarker = null;
+
+    if (!indented) {
+      if (LIST_UNORDERED_MARKERS[character] === true) {
+        currentMarker = character;
+        index++;
+        size++;
+      } else {
+        queue = '';
+
+        while (index < length) {
+          character = value.charAt(index);
+
+          if (!decimal(character)) {
+            break;
+          }
+
+          queue += character;
+          index++;
+        }
+
+        character = value.charAt(index);
+        index++;
+
+        if (queue && markers[character] === true) {
+          currentMarker = character;
+          size += queue.length + 1;
+        }
+      }
+
+      if (currentMarker) {
+        character = value.charAt(index);
+
+        if (character === C_TAB) {
+          size += TAB_SIZE - (size % TAB_SIZE);
+          index++;
+        } else if (character === C_SPACE) {
+          end = index + TAB_SIZE;
+
+          while (index < end) {
+            if (value.charAt(index) !== C_SPACE) {
+              break;
+            }
+
+            index++;
+            size++;
+          }
+
+          if (index === end && value.charAt(index) === C_SPACE) {
+            index -= TAB_SIZE - 1;
+            size -= TAB_SIZE - 1;
+          }
+        } else if (character !== C_NEWLINE && character !== '') {
+          currentMarker = null;
+        }
+      }
+    }
+
+    if (currentMarker) {
+      if (!pedantic && marker !== currentMarker) {
+        break;
+      }
+
+      prefixed = true;
+    } else {
+      if (!commonmark && !indented && value.charAt(startIndex) === C_SPACE) {
+        indented = true;
+      } else if (commonmark && item) {
+        indented = size >= item.indent || size > TAB_SIZE;
+      }
+
+      prefixed = false;
+      index = startIndex;
+    }
+
+    line = value.slice(startIndex, nextIndex);
+    content = startIndex === index ? line : value.slice(index, nextIndex);
+
+    if (
+      currentMarker === C_ASTERISK ||
+      currentMarker === C_UNDERSCORE ||
+      currentMarker === C_DASH
+    ) {
+      if (tokenizers.thematicBreak.call(self, eat, line, true)) {
+        break;
+      }
+    }
+
+    prevEmpty = empty;
+    empty = !trim(content).length;
+
+    if (indented && item) {
+      item.value = item.value.concat(emptyLines, line);
+      allLines = allLines.concat(emptyLines, line);
+      emptyLines = [];
+    } else if (prefixed) {
+      if (emptyLines.length !== 0) {
+        item.value.push('');
+        item.trail = emptyLines.concat();
+      }
+
+      item = {
+        value: [line],
+        indent: size,
+        trail: []
+      };
+
+      items.push(item);
+      allLines = allLines.concat(emptyLines, line);
+      emptyLines = [];
+    } else if (empty) {
+      if (prevEmpty) {
+        break;
+      }
+
+      emptyLines.push(line);
+    } else {
+      if (prevEmpty) {
+        break;
+      }
+
+      if (interrupt(interuptors, tokenizers, self, [eat, line, true])) {
+        break;
+      }
+
+      item.value = item.value.concat(emptyLines, line);
+      allLines = allLines.concat(emptyLines, line);
+      emptyLines = [];
+    }
+
+    index = nextIndex + 1;
+  }
+
+  node = eat(allLines.join(C_NEWLINE)).reset({
+    type: 'list',
+    ordered: ordered,
+    start: start,
+    loose: null,
+    children: []
+  });
+
+  enterTop = self.enterList();
+  exitBlockquote = self.enterBlock();
+  isLoose = false;
+  index = -1;
+  length = items.length;
+
+  while (++index < length) {
+    item = items[index].value.join(C_NEWLINE);
+    now = eat.now();
+
+    item = eat(item)(listItem(self, item, now), node);
+
+    if (item.loose) {
+      isLoose = true;
+    }
+
+    item = items[index].trail.join(C_NEWLINE);
+
+    if (index !== length - 1) {
+      item += C_NEWLINE;
+    }
+
+    eat(item);
+  }
+
+  enterTop();
+  exitBlockquote();
+
+  node.loose = isLoose;
+
+  return node;
+}
+
+function listItem(ctx, value, position) {
+  var offsets = ctx.offset;
+  var fn = ctx.options.pedantic ? pedanticListItem : normalListItem;
+  var checked = null;
+  var task;
+  var indent;
+
+  value = fn.apply(null, arguments);
+
+  if (ctx.options.gfm) {
+    task = value.match(EXPRESSION_TASK_ITEM);
+
+    if (task) {
+      indent = task[0].length;
+      checked = task[1].toLowerCase() === C_X_LOWER;
+      offsets[position.line] += indent;
+      value = value.slice(indent);
+    }
+  }
+
+  return {
+    type: 'listItem',
+    loose: EXPRESSION_LOOSE_LIST_ITEM.test(value) ||
+      value.charAt(value.length - 1) === C_NEWLINE,
+    checked: checked,
+    children: ctx.tokenizeBlock(value, position)
+  };
+}
+
+/* Create a list-item using overly simple mechanics. */
+function pedanticListItem(ctx, value, position) {
+  var offsets = ctx.offset;
+  var line = position.line;
+
+  /* Remove the list-item’s bullet. */
+  value = value.replace(EXPRESSION_PEDANTIC_BULLET, replacer);
+
+  /* The initial line was also matched by the below, so
+   * we reset the `line`. */
+  line = position.line;
+
+  return value.replace(EXPRESSION_INITIAL_INDENT, replacer);
+
+  /* A simple replacer which removed all matches,
+   * and adds their length to `offset`. */
+  function replacer($0) {
+    offsets[line] = (offsets[line] || 0) + $0.length;
+    line++;
+
+    return '';
+  }
+}
+
+/* Create a list-item using sane mechanics. */
+function normalListItem(ctx, value, position) {
+  var offsets = ctx.offset;
+  var line = position.line;
+  var max;
+  var bullet;
+  var rest;
+  var lines;
+  var trimmedLines;
+  var index;
+  var length;
+
+  /* Remove the list-item’s bullet. */
+  value = value.replace(EXPRESSION_BULLET, replacer);
+
+  lines = value.split(C_NEWLINE);
+
+  trimmedLines = removeIndent(value, getIndent(max).indent).split(C_NEWLINE);
+
+  /* We replaced the initial bullet with something
+   * else above, which was used to trick
+   * `removeIndentation` into removing some more
+   * characters when possible.  However, that could
+   * result in the initial line to be stripped more
+   * than it should be. */
+  trimmedLines[0] = rest;
+
+  offsets[line] = (offsets[line] || 0) + bullet.length;
+  line++;
+
+  index = 0;
+  length = lines.length;
+
+  while (++index < length) {
+    offsets[line] = (offsets[line] || 0) +
+      lines[index].length - trimmedLines[index].length;
+    line++;
+  }
+
+  return trimmedLines.join(C_NEWLINE);
+
+  function replacer($0, $1, $2, $3, $4) {
+    bullet = $1 + $2 + $3;
+    rest = $4;
+
+    /* Make sure that the first nine numbered list items
+     * can indent with an extra space.  That is, when
+     * the bullet did not receive an extra final space. */
+    if (Number($2) < 10 && bullet.length % 2 === 1) {
+      $2 = C_SPACE + $2;
+    }
+
+    max = $1 + repeat(C_SPACE, $2.length) + $3;
+
+    return max + rest;
+  }
+}
+
+},{"trim":"../node_modules/trim/index.js","repeat-string":"../node_modules/repeat-string/index.js","is-decimal":"../node_modules/is-decimal/index.js","../util/get-indentation":"../node_modules/remark-parse/lib/util/get-indentation.js","../util/remove-indentation":"../node_modules/remark-parse/lib/util/remove-indentation.js","../util/interrupt":"../node_modules/remark-parse/lib/util/interrupt.js"}],"../node_modules/remark-parse/lib/tokenize/heading-setext.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = setextHeading;
+
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+var C_SPACE = ' ';
+var C_EQUALS = '=';
+var C_DASH = '-';
+
+var MAX_HEADING_INDENT = 3;
+
+/* Map of characters which can be used to mark setext
+ * headers, mapping to their corresponding depth. */
+var SETEXT_MARKERS = {};
+
+SETEXT_MARKERS[C_EQUALS] = 1;
+SETEXT_MARKERS[C_DASH] = 2;
+
+function setextHeading(eat, value, silent) {
+  var self = this;
+  var now = eat.now();
+  var length = value.length;
+  var index = -1;
+  var subvalue = '';
+  var content;
+  var queue;
+  var character;
+  var marker;
+  var depth;
+
+  /* Eat initial indentation. */
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_SPACE || index >= MAX_HEADING_INDENT) {
+      index--;
+      break;
+    }
+
+    subvalue += character;
+  }
+
+  /* Eat content. */
+  content = '';
+  queue = '';
+
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (character === C_NEWLINE) {
+      index--;
+      break;
+    }
+
+    if (character === C_SPACE || character === C_TAB) {
+      queue += character;
+    } else {
+      content += queue + character;
+      queue = '';
+    }
+  }
+
+  now.column += subvalue.length;
+  now.offset += subvalue.length;
+  subvalue += content + queue;
+
+  /* Ensure the content is followed by a newline and a
+   * valid marker. */
+  character = value.charAt(++index);
+  marker = value.charAt(++index);
+
+  if (character !== C_NEWLINE || !SETEXT_MARKERS[marker]) {
+    return;
+  }
+
+  subvalue += character;
+
+  /* Eat Setext-line. */
+  queue = marker;
+  depth = SETEXT_MARKERS[marker];
+
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (character !== marker) {
+      if (character !== C_NEWLINE) {
+        return;
+      }
+
+      index--;
+      break;
+    }
+
+    queue += character;
+  }
+
+  if (silent) {
+    return true;
+  }
+
+  return eat(subvalue + queue)({
+    type: 'heading',
+    depth: depth,
+    children: self.tokenizeInline(content, now)
+  });
+}
+
+},{}],"../node_modules/remark-parse/lib/util/html.js":[function(require,module,exports) {
+'use strict';
+
+var attributeName = '[a-zA-Z_:][a-zA-Z0-9:._-]*';
+var unquoted = '[^"\'=<>`\\u0000-\\u0020]+';
+var singleQuoted = '\'[^\']*\'';
+var doubleQuoted = '"[^"]*"';
+var attributeValue = '(?:' + unquoted + '|' + singleQuoted + '|' + doubleQuoted + ')';
+var attribute = '(?:\\s+' + attributeName + '(?:\\s*=\\s*' + attributeValue + ')?)';
+var openTag = '<[A-Za-z][A-Za-z0-9\\-]*' + attribute + '*\\s*\\/?>';
+var closeTag = '<\\/[A-Za-z][A-Za-z0-9\\-]*\\s*>';
+var comment = '<!---->|<!--(?:-?[^>-])(?:-?[^-])*-->';
+var processing = '<[?].*?[?]>';
+var declaration = '<![A-Za-z]+\\s+[^>]*>';
+var cdata = '<!\\[CDATA\\[[\\s\\S]*?\\]\\]>';
+
+exports.openCloseTag = new RegExp('^(?:' + openTag + '|' + closeTag + ')');
+
+exports.tag = new RegExp('^(?:' +
+  openTag + '|' +
+  closeTag + '|' +
+  comment + '|' +
+  processing + '|' +
+  declaration + '|' +
+  cdata +
+')');
+
+},{}],"../node_modules/remark-parse/lib/tokenize/html-block.js":[function(require,module,exports) {
+'use strict';
+
+var openCloseTag = require('../util/html').openCloseTag;
+
+module.exports = blockHTML;
+
+var C_TAB = '\t';
+var C_SPACE = ' ';
+var C_NEWLINE = '\n';
+var C_LT = '<';
+
+function blockHTML(eat, value, silent) {
+  var self = this;
+  var blocks = self.options.blocks;
+  var length = value.length;
+  var index = 0;
+  var next;
+  var line;
+  var offset;
+  var character;
+  var count;
+  var sequence;
+  var subvalue;
+
+  var sequences = [
+    [/^<(script|pre|style)(?=(\s|>|$))/i, /<\/(script|pre|style)>/i, true],
+    [/^<!--/, /-->/, true],
+    [/^<\?/, /\?>/, true],
+    [/^<![A-Za-z]/, />/, true],
+    [/^<!\[CDATA\[/, /\]\]>/, true],
+    [new RegExp('^</?(' + blocks.join('|') + ')(?=(\\s|/?>|$))', 'i'), /^$/, true],
+    [new RegExp(openCloseTag.source + '\\s*$'), /^$/, false]
+  ];
+
+  /* Eat initial spacing. */
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_TAB && character !== C_SPACE) {
+      break;
+    }
+
+    index++;
+  }
+
+  if (value.charAt(index) !== C_LT) {
+    return;
+  }
+
+  next = value.indexOf(C_NEWLINE, index + 1);
+  next = next === -1 ? length : next;
+  line = value.slice(index, next);
+  offset = -1;
+  count = sequences.length;
+
+  while (++offset < count) {
+    if (sequences[offset][0].test(line)) {
+      sequence = sequences[offset];
+      break;
+    }
+  }
+
+  if (!sequence) {
+    return;
+  }
+
+  if (silent) {
+    return sequence[2];
+  }
+
+  index = next;
+
+  if (!sequence[1].test(line)) {
+    while (index < length) {
+      next = value.indexOf(C_NEWLINE, index + 1);
+      next = next === -1 ? length : next;
+      line = value.slice(index + 1, next);
+
+      if (sequence[1].test(line)) {
+        if (line) {
+          index = next;
+        }
+
+        break;
+      }
+
+      index = next;
+    }
+  }
+
+  subvalue = value.slice(0, index);
+
+  return eat(subvalue)({type: 'html', value: subvalue});
+}
+
+},{"../util/html":"../node_modules/remark-parse/lib/util/html.js"}],"../node_modules/collapse-white-space/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = collapse
+
+// `collapse(' \t\nbar \nbaz\t') // ' bar baz '`
+function collapse(value) {
+  return String(value).replace(/\s+/g, ' ')
+}
+
+},{}],"../node_modules/remark-parse/lib/util/normalize.js":[function(require,module,exports) {
+'use strict';
+
+var collapseWhiteSpace = require('collapse-white-space');
+
+module.exports = normalize;
+
+/* Normalize an identifier.  Collapses multiple white space
+ * characters into a single space, and removes casing. */
+function normalize(value) {
+  return collapseWhiteSpace(value).toLowerCase();
+}
+
+},{"collapse-white-space":"../node_modules/collapse-white-space/index.js"}],"../node_modules/remark-parse/lib/tokenize/footnote-definition.js":[function(require,module,exports) {
+'use strict';
+
+var whitespace = require('is-whitespace-character');
+var normalize = require('../util/normalize');
+
+module.exports = footnoteDefinition;
+footnoteDefinition.notInList = true;
+footnoteDefinition.notInBlock = true;
+
+var C_BACKSLASH = '\\';
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+var C_SPACE = ' ';
+var C_BRACKET_OPEN = '[';
+var C_BRACKET_CLOSE = ']';
+var C_CARET = '^';
+var C_COLON = ':';
+
+var EXPRESSION_INITIAL_TAB = /^( {4}|\t)?/gm;
+
+function footnoteDefinition(eat, value, silent) {
+  var self = this;
+  var offsets = self.offset;
+  var index;
+  var length;
+  var subvalue;
+  var now;
+  var currentLine;
+  var content;
+  var queue;
+  var subqueue;
+  var character;
+  var identifier;
+  var add;
+  var exit;
+
+  if (!self.options.footnotes) {
+    return;
+  }
+
+  index = 0;
+  length = value.length;
+  subvalue = '';
+  now = eat.now();
+  currentLine = now.line;
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (!whitespace(character)) {
+      break;
+    }
+
+    subvalue += character;
+    index++;
+  }
+
+  if (
+    value.charAt(index) !== C_BRACKET_OPEN ||
+    value.charAt(index + 1) !== C_CARET
+  ) {
+    return;
+  }
+
+  subvalue += C_BRACKET_OPEN + C_CARET;
+  index = subvalue.length;
+  queue = '';
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character === C_BRACKET_CLOSE) {
+      break;
+    } else if (character === C_BACKSLASH) {
+      queue += character;
+      index++;
+      character = value.charAt(index);
+    }
+
+    queue += character;
+    index++;
+  }
+
+  if (
+    !queue ||
+    value.charAt(index) !== C_BRACKET_CLOSE ||
+    value.charAt(index + 1) !== C_COLON
+  ) {
+    return;
+  }
+
+  if (silent) {
+    return true;
+  }
+
+  identifier = normalize(queue);
+  subvalue += queue + C_BRACKET_CLOSE + C_COLON;
+  index = subvalue.length;
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_TAB && character !== C_SPACE) {
+      break;
+    }
+
+    subvalue += character;
+    index++;
+  }
+
+  now.column += subvalue.length;
+  now.offset += subvalue.length;
+  queue = '';
+  content = '';
+  subqueue = '';
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character === C_NEWLINE) {
+      subqueue = character;
+      index++;
+
+      while (index < length) {
+        character = value.charAt(index);
+
+        if (character !== C_NEWLINE) {
+          break;
+        }
+
+        subqueue += character;
+        index++;
+      }
+
+      queue += subqueue;
+      subqueue = '';
+
+      while (index < length) {
+        character = value.charAt(index);
+
+        if (character !== C_SPACE) {
+          break;
+        }
+
+        subqueue += character;
+        index++;
+      }
+
+      if (subqueue.length === 0) {
+        break;
+      }
+
+      queue += subqueue;
+    }
+
+    if (queue) {
+      content += queue;
+      queue = '';
+    }
+
+    content += character;
+    index++;
+  }
+
+  subvalue += content;
+
+  content = content.replace(EXPRESSION_INITIAL_TAB, function (line) {
+    offsets[currentLine] = (offsets[currentLine] || 0) + line.length;
+    currentLine++;
+
+    return '';
+  });
+
+  add = eat(subvalue);
+
+  exit = self.enterBlock();
+  content = self.tokenizeBlock(content, now);
+  exit();
+
+  return add({
+    type: 'footnoteDefinition',
+    identifier: identifier,
+    children: content
+  });
+}
+
+},{"is-whitespace-character":"../node_modules/is-whitespace-character/index.js","../util/normalize":"../node_modules/remark-parse/lib/util/normalize.js"}],"../node_modules/remark-parse/lib/tokenize/definition.js":[function(require,module,exports) {
+'use strict';
+
+var whitespace = require('is-whitespace-character');
+var normalize = require('../util/normalize');
+
+module.exports = definition;
+definition.notInList = true;
+definition.notInBlock = true;
+
+var C_DOUBLE_QUOTE = '"';
+var C_SINGLE_QUOTE = '\'';
+var C_BACKSLASH = '\\';
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+var C_SPACE = ' ';
+var C_BRACKET_OPEN = '[';
+var C_BRACKET_CLOSE = ']';
+var C_PAREN_OPEN = '(';
+var C_PAREN_CLOSE = ')';
+var C_COLON = ':';
+var C_LT = '<';
+var C_GT = '>';
+
+function definition(eat, value, silent) {
+  var self = this;
+  var commonmark = self.options.commonmark;
+  var index = 0;
+  var length = value.length;
+  var subvalue = '';
+  var beforeURL;
+  var beforeTitle;
+  var queue;
+  var character;
+  var test;
+  var identifier;
+  var url;
+  var title;
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_SPACE && character !== C_TAB) {
+      break;
+    }
+
+    subvalue += character;
+    index++;
+  }
+
+  character = value.charAt(index);
+
+  if (character !== C_BRACKET_OPEN) {
+    return;
+  }
+
+  index++;
+  subvalue += character;
+  queue = '';
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character === C_BRACKET_CLOSE) {
+      break;
+    } else if (character === C_BACKSLASH) {
+      queue += character;
+      index++;
+      character = value.charAt(index);
+    }
+
+    queue += character;
+    index++;
+  }
+
+  if (
+    !queue ||
+    value.charAt(index) !== C_BRACKET_CLOSE ||
+    value.charAt(index + 1) !== C_COLON
+  ) {
+    return;
+  }
+
+  identifier = queue;
+  subvalue += queue + C_BRACKET_CLOSE + C_COLON;
+  index = subvalue.length;
+  queue = '';
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (
+      character !== C_TAB &&
+      character !== C_SPACE &&
+      character !== C_NEWLINE
+    ) {
+      break;
+    }
+
+    subvalue += character;
+    index++;
+  }
+
+  character = value.charAt(index);
+  queue = '';
+  beforeURL = subvalue;
+
+  if (character === C_LT) {
+    index++;
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (!isEnclosedURLCharacter(character)) {
+        break;
+      }
+
+      queue += character;
+      index++;
+    }
+
+    character = value.charAt(index);
+
+    if (character === isEnclosedURLCharacter.delimiter) {
+      subvalue += C_LT + queue + character;
+      index++;
+    } else {
+      if (commonmark) {
+        return;
+      }
+
+      index -= queue.length + 1;
+      queue = '';
+    }
+  }
+
+  if (!queue) {
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (!isUnclosedURLCharacter(character)) {
+        break;
+      }
+
+      queue += character;
+      index++;
+    }
+
+    subvalue += queue;
+  }
+
+  if (!queue) {
+    return;
+  }
+
+  url = queue;
+  queue = '';
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (
+      character !== C_TAB &&
+      character !== C_SPACE &&
+      character !== C_NEWLINE
+    ) {
+      break;
+    }
+
+    queue += character;
+    index++;
+  }
+
+  character = value.charAt(index);
+  test = null;
+
+  if (character === C_DOUBLE_QUOTE) {
+    test = C_DOUBLE_QUOTE;
+  } else if (character === C_SINGLE_QUOTE) {
+    test = C_SINGLE_QUOTE;
+  } else if (character === C_PAREN_OPEN) {
+    test = C_PAREN_CLOSE;
+  }
+
+  if (!test) {
+    queue = '';
+    index = subvalue.length;
+  } else if (queue) {
+    subvalue += queue + character;
+    index = subvalue.length;
+    queue = '';
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (character === test) {
+        break;
+      }
+
+      if (character === C_NEWLINE) {
+        index++;
+        character = value.charAt(index);
+
+        if (character === C_NEWLINE || character === test) {
+          return;
+        }
+
+        queue += C_NEWLINE;
+      }
+
+      queue += character;
+      index++;
+    }
+
+    character = value.charAt(index);
+
+    if (character !== test) {
+      return;
+    }
+
+    beforeTitle = subvalue;
+    subvalue += queue + character;
+    index++;
+    title = queue;
+    queue = '';
+  } else {
+    return;
+  }
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character !== C_TAB && character !== C_SPACE) {
+      break;
+    }
+
+    subvalue += character;
+    index++;
+  }
+
+  character = value.charAt(index);
+
+  if (!character || character === C_NEWLINE) {
+    if (silent) {
+      return true;
+    }
+
+    beforeURL = eat(beforeURL).test().end;
+    url = self.decode.raw(self.unescape(url), beforeURL, {nonTerminated: false});
+
+    if (title) {
+      beforeTitle = eat(beforeTitle).test().end;
+      title = self.decode.raw(self.unescape(title), beforeTitle);
+    }
+
+    return eat(subvalue)({
+      type: 'definition',
+      identifier: normalize(identifier),
+      title: title || null,
+      url: url
+    });
+  }
+}
+
+/* Check if `character` can be inside an enclosed URI. */
+function isEnclosedURLCharacter(character) {
+  return character !== C_GT &&
+    character !== C_BRACKET_OPEN &&
+    character !== C_BRACKET_CLOSE;
+}
+
+isEnclosedURLCharacter.delimiter = C_GT;
+
+/* Check if `character` can be inside an unclosed URI. */
+function isUnclosedURLCharacter(character) {
+  return character !== C_BRACKET_OPEN &&
+    character !== C_BRACKET_CLOSE &&
+    !whitespace(character);
+}
+
+},{"is-whitespace-character":"../node_modules/is-whitespace-character/index.js","../util/normalize":"../node_modules/remark-parse/lib/util/normalize.js"}],"../node_modules/remark-parse/lib/tokenize/table.js":[function(require,module,exports) {
+'use strict';
+
+var whitespace = require('is-whitespace-character');
+
+module.exports = table;
+
+var C_BACKSLASH = '\\';
+var C_TICK = '`';
+var C_DASH = '-';
+var C_PIPE = '|';
+var C_COLON = ':';
+var C_SPACE = ' ';
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+
+var MIN_TABLE_COLUMNS = 1;
+var MIN_TABLE_ROWS = 2;
+
+var TABLE_ALIGN_LEFT = 'left';
+var TABLE_ALIGN_CENTER = 'center';
+var TABLE_ALIGN_RIGHT = 'right';
+var TABLE_ALIGN_NONE = null;
+
+function table(eat, value, silent) {
+  var self = this;
+  var index;
+  var alignments;
+  var alignment;
+  var subvalue;
+  var row;
+  var length;
+  var lines;
+  var queue;
+  var character;
+  var hasDash;
+  var align;
+  var cell;
+  var preamble;
+  var count;
+  var opening;
+  var now;
+  var position;
+  var lineCount;
+  var line;
+  var rows;
+  var table;
+  var lineIndex;
+  var pipeIndex;
+  var first;
+
+  /* Exit when not in gfm-mode. */
+  if (!self.options.gfm) {
+    return;
+  }
+
+  /* Get the rows.
+   * Detecting tables soon is hard, so there are some
+   * checks for performance here, such as the minimum
+   * number of rows, and allowed characters in the
+   * alignment row. */
+  index = 0;
+  lineCount = 0;
+  length = value.length + 1;
+  lines = [];
+
+  while (index < length) {
+    lineIndex = value.indexOf(C_NEWLINE, index);
+    pipeIndex = value.indexOf(C_PIPE, index + 1);
+
+    if (lineIndex === -1) {
+      lineIndex = value.length;
+    }
+
+    if (pipeIndex === -1 || pipeIndex > lineIndex) {
+      if (lineCount < MIN_TABLE_ROWS) {
+        return;
+      }
+
+      break;
+    }
+
+    lines.push(value.slice(index, lineIndex));
+    lineCount++;
+    index = lineIndex + 1;
+  }
+
+  /* Parse the alignment row. */
+  subvalue = lines.join(C_NEWLINE);
+  alignments = lines.splice(1, 1)[0] || [];
+  index = 0;
+  length = alignments.length;
+  lineCount--;
+  alignment = false;
+  align = [];
+
+  while (index < length) {
+    character = alignments.charAt(index);
+
+    if (character === C_PIPE) {
+      hasDash = null;
+
+      if (alignment === false) {
+        if (first === false) {
+          return;
+        }
+      } else {
+        align.push(alignment);
+        alignment = false;
+      }
+
+      first = false;
+    } else if (character === C_DASH) {
+      hasDash = true;
+      alignment = alignment || TABLE_ALIGN_NONE;
+    } else if (character === C_COLON) {
+      if (alignment === TABLE_ALIGN_LEFT) {
+        alignment = TABLE_ALIGN_CENTER;
+      } else if (hasDash && alignment === TABLE_ALIGN_NONE) {
+        alignment = TABLE_ALIGN_RIGHT;
+      } else {
+        alignment = TABLE_ALIGN_LEFT;
+      }
+    } else if (!whitespace(character)) {
+      return;
+    }
+
+    index++;
+  }
+
+  if (alignment !== false) {
+    align.push(alignment);
+  }
+
+  /* Exit when without enough columns. */
+  if (align.length < MIN_TABLE_COLUMNS) {
+    return;
+  }
+
+  /* istanbul ignore if - never used (yet) */
+  if (silent) {
+    return true;
+  }
+
+  /* Parse the rows. */
+  position = -1;
+  rows = [];
+
+  table = eat(subvalue).reset({
+    type: 'table',
+    align: align,
+    children: rows
+  });
+
+  while (++position < lineCount) {
+    line = lines[position];
+    row = {type: 'tableRow', children: []};
+
+    /* Eat a newline character when this is not the
+     * first row. */
+    if (position) {
+      eat(C_NEWLINE);
+    }
+
+    /* Eat the row. */
+    eat(line).reset(row, table);
+
+    length = line.length + 1;
+    index = 0;
+    queue = '';
+    cell = '';
+    preamble = true;
+    count = null;
+    opening = null;
+
+    while (index < length) {
+      character = line.charAt(index);
+
+      if (character === C_TAB || character === C_SPACE) {
+        if (cell) {
+          queue += character;
+        } else {
+          eat(character);
+        }
+
+        index++;
+        continue;
+      }
+
+      if (character === '' || character === C_PIPE) {
+        if (preamble) {
+          eat(character);
+        } else {
+          if (character && opening) {
+            queue += character;
+            index++;
+            continue;
+          }
+
+          if ((cell || character) && !preamble) {
+            subvalue = cell;
+
+            if (queue.length > 1) {
+              if (character) {
+                subvalue += queue.slice(0, queue.length - 1);
+                queue = queue.charAt(queue.length - 1);
+              } else {
+                subvalue += queue;
+                queue = '';
+              }
+            }
+
+            now = eat.now();
+
+            eat(subvalue)({
+              type: 'tableCell',
+              children: self.tokenizeInline(cell, now)
+            }, row);
+          }
+
+          eat(queue + character);
+
+          queue = '';
+          cell = '';
+        }
+      } else {
+        if (queue) {
+          cell += queue;
+          queue = '';
+        }
+
+        cell += character;
+
+        if (character === C_BACKSLASH && index !== length - 2) {
+          cell += line.charAt(index + 1);
+          index++;
+        }
+
+        if (character === C_TICK) {
+          count = 1;
+
+          while (line.charAt(index + 1) === character) {
+            cell += character;
+            index++;
+            count++;
+          }
+
+          if (!opening) {
+            opening = count;
+          } else if (count >= opening) {
+            opening = 0;
+          }
+        }
+      }
+
+      preamble = false;
+      index++;
+    }
+
+    /* Eat the alignment row. */
+    if (!position) {
+      eat(C_NEWLINE + alignments);
+    }
+  }
+
+  return table;
+}
+
+},{"is-whitespace-character":"../node_modules/is-whitespace-character/index.js"}],"../node_modules/remark-parse/lib/tokenize/paragraph.js":[function(require,module,exports) {
+'use strict';
+
+var trim = require('trim');
+var decimal = require('is-decimal');
+var trimTrailingLines = require('trim-trailing-lines');
+var interrupt = require('../util/interrupt');
+
+module.exports = paragraph;
+
+var C_NEWLINE = '\n';
+var C_TAB = '\t';
+var C_SPACE = ' ';
+
+var TAB_SIZE = 4;
+
+/* Tokenise paragraph. */
+function paragraph(eat, value, silent) {
+  var self = this;
+  var settings = self.options;
+  var commonmark = settings.commonmark;
+  var gfm = settings.gfm;
+  var tokenizers = self.blockTokenizers;
+  var interruptors = self.interruptParagraph;
+  var index = value.indexOf(C_NEWLINE);
+  var length = value.length;
+  var position;
+  var subvalue;
+  var character;
+  var size;
+  var now;
+
+  while (index < length) {
+    /* Eat everything if there’s no following newline. */
+    if (index === -1) {
+      index = length;
+      break;
+    }
+
+    /* Stop if the next character is NEWLINE. */
+    if (value.charAt(index + 1) === C_NEWLINE) {
+      break;
+    }
+
+    /* In commonmark-mode, following indented lines
+     * are part of the paragraph. */
+    if (commonmark) {
+      size = 0;
+      position = index + 1;
+
+      while (position < length) {
+        character = value.charAt(position);
+
+        if (character === C_TAB) {
+          size = TAB_SIZE;
+          break;
+        } else if (character === C_SPACE) {
+          size++;
+        } else {
+          break;
+        }
+
+        position++;
+      }
+
+      if (size >= TAB_SIZE) {
+        index = value.indexOf(C_NEWLINE, index + 1);
+        continue;
+      }
+    }
+
+    subvalue = value.slice(index + 1);
+
+    /* Check if the following code contains a possible
+     * block. */
+    if (interrupt(interruptors, tokenizers, self, [eat, subvalue, true])) {
+      break;
+    }
+
+    /* Break if the following line starts a list, when
+     * already in a list, or when in commonmark, or when
+     * in gfm mode and the bullet is *not* numeric. */
+    if (
+      tokenizers.list.call(self, eat, subvalue, true) &&
+      (
+        self.inList ||
+        commonmark ||
+        (gfm && !decimal(trim.left(subvalue).charAt(0)))
+      )
+    ) {
+      break;
+    }
+
+    position = index;
+    index = value.indexOf(C_NEWLINE, index + 1);
+
+    if (index !== -1 && trim(value.slice(position, index)) === '') {
+      index = position;
+      break;
+    }
+  }
+
+  subvalue = value.slice(0, index);
+
+  if (trim(subvalue) === '') {
+    eat(subvalue);
+
+    return null;
+  }
+
+  /* istanbul ignore if - never used (yet) */
+  if (silent) {
+    return true;
+  }
+
+  now = eat.now();
+  subvalue = trimTrailingLines(subvalue);
+
+  return eat(subvalue)({
+    type: 'paragraph',
+    children: self.tokenizeInline(subvalue, now)
+  });
+}
+
+},{"trim":"../node_modules/trim/index.js","is-decimal":"../node_modules/is-decimal/index.js","trim-trailing-lines":"../node_modules/trim-trailing-lines/index.js","../util/interrupt":"../node_modules/remark-parse/lib/util/interrupt.js"}],"../node_modules/remark-parse/lib/locate/escape.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = locate;
+
+function locate(value, fromIndex) {
+  return value.indexOf('\\', fromIndex);
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/escape.js":[function(require,module,exports) {
+'use strict';
+
+var locate = require('../locate/escape');
+
+module.exports = escape;
+escape.locator = locate;
+
+function escape(eat, value, silent) {
+  var self = this;
+  var character;
+  var node;
+
+  if (value.charAt(0) === '\\') {
+    character = value.charAt(1);
+
+    if (self.escape.indexOf(character) !== -1) {
+      /* istanbul ignore if - never used (yet) */
+      if (silent) {
+        return true;
+      }
+
+      if (character === '\n') {
+        node = {type: 'break'};
+      } else {
+        node = {
+          type: 'text',
+          value: character
+        };
+      }
+
+      return eat('\\' + character)(node);
+    }
+  }
+}
+
+},{"../locate/escape":"../node_modules/remark-parse/lib/locate/escape.js"}],"../node_modules/remark-parse/lib/locate/tag.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = locate;
+
+function locate(value, fromIndex) {
+  return value.indexOf('<', fromIndex);
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/auto-link.js":[function(require,module,exports) {
+'use strict';
+
+var whitespace = require('is-whitespace-character');
+var decode = require('parse-entities');
+var locate = require('../locate/tag');
+
+module.exports = autoLink;
+autoLink.locator = locate;
+autoLink.notInLink = true;
+
+var C_LT = '<';
+var C_GT = '>';
+var C_AT_SIGN = '@';
+var C_SLASH = '/';
+var MAILTO = 'mailto:';
+var MAILTO_LENGTH = MAILTO.length;
+
+/* Tokenise a link. */
+function autoLink(eat, value, silent) {
+  var self;
+  var subvalue;
+  var length;
+  var index;
+  var queue;
+  var character;
+  var hasAtCharacter;
+  var link;
+  var now;
+  var content;
+  var tokenizers;
+  var exit;
+
+  if (value.charAt(0) !== C_LT) {
+    return;
+  }
+
+  self = this;
+  subvalue = '';
+  length = value.length;
+  index = 0;
+  queue = '';
+  hasAtCharacter = false;
+  link = '';
+
+  index++;
+  subvalue = C_LT;
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (
+      whitespace(character) ||
+      character === C_GT ||
+      character === C_AT_SIGN ||
+      (character === ':' && value.charAt(index + 1) === C_SLASH)
+    ) {
+      break;
+    }
+
+    queue += character;
+    index++;
+  }
+
+  if (!queue) {
+    return;
+  }
+
+  link += queue;
+  queue = '';
+
+  character = value.charAt(index);
+  link += character;
+  index++;
+
+  if (character === C_AT_SIGN) {
+    hasAtCharacter = true;
+  } else {
+    if (
+      character !== ':' ||
+      value.charAt(index + 1) !== C_SLASH
+    ) {
+      return;
+    }
+
+    link += C_SLASH;
+    index++;
+  }
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (whitespace(character) || character === C_GT) {
+      break;
+    }
+
+    queue += character;
+    index++;
+  }
+
+  character = value.charAt(index);
+
+  if (!queue || character !== C_GT) {
+    return;
+  }
+
+  /* istanbul ignore if - never used (yet) */
+  if (silent) {
+    return true;
+  }
+
+  link += queue;
+  content = link;
+  subvalue += link + character;
+  now = eat.now();
+  now.column++;
+  now.offset++;
+
+  if (hasAtCharacter) {
+    if (link.slice(0, MAILTO_LENGTH).toLowerCase() === MAILTO) {
+      content = content.substr(MAILTO_LENGTH);
+      now.column += MAILTO_LENGTH;
+      now.offset += MAILTO_LENGTH;
+    } else {
+      link = MAILTO + link;
+    }
+  }
+
+  /* Temporarily remove all tokenizers except text in autolinks. */
+  tokenizers = self.inlineTokenizers;
+  self.inlineTokenizers = {text: tokenizers.text};
+
+  exit = self.enterLink();
+
+  content = self.tokenizeInline(content, now);
+
+  self.inlineTokenizers = tokenizers;
+  exit();
+
+  return eat(subvalue)({
+    type: 'link',
+    title: null,
+    url: decode(link, {nonTerminated: false}),
+    children: content
+  });
+}
+
+},{"is-whitespace-character":"../node_modules/is-whitespace-character/index.js","parse-entities":"../node_modules/parse-entities/index.js","../locate/tag":"../node_modules/remark-parse/lib/locate/tag.js"}],"../node_modules/remark-parse/lib/locate/url.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = locate;
+
+var PROTOCOLS = ['https://', 'http://', 'mailto:'];
+
+function locate(value, fromIndex) {
+  var length = PROTOCOLS.length;
+  var index = -1;
+  var min = -1;
+  var position;
+
+  if (!this.options.gfm) {
+    return -1;
+  }
+
+  while (++index < length) {
+    position = value.indexOf(PROTOCOLS[index], fromIndex);
+
+    if (position !== -1 && (position < min || min === -1)) {
+      min = position;
+    }
+  }
+
+  return min;
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/url.js":[function(require,module,exports) {
+'use strict';
+
+var decode = require('parse-entities');
+var whitespace = require('is-whitespace-character');
+var locate = require('../locate/url');
+
+module.exports = url;
+url.locator = locate;
+url.notInLink = true;
+
+var C_BRACKET_OPEN = '[';
+var C_BRACKET_CLOSE = ']';
+var C_PAREN_OPEN = '(';
+var C_PAREN_CLOSE = ')';
+var C_LT = '<';
+var C_AT_SIGN = '@';
+
+var HTTP_PROTOCOL = 'http://';
+var HTTPS_PROTOCOL = 'https://';
+var MAILTO_PROTOCOL = 'mailto:';
+
+var PROTOCOLS = [
+  HTTP_PROTOCOL,
+  HTTPS_PROTOCOL,
+  MAILTO_PROTOCOL
+];
+
+var PROTOCOLS_LENGTH = PROTOCOLS.length;
+
+function url(eat, value, silent) {
+  var self = this;
+  var subvalue;
+  var content;
+  var character;
+  var index;
+  var position;
+  var protocol;
+  var match;
+  var length;
+  var queue;
+  var parenCount;
+  var nextCharacter;
+  var exit;
+
+  if (!self.options.gfm) {
+    return;
+  }
+
+  subvalue = '';
+  index = -1;
+  length = PROTOCOLS_LENGTH;
+
+  while (++index < length) {
+    protocol = PROTOCOLS[index];
+    match = value.slice(0, protocol.length);
+
+    if (match.toLowerCase() === protocol) {
+      subvalue = match;
+      break;
+    }
+  }
+
+  if (!subvalue) {
+    return;
+  }
+
+  index = subvalue.length;
+  length = value.length;
+  queue = '';
+  parenCount = 0;
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (whitespace(character) || character === C_LT) {
+      break;
+    }
+
+    if (
+      character === '.' ||
+      character === ',' ||
+      character === ':' ||
+      character === ';' ||
+      character === '"' ||
+      character === '\'' ||
+      character === ')' ||
+      character === ']'
+    ) {
+      nextCharacter = value.charAt(index + 1);
+
+      if (!nextCharacter || whitespace(nextCharacter)) {
+        break;
+      }
+    }
+
+    if (character === C_PAREN_OPEN || character === C_BRACKET_OPEN) {
+      parenCount++;
+    }
+
+    if (character === C_PAREN_CLOSE || character === C_BRACKET_CLOSE) {
+      parenCount--;
+
+      if (parenCount < 0) {
+        break;
+      }
+    }
+
+    queue += character;
+    index++;
+  }
+
+  if (!queue) {
+    return;
+  }
+
+  subvalue += queue;
+  content = subvalue;
+
+  if (protocol === MAILTO_PROTOCOL) {
+    position = queue.indexOf(C_AT_SIGN);
+
+    if (position === -1 || position === length - 1) {
+      return;
+    }
+
+    content = content.substr(MAILTO_PROTOCOL.length);
+  }
+
+  /* istanbul ignore if - never used (yet) */
+  if (silent) {
+    return true;
+  }
+
+  exit = self.enterLink();
+  content = self.tokenizeInline(content, eat.now());
+  exit();
+
+  return eat(subvalue)({
+    type: 'link',
+    title: null,
+    url: decode(subvalue, {nonTerminated: false}),
+    children: content
+  });
+}
+
+},{"parse-entities":"../node_modules/parse-entities/index.js","is-whitespace-character":"../node_modules/is-whitespace-character/index.js","../locate/url":"../node_modules/remark-parse/lib/locate/url.js"}],"../node_modules/remark-parse/lib/tokenize/html-inline.js":[function(require,module,exports) {
+'use strict';
+
+var alphabetical = require('is-alphabetical');
+var locate = require('../locate/tag');
+var tag = require('../util/html').tag;
+
+module.exports = inlineHTML;
+inlineHTML.locator = locate;
+
+var EXPRESSION_HTML_LINK_OPEN = /^<a /i;
+var EXPRESSION_HTML_LINK_CLOSE = /^<\/a>/i;
+
+function inlineHTML(eat, value, silent) {
+  var self = this;
+  var length = value.length;
+  var character;
+  var subvalue;
+
+  if (value.charAt(0) !== '<' || length < 3) {
+    return;
+  }
+
+  character = value.charAt(1);
+
+  if (
+    !alphabetical(character) &&
+    character !== '?' &&
+    character !== '!' &&
+    character !== '/'
+  ) {
+    return;
+  }
+
+  subvalue = value.match(tag);
+
+  if (!subvalue) {
+    return;
+  }
+
+  /* istanbul ignore if - not used yet. */
+  if (silent) {
+    return true;
+  }
+
+  subvalue = subvalue[0];
+
+  if (!self.inLink && EXPRESSION_HTML_LINK_OPEN.test(subvalue)) {
+    self.inLink = true;
+  } else if (self.inLink && EXPRESSION_HTML_LINK_CLOSE.test(subvalue)) {
+    self.inLink = false;
+  }
+
+  return eat(subvalue)({type: 'html', value: subvalue});
+}
+
+},{"is-alphabetical":"../node_modules/is-alphabetical/index.js","../locate/tag":"../node_modules/remark-parse/lib/locate/tag.js","../util/html":"../node_modules/remark-parse/lib/util/html.js"}],"../node_modules/remark-parse/lib/locate/link.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = locate;
+
+function locate(value, fromIndex) {
+  var link = value.indexOf('[', fromIndex);
+  var image = value.indexOf('![', fromIndex);
+
+  if (image === -1) {
+    return link;
+  }
+
+  /* Link can never be `-1` if an image is found, so we don’t need
+   * to check for that :) */
+  return link < image ? link : image;
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/link.js":[function(require,module,exports) {
+'use strict';
+
+var whitespace = require('is-whitespace-character');
+var locate = require('../locate/link');
+
+module.exports = link;
+link.locator = locate;
+
+var own = {}.hasOwnProperty;
+
+var C_BACKSLASH = '\\';
+var C_BRACKET_OPEN = '[';
+var C_BRACKET_CLOSE = ']';
+var C_PAREN_OPEN = '(';
+var C_PAREN_CLOSE = ')';
+var C_LT = '<';
+var C_GT = '>';
+var C_TICK = '`';
+var C_DOUBLE_QUOTE = '"';
+var C_SINGLE_QUOTE = '\'';
+
+/* Map of characters, which can be used to mark link
+ * and image titles. */
+var LINK_MARKERS = {};
+
+LINK_MARKERS[C_DOUBLE_QUOTE] = C_DOUBLE_QUOTE;
+LINK_MARKERS[C_SINGLE_QUOTE] = C_SINGLE_QUOTE;
+
+/* Map of characters, which can be used to mark link
+ * and image titles in commonmark-mode. */
+var COMMONMARK_LINK_MARKERS = {};
+
+COMMONMARK_LINK_MARKERS[C_DOUBLE_QUOTE] = C_DOUBLE_QUOTE;
+COMMONMARK_LINK_MARKERS[C_SINGLE_QUOTE] = C_SINGLE_QUOTE;
+COMMONMARK_LINK_MARKERS[C_PAREN_OPEN] = C_PAREN_CLOSE;
+
+function link(eat, value, silent) {
+  var self = this;
+  var subvalue = '';
+  var index = 0;
+  var character = value.charAt(0);
+  var pedantic = self.options.pedantic;
+  var commonmark = self.options.commonmark;
+  var gfm = self.options.gfm;
+  var closed;
+  var count;
+  var opening;
+  var beforeURL;
+  var beforeTitle;
+  var subqueue;
+  var hasMarker;
+  var markers;
+  var isImage;
+  var content;
+  var marker;
+  var length;
+  var title;
+  var depth;
+  var queue;
+  var url;
+  var now;
+  var exit;
+  var node;
+
+  /* Detect whether this is an image. */
+  if (character === '!') {
+    isImage = true;
+    subvalue = character;
+    character = value.charAt(++index);
+  }
+
+  /* Eat the opening. */
+  if (character !== C_BRACKET_OPEN) {
+    return;
+  }
+
+  /* Exit when this is a link and we’re already inside
+   * a link. */
+  if (!isImage && self.inLink) {
+    return;
+  }
+
+  subvalue += character;
+  queue = '';
+  index++;
+
+  /* Eat the content. */
+  length = value.length;
+  now = eat.now();
+  depth = 0;
+
+  now.column += index;
+  now.offset += index;
+
+  while (index < length) {
+    character = value.charAt(index);
+    subqueue = character;
+
+    if (character === C_TICK) {
+      /* Inline-code in link content. */
+      count = 1;
+
+      while (value.charAt(index + 1) === C_TICK) {
+        subqueue += character;
+        index++;
+        count++;
+      }
+
+      if (!opening) {
+        opening = count;
+      } else if (count >= opening) {
+        opening = 0;
+      }
+    } else if (character === C_BACKSLASH) {
+      /* Allow brackets to be escaped. */
+      index++;
+      subqueue += value.charAt(index);
+    /* In GFM mode, brackets in code still count.
+     * In all other modes, they don’t.  This empty
+     * block prevents the next statements are
+     * entered. */
+    } else if ((!opening || gfm) && character === C_BRACKET_OPEN) {
+      depth++;
+    } else if ((!opening || gfm) && character === C_BRACKET_CLOSE) {
+      if (depth) {
+        depth--;
+      } else {
+        /* Allow white-space between content and
+         * url in GFM mode. */
+        if (!pedantic) {
+          while (index < length) {
+            character = value.charAt(index + 1);
+
+            if (!whitespace(character)) {
+              break;
+            }
+
+            subqueue += character;
+            index++;
+          }
+        }
+
+        if (value.charAt(index + 1) !== C_PAREN_OPEN) {
+          return;
+        }
+
+        subqueue += C_PAREN_OPEN;
+        closed = true;
+        index++;
+
+        break;
+      }
+    }
+
+    queue += subqueue;
+    subqueue = '';
+    index++;
+  }
+
+  /* Eat the content closing. */
+  if (!closed) {
+    return;
+  }
+
+  content = queue;
+  subvalue += queue + subqueue;
+  index++;
+
+  /* Eat white-space. */
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (!whitespace(character)) {
+      break;
+    }
+
+    subvalue += character;
+    index++;
+  }
+
+  /* Eat the URL. */
+  character = value.charAt(index);
+  markers = commonmark ? COMMONMARK_LINK_MARKERS : LINK_MARKERS;
+  queue = '';
+  beforeURL = subvalue;
+
+  if (character === C_LT) {
+    index++;
+    beforeURL += C_LT;
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (character === C_GT) {
+        break;
+      }
+
+      if (commonmark && character === '\n') {
+        return;
+      }
+
+      queue += character;
+      index++;
+    }
+
+    if (value.charAt(index) !== C_GT) {
+      return;
+    }
+
+    subvalue += C_LT + queue + C_GT;
+    url = queue;
+    index++;
+  } else {
+    character = null;
+    subqueue = '';
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (subqueue && own.call(markers, character)) {
+        break;
+      }
+
+      if (whitespace(character)) {
+        if (!pedantic) {
+          break;
+        }
+
+        subqueue += character;
+      } else {
+        if (character === C_PAREN_OPEN) {
+          depth++;
+        } else if (character === C_PAREN_CLOSE) {
+          if (depth === 0) {
+            break;
+          }
+
+          depth--;
+        }
+
+        queue += subqueue;
+        subqueue = '';
+
+        if (character === C_BACKSLASH) {
+          queue += C_BACKSLASH;
+          character = value.charAt(++index);
+        }
+
+        queue += character;
+      }
+
+      index++;
+    }
+
+    subvalue += queue;
+    url = queue;
+    index = subvalue.length;
+  }
+
+  /* Eat white-space. */
+  queue = '';
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (!whitespace(character)) {
+      break;
+    }
+
+    queue += character;
+    index++;
+  }
+
+  character = value.charAt(index);
+  subvalue += queue;
+
+  /* Eat the title. */
+  if (queue && own.call(markers, character)) {
+    index++;
+    subvalue += character;
+    queue = '';
+    marker = markers[character];
+    beforeTitle = subvalue;
+
+    /* In commonmark-mode, things are pretty easy: the
+     * marker cannot occur inside the title.
+     *
+     * Non-commonmark does, however, support nested
+     * delimiters. */
+    if (commonmark) {
+      while (index < length) {
+        character = value.charAt(index);
+
+        if (character === marker) {
+          break;
+        }
+
+        if (character === C_BACKSLASH) {
+          queue += C_BACKSLASH;
+          character = value.charAt(++index);
+        }
+
+        index++;
+        queue += character;
+      }
+
+      character = value.charAt(index);
+
+      if (character !== marker) {
+        return;
+      }
+
+      title = queue;
+      subvalue += queue + character;
+      index++;
+
+      while (index < length) {
+        character = value.charAt(index);
+
+        if (!whitespace(character)) {
+          break;
+        }
+
+        subvalue += character;
+        index++;
+      }
+    } else {
+      subqueue = '';
+
+      while (index < length) {
+        character = value.charAt(index);
+
+        if (character === marker) {
+          if (hasMarker) {
+            queue += marker + subqueue;
+            subqueue = '';
+          }
+
+          hasMarker = true;
+        } else if (!hasMarker) {
+          queue += character;
+        } else if (character === C_PAREN_CLOSE) {
+          subvalue += queue + marker + subqueue;
+          title = queue;
+          break;
+        } else if (whitespace(character)) {
+          subqueue += character;
+        } else {
+          queue += marker + subqueue + character;
+          subqueue = '';
+          hasMarker = false;
+        }
+
+        index++;
+      }
+    }
+  }
+
+  if (value.charAt(index) !== C_PAREN_CLOSE) {
+    return;
+  }
+
+  /* istanbul ignore if - never used (yet) */
+  if (silent) {
+    return true;
+  }
+
+  subvalue += C_PAREN_CLOSE;
+
+  url = self.decode.raw(self.unescape(url), eat(beforeURL).test().end, {nonTerminated: false});
+
+  if (title) {
+    beforeTitle = eat(beforeTitle).test().end;
+    title = self.decode.raw(self.unescape(title), beforeTitle);
+  }
+
+  node = {
+    type: isImage ? 'image' : 'link',
+    title: title || null,
+    url: url
+  };
+
+  if (isImage) {
+    node.alt = self.decode.raw(self.unescape(content), now) || null;
+  } else {
+    exit = self.enterLink();
+    node.children = self.tokenizeInline(content, now);
+    exit();
+  }
+
+  return eat(subvalue)(node);
+}
+
+},{"is-whitespace-character":"../node_modules/is-whitespace-character/index.js","../locate/link":"../node_modules/remark-parse/lib/locate/link.js"}],"../node_modules/remark-parse/lib/tokenize/reference.js":[function(require,module,exports) {
+'use strict';
+
+var whitespace = require('is-whitespace-character');
+var locate = require('../locate/link');
+var normalize = require('../util/normalize');
+
+module.exports = reference;
+reference.locator = locate;
+
+var T_LINK = 'link';
+var T_IMAGE = 'image';
+var T_FOOTNOTE = 'footnote';
+var REFERENCE_TYPE_SHORTCUT = 'shortcut';
+var REFERENCE_TYPE_COLLAPSED = 'collapsed';
+var REFERENCE_TYPE_FULL = 'full';
+var C_CARET = '^';
+var C_BACKSLASH = '\\';
+var C_BRACKET_OPEN = '[';
+var C_BRACKET_CLOSE = ']';
+
+function reference(eat, value, silent) {
+  var self = this;
+  var character = value.charAt(0);
+  var index = 0;
+  var length = value.length;
+  var subvalue = '';
+  var intro = '';
+  var type = T_LINK;
+  var referenceType = REFERENCE_TYPE_SHORTCUT;
+  var content;
+  var identifier;
+  var now;
+  var node;
+  var exit;
+  var queue;
+  var bracketed;
+  var depth;
+
+  /* Check whether we’re eating an image. */
+  if (character === '!') {
+    type = T_IMAGE;
+    intro = character;
+    character = value.charAt(++index);
+  }
+
+  if (character !== C_BRACKET_OPEN) {
+    return;
+  }
+
+  index++;
+  intro += character;
+  queue = '';
+
+  /* Check whether we’re eating a footnote. */
+  if (self.options.footnotes && value.charAt(index) === C_CARET) {
+    /* Exit if `![^` is found, so the `!` will be seen as text after this,
+     * and we’ll enter this function again when `[^` is found. */
+    if (type === T_IMAGE) {
+      return;
+    }
+
+    intro += C_CARET;
+    index++;
+    type = T_FOOTNOTE;
+  }
+
+  /* Eat the text. */
+  depth = 0;
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (character === C_BRACKET_OPEN) {
+      bracketed = true;
+      depth++;
+    } else if (character === C_BRACKET_CLOSE) {
+      if (!depth) {
+        break;
+      }
+
+      depth--;
+    }
+
+    if (character === C_BACKSLASH) {
+      queue += C_BACKSLASH;
+      character = value.charAt(++index);
+    }
+
+    queue += character;
+    index++;
+  }
+
+  subvalue = queue;
+  content = queue;
+  character = value.charAt(index);
+
+  if (character !== C_BRACKET_CLOSE) {
+    return;
+  }
+
+  index++;
+  subvalue += character;
+  queue = '';
+
+  while (index < length) {
+    character = value.charAt(index);
+
+    if (!whitespace(character)) {
+      break;
+    }
+
+    queue += character;
+    index++;
+  }
+
+  character = value.charAt(index);
+
+  /* Inline footnotes cannot have an identifier. */
+  if (type !== T_FOOTNOTE && character === C_BRACKET_OPEN) {
+    identifier = '';
+    queue += character;
+    index++;
+
+    while (index < length) {
+      character = value.charAt(index);
+
+      if (character === C_BRACKET_OPEN || character === C_BRACKET_CLOSE) {
+        break;
+      }
+
+      if (character === C_BACKSLASH) {
+        identifier += C_BACKSLASH;
+        character = value.charAt(++index);
+      }
+
+      identifier += character;
+      index++;
+    }
+
+    character = value.charAt(index);
+
+    if (character === C_BRACKET_CLOSE) {
+      referenceType = identifier ? REFERENCE_TYPE_FULL : REFERENCE_TYPE_COLLAPSED;
+      queue += identifier + character;
+      index++;
+    } else {
+      identifier = '';
+    }
+
+    subvalue += queue;
+    queue = '';
+  } else {
+    if (!content) {
+      return;
+    }
+
+    identifier = content;
+  }
+
+  /* Brackets cannot be inside the identifier. */
+  if (referenceType !== REFERENCE_TYPE_FULL && bracketed) {
+    return;
+  }
+
+  subvalue = intro + subvalue;
+
+  if (type === T_LINK && self.inLink) {
+    return null;
+  }
+
+  /* istanbul ignore if - never used (yet) */
+  if (silent) {
+    return true;
+  }
+
+  if (type === T_FOOTNOTE && content.indexOf(' ') !== -1) {
+    return eat(subvalue)({
+      type: 'footnote',
+      children: this.tokenizeInline(content, eat.now())
+    });
+  }
+
+  now = eat.now();
+  now.column += intro.length;
+  now.offset += intro.length;
+  identifier = referenceType === REFERENCE_TYPE_FULL ? identifier : content;
+
+  node = {
+    type: type + 'Reference',
+    identifier: normalize(identifier)
+  };
+
+  if (type === T_LINK || type === T_IMAGE) {
+    node.referenceType = referenceType;
+  }
+
+  if (type === T_LINK) {
+    exit = self.enterLink();
+    node.children = self.tokenizeInline(content, now);
+    exit();
+  } else if (type === T_IMAGE) {
+    node.alt = self.decode.raw(self.unescape(content), now) || null;
+  }
+
+  return eat(subvalue)(node);
+}
+
+},{"is-whitespace-character":"../node_modules/is-whitespace-character/index.js","../locate/link":"../node_modules/remark-parse/lib/locate/link.js","../util/normalize":"../node_modules/remark-parse/lib/util/normalize.js"}],"../node_modules/remark-parse/lib/locate/strong.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = locate;
+
+function locate(value, fromIndex) {
+  var asterisk = value.indexOf('**', fromIndex);
+  var underscore = value.indexOf('__', fromIndex);
+
+  if (underscore === -1) {
+    return asterisk;
+  }
+
+  if (asterisk === -1) {
+    return underscore;
+  }
+
+  return underscore < asterisk ? underscore : asterisk;
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/strong.js":[function(require,module,exports) {
+'use strict';
+
+var trim = require('trim');
+var whitespace = require('is-whitespace-character');
+var locate = require('../locate/strong');
+
+module.exports = strong;
+strong.locator = locate;
+
+var C_ASTERISK = '*';
+var C_UNDERSCORE = '_';
+
+function strong(eat, value, silent) {
+  var self = this;
+  var index = 0;
+  var character = value.charAt(index);
+  var now;
+  var pedantic;
+  var marker;
+  var queue;
+  var subvalue;
+  var length;
+  var prev;
+
+  if (
+    (character !== C_ASTERISK && character !== C_UNDERSCORE) ||
+    value.charAt(++index) !== character
+  ) {
+    return;
+  }
+
+  pedantic = self.options.pedantic;
+  marker = character;
+  subvalue = marker + marker;
+  length = value.length;
+  index++;
+  queue = '';
+  character = '';
+
+  if (pedantic && whitespace(value.charAt(index))) {
+    return;
+  }
+
+  while (index < length) {
+    prev = character;
+    character = value.charAt(index);
+
+    if (
+      character === marker &&
+      value.charAt(index + 1) === marker &&
+      (!pedantic || !whitespace(prev))
+    ) {
+      character = value.charAt(index + 2);
+
+      if (character !== marker) {
+        if (!trim(queue)) {
+          return;
+        }
+
+        /* istanbul ignore if - never used (yet) */
+        if (silent) {
+          return true;
+        }
+
+        now = eat.now();
+        now.column += 2;
+        now.offset += 2;
+
+        return eat(subvalue + queue + subvalue)({
+          type: 'strong',
+          children: self.tokenizeInline(queue, now)
+        });
+      }
+    }
+
+    if (!pedantic && character === '\\') {
+      queue += character;
+      character = value.charAt(++index);
+    }
+
+    queue += character;
+    index++;
+  }
+}
+
+},{"trim":"../node_modules/trim/index.js","is-whitespace-character":"../node_modules/is-whitespace-character/index.js","../locate/strong":"../node_modules/remark-parse/lib/locate/strong.js"}],"../node_modules/is-word-character/index.js":[function(require,module,exports) {
+'use strict'
+
+module.exports = wordCharacter
+
+var fromCode = String.fromCharCode
+var re = /\w/
+
+// Check if the given character code, or the character code at the first
+// character, is a word character.
+function wordCharacter(character) {
+  return re.test(
+    typeof character === 'number' ? fromCode(character) : character.charAt(0)
+  )
+}
+
+},{}],"../node_modules/remark-parse/lib/locate/emphasis.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = locate;
+
+function locate(value, fromIndex) {
+  var asterisk = value.indexOf('*', fromIndex);
+  var underscore = value.indexOf('_', fromIndex);
+
+  if (underscore === -1) {
+    return asterisk;
+  }
+
+  if (asterisk === -1) {
+    return underscore;
+  }
+
+  return underscore < asterisk ? underscore : asterisk;
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/emphasis.js":[function(require,module,exports) {
+'use strict';
+
+var trim = require('trim');
+var word = require('is-word-character');
+var whitespace = require('is-whitespace-character');
+var locate = require('../locate/emphasis');
+
+module.exports = emphasis;
+emphasis.locator = locate;
+
+var C_ASTERISK = '*';
+var C_UNDERSCORE = '_';
+
+function emphasis(eat, value, silent) {
+  var self = this;
+  var index = 0;
+  var character = value.charAt(index);
+  var now;
+  var pedantic;
+  var marker;
+  var queue;
+  var subvalue;
+  var length;
+  var prev;
+
+  if (character !== C_ASTERISK && character !== C_UNDERSCORE) {
+    return;
+  }
+
+  pedantic = self.options.pedantic;
+  subvalue = character;
+  marker = character;
+  length = value.length;
+  index++;
+  queue = '';
+  character = '';
+
+  if (pedantic && whitespace(value.charAt(index))) {
+    return;
+  }
+
+  while (index < length) {
+    prev = character;
+    character = value.charAt(index);
+
+    if (character === marker && (!pedantic || !whitespace(prev))) {
+      character = value.charAt(++index);
+
+      if (character !== marker) {
+        if (!trim(queue) || prev === marker) {
+          return;
+        }
+
+        if (!pedantic && marker === C_UNDERSCORE && word(character)) {
+          queue += marker;
+          continue;
+        }
+
+        /* istanbul ignore if - never used (yet) */
+        if (silent) {
+          return true;
+        }
+
+        now = eat.now();
+        now.column++;
+        now.offset++;
+
+        return eat(subvalue + queue + marker)({
+          type: 'emphasis',
+          children: self.tokenizeInline(queue, now)
+        });
+      }
+
+      queue += marker;
+    }
+
+    if (!pedantic && character === '\\') {
+      queue += character;
+      character = value.charAt(++index);
+    }
+
+    queue += character;
+    index++;
+  }
+}
+
+},{"trim":"../node_modules/trim/index.js","is-word-character":"../node_modules/is-word-character/index.js","is-whitespace-character":"../node_modules/is-whitespace-character/index.js","../locate/emphasis":"../node_modules/remark-parse/lib/locate/emphasis.js"}],"../node_modules/remark-parse/lib/locate/delete.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = locate;
+
+function locate(value, fromIndex) {
+  return value.indexOf('~~', fromIndex);
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/delete.js":[function(require,module,exports) {
+'use strict';
+
+var whitespace = require('is-whitespace-character');
+var locate = require('../locate/delete');
+
+module.exports = strikethrough;
+strikethrough.locator = locate;
+
+var C_TILDE = '~';
+var DOUBLE = '~~';
+
+function strikethrough(eat, value, silent) {
+  var self = this;
+  var character = '';
+  var previous = '';
+  var preceding = '';
+  var subvalue = '';
+  var index;
+  var length;
+  var now;
+
+  if (
+    !self.options.gfm ||
+    value.charAt(0) !== C_TILDE ||
+    value.charAt(1) !== C_TILDE ||
+    whitespace(value.charAt(2))
+  ) {
+    return;
+  }
+
+  index = 1;
+  length = value.length;
+  now = eat.now();
+  now.column += 2;
+  now.offset += 2;
+
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (
+      character === C_TILDE &&
+      previous === C_TILDE &&
+      (!preceding || !whitespace(preceding))
+    ) {
+      /* istanbul ignore if - never used (yet) */
+      if (silent) {
+        return true;
+      }
+
+      return eat(DOUBLE + subvalue + DOUBLE)({
+        type: 'delete',
+        children: self.tokenizeInline(subvalue, now)
+      });
+    }
+
+    subvalue += previous;
+    preceding = previous;
+    previous = character;
+  }
+}
+
+},{"is-whitespace-character":"../node_modules/is-whitespace-character/index.js","../locate/delete":"../node_modules/remark-parse/lib/locate/delete.js"}],"../node_modules/remark-parse/lib/locate/code-inline.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = locate;
+
+function locate(value, fromIndex) {
+  return value.indexOf('`', fromIndex);
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/code-inline.js":[function(require,module,exports) {
+'use strict';
+
+var whitespace = require('is-whitespace-character');
+var locate = require('../locate/code-inline');
+
+module.exports = inlineCode;
+inlineCode.locator = locate;
+
+var C_TICK = '`';
+
+/* Tokenise inline code. */
+function inlineCode(eat, value, silent) {
+  var length = value.length;
+  var index = 0;
+  var queue = '';
+  var tickQueue = '';
+  var contentQueue;
+  var subqueue;
+  var count;
+  var openingCount;
+  var subvalue;
+  var character;
+  var found;
+  var next;
+
+  while (index < length) {
+    if (value.charAt(index) !== C_TICK) {
+      break;
+    }
+
+    queue += C_TICK;
+    index++;
+  }
+
+  if (!queue) {
+    return;
+  }
+
+  subvalue = queue;
+  openingCount = index;
+  queue = '';
+  next = value.charAt(index);
+  count = 0;
+
+  while (index < length) {
+    character = next;
+    next = value.charAt(index + 1);
+
+    if (character === C_TICK) {
+      count++;
+      tickQueue += character;
+    } else {
+      count = 0;
+      queue += character;
+    }
+
+    if (count && next !== C_TICK) {
+      if (count === openingCount) {
+        subvalue += queue + tickQueue;
+        found = true;
+        break;
+      }
+
+      queue += tickQueue;
+      tickQueue = '';
+    }
+
+    index++;
+  }
+
+  if (!found) {
+    if (openingCount % 2 !== 0) {
+      return;
+    }
+
+    queue = '';
+  }
+
+  /* istanbul ignore if - never used (yet) */
+  if (silent) {
+    return true;
+  }
+
+  contentQueue = '';
+  subqueue = '';
+  length = queue.length;
+  index = -1;
+
+  while (++index < length) {
+    character = queue.charAt(index);
+
+    if (whitespace(character)) {
+      subqueue += character;
+      continue;
+    }
+
+    if (subqueue) {
+      if (contentQueue) {
+        contentQueue += subqueue;
+      }
+
+      subqueue = '';
+    }
+
+    contentQueue += character;
+  }
+
+  return eat(subvalue)({
+    type: 'inlineCode',
+    value: contentQueue
+  });
+}
+
+},{"is-whitespace-character":"../node_modules/is-whitespace-character/index.js","../locate/code-inline":"../node_modules/remark-parse/lib/locate/code-inline.js"}],"../node_modules/remark-parse/lib/locate/break.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = locate;
+
+function locate(value, fromIndex) {
+  var index = value.indexOf('\n', fromIndex);
+
+  while (index > fromIndex) {
+    if (value.charAt(index - 1) !== ' ') {
+      break;
+    }
+
+    index--;
+  }
+
+  return index;
+}
+
+},{}],"../node_modules/remark-parse/lib/tokenize/break.js":[function(require,module,exports) {
+'use strict';
+
+var locate = require('../locate/break');
+
+module.exports = hardBreak;
+hardBreak.locator = locate;
+
+var MIN_BREAK_LENGTH = 2;
+
+function hardBreak(eat, value, silent) {
+  var length = value.length;
+  var index = -1;
+  var queue = '';
+  var character;
+
+  while (++index < length) {
+    character = value.charAt(index);
+
+    if (character === '\n') {
+      if (index < MIN_BREAK_LENGTH) {
+        return;
+      }
+
+      /* istanbul ignore if - never used (yet) */
+      if (silent) {
+        return true;
+      }
+
+      queue += character;
+
+      return eat(queue)({type: 'break'});
+    }
+
+    if (character !== ' ') {
+      return;
+    }
+
+    queue += character;
+  }
+}
+
+},{"../locate/break":"../node_modules/remark-parse/lib/locate/break.js"}],"../node_modules/remark-parse/lib/tokenize/text.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = text;
+
+function text(eat, value, silent) {
+  var self = this;
+  var methods;
+  var tokenizers;
+  var index;
+  var length;
+  var subvalue;
+  var position;
+  var tokenizer;
+  var name;
+  var min;
+  var now;
+
+  /* istanbul ignore if - never used (yet) */
+  if (silent) {
+    return true;
+  }
+
+  methods = self.inlineMethods;
+  length = methods.length;
+  tokenizers = self.inlineTokenizers;
+  index = -1;
+  min = value.length;
+
+  while (++index < length) {
+    name = methods[index];
+
+    if (name === 'text' || !tokenizers[name]) {
+      continue;
+    }
+
+    tokenizer = tokenizers[name].locator;
+
+    if (!tokenizer) {
+      eat.file.fail('Missing locator: `' + name + '`');
+    }
+
+    position = tokenizer.call(self, value, 1);
+
+    if (position !== -1 && position < min) {
+      min = position;
+    }
+  }
+
+  subvalue = value.slice(0, min);
+  now = eat.now();
+
+  self.decode(subvalue, now, function (content, position, source) {
+    eat(source || content)({
+      type: 'text',
+      value: content
+    });
+  });
+}
+
+},{}],"../node_modules/remark-parse/lib/parser.js":[function(require,module,exports) {
+'use strict';
+
+var xtend = require('xtend');
+var toggle = require('state-toggle');
+var vfileLocation = require('vfile-location');
+var unescape = require('./unescape');
+var decode = require('./decode');
+var tokenizer = require('./tokenizer');
+
+module.exports = Parser;
+
+function Parser(doc, file) {
+  this.file = file;
+  this.offset = {};
+  this.options = xtend(this.options);
+  this.setOptions({});
+
+  this.inList = false;
+  this.inBlock = false;
+  this.inLink = false;
+  this.atStart = true;
+
+  this.toOffset = vfileLocation(file).toOffset;
+  this.unescape = unescape(this, 'escape');
+  this.decode = decode(this);
+}
+
+var proto = Parser.prototype;
+
+/* Expose core. */
+proto.setOptions = require('./set-options');
+proto.parse = require('./parse');
+
+/* Expose `defaults`. */
+proto.options = require('./defaults');
+
+/* Enter and exit helpers. */
+proto.exitStart = toggle('atStart', true);
+proto.enterList = toggle('inList', false);
+proto.enterLink = toggle('inLink', false);
+proto.enterBlock = toggle('inBlock', false);
+
+/* Nodes that can interupt a paragraph:
+ *
+ * ```markdown
+ * A paragraph, followed by a thematic break.
+ * ___
+ * ```
+ *
+ * In the above example, the thematic break “interupts”
+ * the paragraph. */
+proto.interruptParagraph = [
+  ['thematicBreak'],
+  ['atxHeading'],
+  ['fencedCode'],
+  ['blockquote'],
+  ['html'],
+  ['setextHeading', {commonmark: false}],
+  ['definition', {commonmark: false}],
+  ['footnote', {commonmark: false}]
+];
+
+/* Nodes that can interupt a list:
+ *
+ * ```markdown
+ * - One
+ * ___
+ * ```
+ *
+ * In the above example, the thematic break “interupts”
+ * the list. */
+proto.interruptList = [
+  ['atxHeading', {pedantic: false}],
+  ['fencedCode', {pedantic: false}],
+  ['thematicBreak', {pedantic: false}],
+  ['definition', {commonmark: false}],
+  ['footnote', {commonmark: false}]
+];
+
+/* Nodes that can interupt a blockquote:
+ *
+ * ```markdown
+ * > A paragraph.
+ * ___
+ * ```
+ *
+ * In the above example, the thematic break “interupts”
+ * the blockquote. */
+proto.interruptBlockquote = [
+  ['indentedCode', {commonmark: true}],
+  ['fencedCode', {commonmark: true}],
+  ['atxHeading', {commonmark: true}],
+  ['setextHeading', {commonmark: true}],
+  ['thematicBreak', {commonmark: true}],
+  ['html', {commonmark: true}],
+  ['list', {commonmark: true}],
+  ['definition', {commonmark: false}],
+  ['footnote', {commonmark: false}]
+];
+
+/* Handlers. */
+proto.blockTokenizers = {
+  newline: require('./tokenize/newline'),
+  indentedCode: require('./tokenize/code-indented'),
+  fencedCode: require('./tokenize/code-fenced'),
+  blockquote: require('./tokenize/blockquote'),
+  atxHeading: require('./tokenize/heading-atx'),
+  thematicBreak: require('./tokenize/thematic-break'),
+  list: require('./tokenize/list'),
+  setextHeading: require('./tokenize/heading-setext'),
+  html: require('./tokenize/html-block'),
+  footnote: require('./tokenize/footnote-definition'),
+  definition: require('./tokenize/definition'),
+  table: require('./tokenize/table'),
+  paragraph: require('./tokenize/paragraph')
+};
+
+proto.inlineTokenizers = {
+  escape: require('./tokenize/escape'),
+  autoLink: require('./tokenize/auto-link'),
+  url: require('./tokenize/url'),
+  html: require('./tokenize/html-inline'),
+  link: require('./tokenize/link'),
+  reference: require('./tokenize/reference'),
+  strong: require('./tokenize/strong'),
+  emphasis: require('./tokenize/emphasis'),
+  deletion: require('./tokenize/delete'),
+  code: require('./tokenize/code-inline'),
+  break: require('./tokenize/break'),
+  text: require('./tokenize/text')
+};
+
+/* Expose precedence. */
+proto.blockMethods = keys(proto.blockTokenizers);
+proto.inlineMethods = keys(proto.inlineTokenizers);
+
+/* Tokenizers. */
+proto.tokenizeBlock = tokenizer('block');
+proto.tokenizeInline = tokenizer('inline');
+proto.tokenizeFactory = tokenizer;
+
+/* Get all keys in `value`. */
+function keys(value) {
+  var result = [];
+  var key;
+
+  for (key in value) {
+    result.push(key);
+  }
+
+  return result;
+}
+
+},{"xtend":"../node_modules/xtend/immutable.js","state-toggle":"../node_modules/state-toggle/index.js","vfile-location":"../node_modules/vfile-location/index.js","./unescape":"../node_modules/remark-parse/lib/unescape.js","./decode":"../node_modules/remark-parse/lib/decode.js","./tokenizer":"../node_modules/remark-parse/lib/tokenizer.js","./set-options":"../node_modules/remark-parse/lib/set-options.js","./parse":"../node_modules/remark-parse/lib/parse.js","./defaults":"../node_modules/remark-parse/lib/defaults.js","./tokenize/newline":"../node_modules/remark-parse/lib/tokenize/newline.js","./tokenize/code-indented":"../node_modules/remark-parse/lib/tokenize/code-indented.js","./tokenize/code-fenced":"../node_modules/remark-parse/lib/tokenize/code-fenced.js","./tokenize/blockquote":"../node_modules/remark-parse/lib/tokenize/blockquote.js","./tokenize/heading-atx":"../node_modules/remark-parse/lib/tokenize/heading-atx.js","./tokenize/thematic-break":"../node_modules/remark-parse/lib/tokenize/thematic-break.js","./tokenize/list":"../node_modules/remark-parse/lib/tokenize/list.js","./tokenize/heading-setext":"../node_modules/remark-parse/lib/tokenize/heading-setext.js","./tokenize/html-block":"../node_modules/remark-parse/lib/tokenize/html-block.js","./tokenize/footnote-definition":"../node_modules/remark-parse/lib/tokenize/footnote-definition.js","./tokenize/definition":"../node_modules/remark-parse/lib/tokenize/definition.js","./tokenize/table":"../node_modules/remark-parse/lib/tokenize/table.js","./tokenize/paragraph":"../node_modules/remark-parse/lib/tokenize/paragraph.js","./tokenize/escape":"../node_modules/remark-parse/lib/tokenize/escape.js","./tokenize/auto-link":"../node_modules/remark-parse/lib/tokenize/auto-link.js","./tokenize/url":"../node_modules/remark-parse/lib/tokenize/url.js","./tokenize/html-inline":"../node_modules/remark-parse/lib/tokenize/html-inline.js","./tokenize/link":"../node_modules/remark-parse/lib/tokenize/link.js","./tokenize/reference":"../node_modules/remark-parse/lib/tokenize/reference.js","./tokenize/strong":"../node_modules/remark-parse/lib/tokenize/strong.js","./tokenize/emphasis":"../node_modules/remark-parse/lib/tokenize/emphasis.js","./tokenize/delete":"../node_modules/remark-parse/lib/tokenize/delete.js","./tokenize/code-inline":"../node_modules/remark-parse/lib/tokenize/code-inline.js","./tokenize/break":"../node_modules/remark-parse/lib/tokenize/break.js","./tokenize/text":"../node_modules/remark-parse/lib/tokenize/text.js"}],"../node_modules/remark-parse/index.js":[function(require,module,exports) {
+'use strict';
+
+var unherit = require('unherit');
+var xtend = require('xtend');
+var Parser = require('./lib/parser.js');
+
+module.exports = parse;
+parse.Parser = Parser;
+
+function parse(options) {
+  var Local = unherit(Parser);
+  Local.prototype.options = xtend(Local.prototype.options, this.data('settings'), options);
+  this.Parser = Local;
+}
+
+},{"unherit":"../node_modules/unherit/index.js","xtend":"../node_modules/xtend/immutable.js","./lib/parser.js":"../node_modules/remark-parse/lib/parser.js"}],"../node_modules/unist-util-visit-parents/index.js":[function(require,module,exports) {
+'use strict'
+
+/* Expose. */
+module.exports = visitParents
+
+/* Visit. */
+function visitParents(tree, type, visitor) {
+  var stack = []
+
+  if (typeof type === 'function') {
+    visitor = type
+    type = null
+  }
+
+  one(tree)
+
+  /* Visit a single node. */
+  function one(node) {
+    var result
+
+    if (!type || node.type === type) {
+      result = visitor(node, stack.concat())
+    }
+
+    if (node.children && result !== false) {
+      return all(node.children, node)
+    }
+
+    return result
+  }
+
+  /* Visit children in `parent`. */
+  function all(children, parent) {
+    var length = children.length
+    var index = -1
+    var child
+
+    stack.push(parent)
+
+    while (++index < length) {
+      child = children[index]
+
+      if (child && one(child) === false) {
+        return false
+      }
+    }
+
+    stack.pop()
+
+    return true
+  }
+}
+
+},{}],"../node_modules/mdast-add-list-metadata/index.js":[function(require,module,exports) {
+var visitWithParents = require('unist-util-visit-parents');
+
+function addListMetadata() {
+  return function (ast) {
+    visitWithParents(ast, 'list', function (listNode, parents) {
+      var depth = 0, i, n;
+      for (i = 0, n = parents.length; i < n; i++) {
+        if (parents[i].type === 'list') depth += 1;
+      }
+      for (i = 0, n = listNode.children.length; i < n; i++) {
+        var child = listNode.children[i];
+        child.index = i;
+        child.ordered = listNode.ordered;
+      }
+      listNode.depth = depth;
+    });
+    return ast;
+  };
+}
+
+module.exports = addListMetadata;
+
+},{"unist-util-visit-parents":"../node_modules/unist-util-visit-parents/index.js"}],"../node_modules/react-markdown/lib/plugins/naive-html.js":[function(require,module,exports) {
+"use strict";
+
+/**
+ * Naive, simple plugin to match inline nodes without attributes
+ * This allows say <strong>foo</strong>, but not <strong class="very">foo</strong>
+ * For proper HTML support, you'll want a different plugin
+ **/
+var visit = require('unist-util-visit');
+
+var type = 'virtualHtml';
+var selfClosingRe = /^<(area|base|br|col|embed|hr|img|input|keygen|link|meta|param|source|track|wbr)\s*\/?>$/i;
+var simpleTagRe = /^<(\/?)([a-z]+)\s*>$/;
+
+module.exports = function (tree) {
+  var open;
+  var currentParent;
+  visit(tree, 'html', function (node, index, parent) {
+    if (currentParent !== parent) {
+      open = [];
+      currentParent = parent;
+    }
+
+    var selfClosing = getSelfClosing(node);
+
+    if (selfClosing) {
+      parent.children.splice(index, 1, {
+        type: type,
+        tag: selfClosing,
+        position: node.position
+      });
+      return true;
+    }
+
+    var current = getSimpleTag(node, parent);
+
+    if (!current) {
+      return true;
+    }
+
+    var matching = findAndPull(open, current.tag);
+
+    if (matching) {
+      parent.children.splice(index, 0, virtual(current, matching, parent));
+    } else if (!current.opening) {
+      open.push(current);
+    }
+
+    return true;
+  }, true // Iterate in reverse
+  );
+  return tree;
+};
+
+function findAndPull(open, matchingTag) {
+  var i = open.length;
+
+  while (i--) {
+    if (open[i].tag === matchingTag) {
+      return open.splice(i, 1)[0];
+    }
+  }
+
+  return false;
+}
+
+function getSimpleTag(node, parent) {
+  var match = node.value.match(simpleTagRe);
+  return match ? {
+    tag: match[2],
+    opening: !match[1],
+    node: node
+  } : false;
+}
+
+function getSelfClosing(node) {
+  var match = node.value.match(selfClosingRe);
+  return match ? match[1] : false;
+}
+
+function virtual(fromNode, toNode, parent) {
+  var fromIndex = parent.children.indexOf(fromNode.node);
+  var toIndex = parent.children.indexOf(toNode.node);
+  var extracted = parent.children.splice(fromIndex, toIndex - fromIndex + 1);
+  var children = extracted.slice(1, -1);
+  return {
+    type: type,
+    children: children,
+    tag: fromNode.tag,
+    position: {
+      start: fromNode.node.position.start,
+      end: toNode.node.position.end,
+      indent: []
+    }
+  };
+}
+},{"unist-util-visit":"../node_modules/unist-util-visit/index.js"}],"../node_modules/react-markdown/lib/plugins/disallow-node.js":[function(require,module,exports) {
+"use strict";
+
+var visit = require('unist-util-visit');
+
+exports.ofType = function (types, mode) {
+  return function (node) {
+    types.forEach(function (type) {
+      return visit(node, type, disallow, true);
+    });
+    return node;
+  };
+
+  function disallow(node, index, parent) {
+    if (parent) {
+      untangle(node, index, parent, mode);
+    }
+  }
+};
+
+exports.ifNotMatch = function (allowNode, mode) {
+  return function (node) {
+    visit(node, disallow, true);
+    return node;
+  };
+
+  function disallow(node, index, parent) {
+    if (parent && !allowNode(node, index, parent)) {
+      untangle(node, index, parent, mode);
+    }
+  }
+};
+
+function untangle(node, index, parent, mode) {
+  if (mode === 'remove') {
+    parent.children.splice(index, 1);
+  } else if (mode === 'unwrap') {
+    var args = [index, 1];
+
+    if (node.children) {
+      args = args.concat(node.children);
+    }
+
+    Array.prototype.splice.apply(parent.children, args);
+  }
+}
+},{"unist-util-visit":"../node_modules/unist-util-visit/index.js"}],"../node_modules/react-markdown/lib/ast-to-react.js":[function(require,module,exports) {
+'use strict';
+
+var React = require('react');
+
+var xtend = require('xtend');
+
+var ReactIs = require('react-is');
+
+var defaultNodePosition = {
+  start: {
+    line: 1,
+    column: 1,
+    offset: 0
+  },
+  end: {
+    line: 1,
+    column: 1,
+    offset: 0
+  }
+};
+
+function astToReact(node, options) {
+  var parent = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+  var index = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 0;
+  var renderer = options.renderers[node.type]; // nodes generated by plugins may not have position data
+  // much of the code after this point will attempt to access properties of the node.position
+  // this will set the node position to the parent node's position to prevent errors
+
+  if (node.position === undefined) {
+    node.position = parent.node && parent.node.position || defaultNodePosition;
+  }
+
+  var pos = node.position.start;
+  var key = [node.type, pos.line, pos.column, index].join('-');
+
+  if (!ReactIs.isValidElementType(renderer)) {
+    throw new Error("Renderer for type `".concat(node.type, "` not defined or is not renderable"));
+  }
+
+  var nodeProps = getNodeProps(node, key, options, renderer, parent, index);
+  return React.createElement(renderer, nodeProps, nodeProps.children || resolveChildren() || undefined);
+
+  function resolveChildren() {
+    return node.children && node.children.map(function (childNode, i) {
+      return astToReact(childNode, options, {
+        node: node,
+        props: nodeProps
+      }, i);
+    });
+  }
+} // eslint-disable-next-line max-params, complexity
+
+
+function getNodeProps(node, key, opts, renderer, parent, index) {
+  var props = {
+    key: key
+  };
+  var isTagRenderer = typeof renderer === 'string'; // `sourcePos` is true if the user wants source information (line/column info from markdown source)
+
+  if (opts.sourcePos && node.position) {
+    props['data-sourcepos'] = flattenPosition(node.position);
+  }
+
+  if (opts.rawSourcePos && !isTagRenderer) {
+    props.sourcePosition = node.position;
+  } // If `includeNodeIndex` is true, pass node index info to all non-tag renderers
+
+
+  if (opts.includeNodeIndex && parent.node && parent.node.children && !isTagRenderer) {
+    props.index = parent.node.children.indexOf(node);
+    props.parentChildCount = parent.node.children.length;
+  }
+
+  var ref = node.identifier !== null && node.identifier !== undefined ? opts.definitions[node.identifier] || {} : null;
+
+  switch (node.type) {
+    case 'root':
+      assignDefined(props, {
+        className: opts.className
+      });
+      break;
+
+    case 'text':
+      props.nodeKey = key;
+      props.children = node.value;
+      break;
+
+    case 'heading':
+      props.level = node.depth;
+      break;
+
+    case 'list':
+      props.start = node.start;
+      props.ordered = node.ordered;
+      props.tight = !node.loose;
+      props.depth = node.depth;
+      break;
+
+    case 'listItem':
+      props.checked = node.checked;
+      props.tight = !node.loose;
+      props.ordered = node.ordered;
+      props.index = node.index;
+      props.children = getListItemChildren(node, parent).map(function (childNode, i) {
+        return astToReact(childNode, opts, {
+          node: node,
+          props: props
+        }, i);
+      });
+      break;
+
+    case 'definition':
+      assignDefined(props, {
+        identifier: node.identifier,
+        title: node.title,
+        url: node.url
+      });
+      break;
+
+    case 'code':
+      assignDefined(props, {
+        language: node.lang && node.lang.split(/\s/, 1)[0]
+      });
+      break;
+
+    case 'inlineCode':
+      props.children = node.value;
+      props.inline = true;
+      break;
+
+    case 'link':
+      assignDefined(props, {
+        title: node.title || undefined,
+        target: typeof opts.linkTarget === 'function' ? opts.linkTarget(node.url, node.children, node.title) : opts.linkTarget,
+        href: opts.transformLinkUri ? opts.transformLinkUri(node.url, node.children, node.title) : node.url
+      });
+      break;
+
+    case 'image':
+      assignDefined(props, {
+        alt: node.alt || undefined,
+        title: node.title || undefined,
+        src: opts.transformImageUri ? opts.transformImageUri(node.url, node.children, node.title, node.alt) : node.url
+      });
+      break;
+
+    case 'linkReference':
+      assignDefined(props, xtend(ref, {
+        href: opts.transformLinkUri ? opts.transformLinkUri(ref.href) : ref.href
+      }));
+      break;
+
+    case 'imageReference':
+      assignDefined(props, {
+        src: opts.transformImageUri && ref.href ? opts.transformImageUri(ref.href, node.children, ref.title, node.alt) : ref.href,
+        title: ref.title || undefined,
+        alt: node.alt || undefined
+      });
+      break;
+
+    case 'table':
+    case 'tableHead':
+    case 'tableBody':
+      props.columnAlignment = node.align;
+      break;
+
+    case 'tableRow':
+      props.isHeader = parent.node.type === 'tableHead';
+      props.columnAlignment = parent.props.columnAlignment;
+      break;
+
+    case 'tableCell':
+      assignDefined(props, {
+        isHeader: parent.props.isHeader,
+        align: parent.props.columnAlignment[index]
+      });
+      break;
+
+    case 'virtualHtml':
+      props.tag = node.tag;
+      break;
+
+    case 'html':
+      // @todo find a better way than this
+      props.isBlock = node.position.start.line !== node.position.end.line;
+      props.escapeHtml = opts.escapeHtml;
+      props.skipHtml = opts.skipHtml;
+      break;
+
+    case 'parsedHtml':
+      {
+        var parsedChildren;
+
+        if (node.children) {
+          parsedChildren = node.children.map(function (child, i) {
+            return astToReact(child, opts, {
+              node: node,
+              props: props
+            }, i);
+          });
+        }
+
+        props.escapeHtml = opts.escapeHtml;
+        props.skipHtml = opts.skipHtml;
+        props.element = mergeNodeChildren(node, parsedChildren);
+        break;
+      }
+
+    default:
+      assignDefined(props, xtend(node, {
+        type: undefined,
+        position: undefined,
+        children: undefined
+      }));
+  }
+
+  if (!isTagRenderer && node.value) {
+    props.value = node.value;
+  }
+
+  return props;
+}
+
+function assignDefined(target, attrs) {
+  for (var key in attrs) {
+    if (typeof attrs[key] !== 'undefined') {
+      target[key] = attrs[key];
+    }
+  }
+}
+
+function mergeNodeChildren(node, parsedChildren) {
+  var el = node.element;
+
+  if (Array.isArray(el)) {
+    var Fragment = React.Fragment || 'div';
+    return React.createElement(Fragment, null, el);
+  }
+
+  if (el.props.children || parsedChildren) {
+    var children = React.Children.toArray(el.props.children).concat(parsedChildren);
+    return React.cloneElement(el, null, children);
+  }
+
+  return React.cloneElement(el, null);
+}
+
+function flattenPosition(pos) {
+  return [pos.start.line, ':', pos.start.column, '-', pos.end.line, ':', pos.end.column].map(String).join('');
+}
+
+function getListItemChildren(node, parent) {
+  if (node.loose) {
+    return node.children;
+  }
+
+  if (parent.node && node.index > 0 && parent.node.children[node.index - 1].loose) {
+    return node.children;
+  }
+
+  return unwrapParagraphs(node);
+}
+
+function unwrapParagraphs(node) {
+  return node.children.reduce(function (array, child) {
+    return array.concat(child.type === 'paragraph' ? child.children || [] : [child]);
+  }, []);
+}
+
+module.exports = astToReact;
+},{"react":"../node_modules/react/index.js","xtend":"../node_modules/xtend/immutable.js","react-is":"../node_modules/react-is/index.js"}],"../node_modules/react-markdown/lib/wrap-table-rows.js":[function(require,module,exports) {
+'use strict';
+
+var visit = require('unist-util-visit');
+
+module.exports = function (node) {
+  visit(node, 'table', wrap);
+  return node;
+};
+
+function wrap(table) {
+  var children = table.children;
+  table.children = [{
+    type: 'tableHead',
+    align: table.align,
+    children: [children[0]],
+    position: children[0].position
+  }];
+
+  if (children.length > 1) {
+    table.children.push({
+      type: 'tableBody',
+      align: table.align,
+      children: children.slice(1),
+      position: {
+        start: children[1].position.start,
+        end: children[children.length - 1].position.end
+      }
+    });
+  }
+}
+},{"unist-util-visit":"../node_modules/unist-util-visit/index.js"}],"../node_modules/react-markdown/lib/get-definitions.js":[function(require,module,exports) {
+'use strict';
+
+module.exports = function getDefinitions(node) {
+  var defs = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+  return (node.children || []).reduce(function (definitions, child) {
+    if (child.type === 'definition') {
+      definitions[child.identifier] = {
+        href: child.url,
+        title: child.title
+      };
+    }
+
+    return getDefinitions(child, definitions);
+  }, defs);
+};
+},{}],"../node_modules/react-markdown/lib/uri-transformer.js":[function(require,module,exports) {
+"use strict";
+
+var protocols = ['http', 'https', 'mailto', 'tel'];
+
+module.exports = function uriTransformer(uri) {
+  var url = (uri || '').trim();
+  var first = url.charAt(0);
+
+  if (first === '#' || first === '/') {
+    return url;
+  }
+
+  var colon = url.indexOf(':');
+
+  if (colon === -1) {
+    return url;
+  }
+
+  var length = protocols.length;
+  var index = -1;
+
+  while (++index < length) {
+    var protocol = protocols[index];
+
+    if (colon === protocol.length && url.slice(0, protocol.length).toLowerCase() === protocol) {
+      return url;
+    }
+  }
+
+  index = url.indexOf('?');
+
+  if (index !== -1 && colon > index) {
+    return url;
+  }
+
+  index = url.indexOf('#');
+
+  if (index !== -1 && colon > index) {
+    return url;
+  } // eslint-disable-next-line no-script-url
+
+
+  return 'javascript:void(0)';
+};
+},{}],"../node_modules/react-markdown/lib/renderers.js":[function(require,module,exports) {
+/* eslint-disable react/prop-types, react/no-multi-comp */
+'use strict';
+
+var xtend = require('xtend');
+
+var React = require('react');
+
+var supportsStringRender = parseInt((React.version || '16').slice(0, 2), 10) >= 16;
+var createElement = React.createElement;
+module.exports = {
+  break: 'br',
+  paragraph: 'p',
+  emphasis: 'em',
+  strong: 'strong',
+  thematicBreak: 'hr',
+  blockquote: 'blockquote',
+  delete: 'del',
+  link: 'a',
+  image: 'img',
+  linkReference: 'a',
+  imageReference: 'img',
+  table: SimpleRenderer.bind(null, 'table'),
+  tableHead: SimpleRenderer.bind(null, 'thead'),
+  tableBody: SimpleRenderer.bind(null, 'tbody'),
+  tableRow: SimpleRenderer.bind(null, 'tr'),
+  tableCell: TableCell,
+  root: Root,
+  text: TextRenderer,
+  list: List,
+  listItem: ListItem,
+  definition: NullRenderer,
+  heading: Heading,
+  inlineCode: InlineCode,
+  code: CodeBlock,
+  html: Html,
+  virtualHtml: VirtualHtml,
+  parsedHtml: ParsedHtml
+};
+
+function TextRenderer(props) {
+  return supportsStringRender ? props.children : createElement('span', null, props.children);
+}
+
+function Root(props) {
+  var useFragment = !props.className;
+  var root = useFragment ? React.Fragment || 'div' : 'div';
+  return createElement(root, useFragment ? null : props, props.children);
+}
+
+function SimpleRenderer(tag, props) {
+  return createElement(tag, getCoreProps(props), props.children);
+}
+
+function TableCell(props) {
+  var style = props.align ? {
+    textAlign: props.align
+  } : undefined;
+  var coreProps = getCoreProps(props);
+  return createElement(props.isHeader ? 'th' : 'td', style ? xtend({
+    style: style
+  }, coreProps) : coreProps, props.children);
+}
+
+function Heading(props) {
+  return createElement("h".concat(props.level), getCoreProps(props), props.children);
+}
+
+function List(props) {
+  var attrs = getCoreProps(props);
+
+  if (props.start !== null && props.start !== 1 && props.start !== undefined) {
+    attrs.start = props.start.toString();
+  }
+
+  return createElement(props.ordered ? 'ol' : 'ul', attrs, props.children);
+}
+
+function ListItem(props) {
+  var checkbox = null;
+
+  if (props.checked !== null && props.checked !== undefined) {
+    var checked = props.checked;
+    checkbox = createElement('input', {
+      type: 'checkbox',
+      checked: checked,
+      readOnly: true
+    });
+  }
+
+  return createElement('li', getCoreProps(props), checkbox, props.children);
+}
+
+function CodeBlock(props) {
+  var className = props.language && "language-".concat(props.language);
+  var code = createElement('code', className ? {
+    className: className
+  } : null, props.value);
+  return createElement('pre', getCoreProps(props), code);
+}
+
+function InlineCode(props) {
+  return createElement('code', getCoreProps(props), props.children);
+}
+
+function Html(props) {
+  if (props.skipHtml) {
+    return null;
+  }
+
+  var tag = props.isBlock ? 'div' : 'span';
+
+  if (props.escapeHtml) {
+    var comp = React.Fragment || tag;
+    return createElement(comp, null, props.value);
+  }
+
+  var nodeProps = {
+    dangerouslySetInnerHTML: {
+      __html: props.value
+    }
+  };
+  return createElement(tag, nodeProps);
+}
+
+function ParsedHtml(props) {
+  return props['data-sourcepos'] ? React.cloneElement(props.element, {
+    'data-sourcepos': props['data-sourcepos']
+  }) : props.element;
+}
+
+function VirtualHtml(props) {
+  return createElement(props.tag, getCoreProps(props), props.children);
+}
+
+function NullRenderer() {
+  return null;
+}
+
+function getCoreProps(props) {
+  return props['data-sourcepos'] ? {
+    'data-sourcepos': props['data-sourcepos']
+  } : {};
+}
+},{"xtend":"../node_modules/xtend/immutable.js","react":"../node_modules/react/index.js"}],"../node_modules/react-markdown/lib/symbols.js":[function(require,module,exports) {
+"use strict";
+
+var HtmlParser = '__RMD_HTML_PARSER__';
+exports.HtmlParser = typeof Symbol === 'undefined' ? HtmlParser : Symbol(HtmlParser);
+},{}],"../node_modules/react-markdown/lib/react-markdown.js":[function(require,module,exports) {
+'use strict';
+
+function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _nonIterableSpread(); }
+
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance"); }
+
+function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter); }
+
+function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = new Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } }
+
+var xtend = require('xtend');
+
+var unified = require('unified');
+
+var parse = require('remark-parse');
+
+var PropTypes = require('prop-types');
+
+var addListMetadata = require('mdast-add-list-metadata');
+
+var naiveHtml = require('./plugins/naive-html');
+
+var disallowNode = require('./plugins/disallow-node');
+
+var astToReact = require('./ast-to-react');
+
+var wrapTableRows = require('./wrap-table-rows');
+
+var getDefinitions = require('./get-definitions');
+
+var uriTransformer = require('./uri-transformer');
+
+var defaultRenderers = require('./renderers');
+
+var symbols = require('./symbols');
+
+var allTypes = Object.keys(defaultRenderers);
+
+var ReactMarkdown = function ReactMarkdown(props) {
+  var src = props.source || props.children || '';
+  var parserOptions = props.parserOptions;
+
+  if (props.allowedTypes && props.disallowedTypes) {
+    throw new Error('Only one of `allowedTypes` and `disallowedTypes` should be defined');
+  }
+
+  var renderers = xtend(defaultRenderers, props.renderers);
+  var plugins = [[parse, parserOptions]].concat(props.plugins || []);
+  var parser = plugins.reduce(applyParserPlugin, unified());
+  var rawAst = parser.parse(src);
+  var renderProps = xtend(props, {
+    renderers: renderers,
+    definitions: getDefinitions(rawAst)
+  });
+  var astPlugins = determineAstPlugins(props); // eslint-disable-next-line no-sync
+
+  var transformedAst = parser.runSync(rawAst);
+  var ast = astPlugins.reduce(function (node, plugin) {
+    return plugin(node, renderProps);
+  }, transformedAst);
+  return astToReact(ast, renderProps);
+};
+
+function applyParserPlugin(parser, plugin) {
+  return Array.isArray(plugin) ? parser.use.apply(parser, _toConsumableArray(plugin)) : parser.use(plugin);
+}
+
+function determineAstPlugins(props) {
+  var plugins = [wrapTableRows, addListMetadata()];
+  var disallowedTypes = props.disallowedTypes;
+
+  if (props.allowedTypes) {
+    disallowedTypes = allTypes.filter(function (type) {
+      return type !== 'root' && props.allowedTypes.indexOf(type) === -1;
+    });
+  }
+
+  var removalMethod = props.unwrapDisallowed ? 'unwrap' : 'remove';
+
+  if (disallowedTypes && disallowedTypes.length > 0) {
+    plugins.push(disallowNode.ofType(disallowedTypes, removalMethod));
+  }
+
+  if (props.allowNode) {
+    plugins.push(disallowNode.ifNotMatch(props.allowNode, removalMethod));
+  }
+
+  var renderHtml = !props.escapeHtml && !props.skipHtml;
+  var hasHtmlParser = (props.astPlugins || []).some(function (item) {
+    var plugin = Array.isArray(item) ? item[0] : item;
+    return plugin.identity === symbols.HtmlParser;
+  });
+
+  if (renderHtml && !hasHtmlParser) {
+    plugins.push(naiveHtml);
+  }
+
+  return props.astPlugins ? plugins.concat(props.astPlugins) : plugins;
+}
+
+ReactMarkdown.defaultProps = {
+  renderers: {},
+  escapeHtml: true,
+  skipHtml: false,
+  sourcePos: false,
+  rawSourcePos: false,
+  transformLinkUri: uriTransformer,
+  astPlugins: [],
+  plugins: [],
+  parserOptions: {}
+};
+ReactMarkdown.propTypes = {
+  className: PropTypes.string,
+  source: PropTypes.string,
+  children: PropTypes.string,
+  sourcePos: PropTypes.bool,
+  rawSourcePos: PropTypes.bool,
+  escapeHtml: PropTypes.bool,
+  skipHtml: PropTypes.bool,
+  allowNode: PropTypes.func,
+  allowedTypes: PropTypes.arrayOf(PropTypes.oneOf(allTypes)),
+  disallowedTypes: PropTypes.arrayOf(PropTypes.oneOf(allTypes)),
+  transformLinkUri: PropTypes.oneOfType([PropTypes.func, PropTypes.bool]),
+  linkTarget: PropTypes.oneOfType([PropTypes.func, PropTypes.string]),
+  transformImageUri: PropTypes.func,
+  astPlugins: PropTypes.arrayOf(PropTypes.func),
+  unwrapDisallowed: PropTypes.bool,
+  renderers: PropTypes.object,
+  plugins: PropTypes.array,
+  parserOptions: PropTypes.object
+};
+ReactMarkdown.types = allTypes;
+ReactMarkdown.renderers = defaultRenderers;
+ReactMarkdown.uriTransformer = uriTransformer;
+module.exports = ReactMarkdown;
+},{"xtend":"../node_modules/xtend/immutable.js","unified":"../node_modules/unified/index.js","remark-parse":"../node_modules/remark-parse/index.js","prop-types":"../node_modules/prop-types/index.js","mdast-add-list-metadata":"../node_modules/mdast-add-list-metadata/index.js","./plugins/naive-html":"../node_modules/react-markdown/lib/plugins/naive-html.js","./plugins/disallow-node":"../node_modules/react-markdown/lib/plugins/disallow-node.js","./ast-to-react":"../node_modules/react-markdown/lib/ast-to-react.js","./wrap-table-rows":"../node_modules/react-markdown/lib/wrap-table-rows.js","./get-definitions":"../node_modules/react-markdown/lib/get-definitions.js","./uri-transformer":"../node_modules/react-markdown/lib/uri-transformer.js","./renderers":"../node_modules/react-markdown/lib/renderers.js","./symbols":"../node_modules/react-markdown/lib/symbols.js"}],"../node_modules/date-fns/_lib/getTimezoneOffsetInMilliseconds/index.js":[function(require,module,exports) {
+var MILLISECONDS_IN_MINUTE = 60000
+
+/**
+ * Google Chrome as of 67.0.3396.87 introduced timezones with offset that includes seconds.
+ * They usually appear for dates that denote time before the timezones were introduced
+ * (e.g. for 'Europe/Prague' timezone the offset is GMT+00:57:44 before 1 October 1891
+ * and GMT+01:00:00 after that date)
+ *
+ * Date#getTimezoneOffset returns the offset in minutes and would return 57 for the example above,
+ * which would lead to incorrect calculations.
+ *
+ * This function returns the timezone offset in milliseconds that takes seconds in account.
+ */
+module.exports = function getTimezoneOffsetInMilliseconds (dirtyDate) {
+  var date = new Date(dirtyDate.getTime())
+  var baseTimezoneOffset = date.getTimezoneOffset()
+  date.setSeconds(0, 0)
+  var millisecondsPartOfTimezoneOffset = date.getTime() % MILLISECONDS_IN_MINUTE
+
+  return baseTimezoneOffset * MILLISECONDS_IN_MINUTE + millisecondsPartOfTimezoneOffset
+}
+
+},{}],"../node_modules/date-fns/is_date/index.js":[function(require,module,exports) {
+/**
+ * @category Common Helpers
+ * @summary Is the given argument an instance of Date?
+ *
+ * @description
+ * Is the given argument an instance of Date?
+ *
+ * @param {*} argument - the argument to check
+ * @returns {Boolean} the given argument is an instance of Date
+ *
+ * @example
+ * // Is 'mayonnaise' a Date?
+ * var result = isDate('mayonnaise')
+ * //=> false
+ */
+function isDate (argument) {
+  return argument instanceof Date
+}
+
+module.exports = isDate
+
+},{}],"../node_modules/date-fns/parse/index.js":[function(require,module,exports) {
+var getTimezoneOffsetInMilliseconds = require('../_lib/getTimezoneOffsetInMilliseconds/index.js')
+var isDate = require('../is_date/index.js')
+
+var MILLISECONDS_IN_HOUR = 3600000
+var MILLISECONDS_IN_MINUTE = 60000
+var DEFAULT_ADDITIONAL_DIGITS = 2
+
+var parseTokenDateTimeDelimeter = /[T ]/
+var parseTokenPlainTime = /:/
+
+// year tokens
+var parseTokenYY = /^(\d{2})$/
+var parseTokensYYY = [
+  /^([+-]\d{2})$/, // 0 additional digits
+  /^([+-]\d{3})$/, // 1 additional digit
+  /^([+-]\d{4})$/ // 2 additional digits
+]
+
+var parseTokenYYYY = /^(\d{4})/
+var parseTokensYYYYY = [
+  /^([+-]\d{4})/, // 0 additional digits
+  /^([+-]\d{5})/, // 1 additional digit
+  /^([+-]\d{6})/ // 2 additional digits
+]
+
+// date tokens
+var parseTokenMM = /^-(\d{2})$/
+var parseTokenDDD = /^-?(\d{3})$/
+var parseTokenMMDD = /^-?(\d{2})-?(\d{2})$/
+var parseTokenWww = /^-?W(\d{2})$/
+var parseTokenWwwD = /^-?W(\d{2})-?(\d{1})$/
+
+// time tokens
+var parseTokenHH = /^(\d{2}([.,]\d*)?)$/
+var parseTokenHHMM = /^(\d{2}):?(\d{2}([.,]\d*)?)$/
+var parseTokenHHMMSS = /^(\d{2}):?(\d{2}):?(\d{2}([.,]\d*)?)$/
+
+// timezone tokens
+var parseTokenTimezone = /([Z+-].*)$/
+var parseTokenTimezoneZ = /^(Z)$/
+var parseTokenTimezoneHH = /^([+-])(\d{2})$/
+var parseTokenTimezoneHHMM = /^([+-])(\d{2}):?(\d{2})$/
+
+/**
+ * @category Common Helpers
+ * @summary Convert the given argument to an instance of Date.
+ *
+ * @description
+ * Convert the given argument to an instance of Date.
+ *
+ * If the argument is an instance of Date, the function returns its clone.
+ *
+ * If the argument is a number, it is treated as a timestamp.
+ *
+ * If an argument is a string, the function tries to parse it.
+ * Function accepts complete ISO 8601 formats as well as partial implementations.
+ * ISO 8601: http://en.wikipedia.org/wiki/ISO_8601
+ *
+ * If all above fails, the function passes the given argument to Date constructor.
+ *
+ * @param {Date|String|Number} argument - the value to convert
+ * @param {Object} [options] - the object with options
+ * @param {0 | 1 | 2} [options.additionalDigits=2] - the additional number of digits in the extended year format
+ * @returns {Date} the parsed date in the local time zone
+ *
+ * @example
+ * // Convert string '2014-02-11T11:30:30' to date:
+ * var result = parse('2014-02-11T11:30:30')
+ * //=> Tue Feb 11 2014 11:30:30
+ *
+ * @example
+ * // Parse string '+02014101',
+ * // if the additional number of digits in the extended year format is 1:
+ * var result = parse('+02014101', {additionalDigits: 1})
+ * //=> Fri Apr 11 2014 00:00:00
+ */
+function parse (argument, dirtyOptions) {
+  if (isDate(argument)) {
+    // Prevent the date to lose the milliseconds when passed to new Date() in IE10
+    return new Date(argument.getTime())
+  } else if (typeof argument !== 'string') {
+    return new Date(argument)
+  }
+
+  var options = dirtyOptions || {}
+  var additionalDigits = options.additionalDigits
+  if (additionalDigits == null) {
+    additionalDigits = DEFAULT_ADDITIONAL_DIGITS
+  } else {
+    additionalDigits = Number(additionalDigits)
+  }
+
+  var dateStrings = splitDateString(argument)
+
+  var parseYearResult = parseYear(dateStrings.date, additionalDigits)
+  var year = parseYearResult.year
+  var restDateString = parseYearResult.restDateString
+
+  var date = parseDate(restDateString, year)
+
+  if (date) {
+    var timestamp = date.getTime()
+    var time = 0
+    var offset
+
+    if (dateStrings.time) {
+      time = parseTime(dateStrings.time)
+    }
+
+    if (dateStrings.timezone) {
+      offset = parseTimezone(dateStrings.timezone) * MILLISECONDS_IN_MINUTE
+    } else {
+      var fullTime = timestamp + time
+      var fullTimeDate = new Date(fullTime)
+
+      offset = getTimezoneOffsetInMilliseconds(fullTimeDate)
+
+      // Adjust time when it's coming from DST
+      var fullTimeDateNextDay = new Date(fullTime)
+      fullTimeDateNextDay.setDate(fullTimeDate.getDate() + 1)
+      var offsetDiff =
+        getTimezoneOffsetInMilliseconds(fullTimeDateNextDay) -
+        getTimezoneOffsetInMilliseconds(fullTimeDate)
+      if (offsetDiff > 0) {
+        offset += offsetDiff
+      }
+    }
+
+    return new Date(timestamp + time + offset)
+  } else {
+    return new Date(argument)
+  }
+}
+
+function splitDateString (dateString) {
+  var dateStrings = {}
+  var array = dateString.split(parseTokenDateTimeDelimeter)
+  var timeString
+
+  if (parseTokenPlainTime.test(array[0])) {
+    dateStrings.date = null
+    timeString = array[0]
+  } else {
+    dateStrings.date = array[0]
+    timeString = array[1]
+  }
+
+  if (timeString) {
+    var token = parseTokenTimezone.exec(timeString)
+    if (token) {
+      dateStrings.time = timeString.replace(token[1], '')
+      dateStrings.timezone = token[1]
+    } else {
+      dateStrings.time = timeString
+    }
+  }
+
+  return dateStrings
+}
+
+function parseYear (dateString, additionalDigits) {
+  var parseTokenYYY = parseTokensYYY[additionalDigits]
+  var parseTokenYYYYY = parseTokensYYYYY[additionalDigits]
+
+  var token
+
+  // YYYY or ±YYYYY
+  token = parseTokenYYYY.exec(dateString) || parseTokenYYYYY.exec(dateString)
+  if (token) {
+    var yearString = token[1]
+    return {
+      year: parseInt(yearString, 10),
+      restDateString: dateString.slice(yearString.length)
+    }
+  }
+
+  // YY or ±YYY
+  token = parseTokenYY.exec(dateString) || parseTokenYYY.exec(dateString)
+  if (token) {
+    var centuryString = token[1]
+    return {
+      year: parseInt(centuryString, 10) * 100,
+      restDateString: dateString.slice(centuryString.length)
+    }
+  }
+
+  // Invalid ISO-formatted year
+  return {
+    year: null
+  }
+}
+
+function parseDate (dateString, year) {
+  // Invalid ISO-formatted year
+  if (year === null) {
+    return null
+  }
+
+  var token
+  var date
+  var month
+  var week
+
+  // YYYY
+  if (dateString.length === 0) {
+    date = new Date(0)
+    date.setUTCFullYear(year)
+    return date
+  }
+
+  // YYYY-MM
+  token = parseTokenMM.exec(dateString)
+  if (token) {
+    date = new Date(0)
+    month = parseInt(token[1], 10) - 1
+    date.setUTCFullYear(year, month)
+    return date
+  }
+
+  // YYYY-DDD or YYYYDDD
+  token = parseTokenDDD.exec(dateString)
+  if (token) {
+    date = new Date(0)
+    var dayOfYear = parseInt(token[1], 10)
+    date.setUTCFullYear(year, 0, dayOfYear)
+    return date
+  }
+
+  // YYYY-MM-DD or YYYYMMDD
+  token = parseTokenMMDD.exec(dateString)
+  if (token) {
+    date = new Date(0)
+    month = parseInt(token[1], 10) - 1
+    var day = parseInt(token[2], 10)
+    date.setUTCFullYear(year, month, day)
+    return date
+  }
+
+  // YYYY-Www or YYYYWww
+  token = parseTokenWww.exec(dateString)
+  if (token) {
+    week = parseInt(token[1], 10) - 1
+    return dayOfISOYear(year, week)
+  }
+
+  // YYYY-Www-D or YYYYWwwD
+  token = parseTokenWwwD.exec(dateString)
+  if (token) {
+    week = parseInt(token[1], 10) - 1
+    var dayOfWeek = parseInt(token[2], 10) - 1
+    return dayOfISOYear(year, week, dayOfWeek)
+  }
+
+  // Invalid ISO-formatted date
+  return null
+}
+
+function parseTime (timeString) {
+  var token
+  var hours
+  var minutes
+
+  // hh
+  token = parseTokenHH.exec(timeString)
+  if (token) {
+    hours = parseFloat(token[1].replace(',', '.'))
+    return (hours % 24) * MILLISECONDS_IN_HOUR
+  }
+
+  // hh:mm or hhmm
+  token = parseTokenHHMM.exec(timeString)
+  if (token) {
+    hours = parseInt(token[1], 10)
+    minutes = parseFloat(token[2].replace(',', '.'))
+    return (hours % 24) * MILLISECONDS_IN_HOUR +
+      minutes * MILLISECONDS_IN_MINUTE
+  }
+
+  // hh:mm:ss or hhmmss
+  token = parseTokenHHMMSS.exec(timeString)
+  if (token) {
+    hours = parseInt(token[1], 10)
+    minutes = parseInt(token[2], 10)
+    var seconds = parseFloat(token[3].replace(',', '.'))
+    return (hours % 24) * MILLISECONDS_IN_HOUR +
+      minutes * MILLISECONDS_IN_MINUTE +
+      seconds * 1000
+  }
+
+  // Invalid ISO-formatted time
+  return null
+}
+
+function parseTimezone (timezoneString) {
+  var token
+  var absoluteOffset
+
+  // Z
+  token = parseTokenTimezoneZ.exec(timezoneString)
+  if (token) {
+    return 0
+  }
+
+  // ±hh
+  token = parseTokenTimezoneHH.exec(timezoneString)
+  if (token) {
+    absoluteOffset = parseInt(token[2], 10) * 60
+    return (token[1] === '+') ? -absoluteOffset : absoluteOffset
+  }
+
+  // ±hh:mm or ±hhmm
+  token = parseTokenTimezoneHHMM.exec(timezoneString)
+  if (token) {
+    absoluteOffset = parseInt(token[2], 10) * 60 + parseInt(token[3], 10)
+    return (token[1] === '+') ? -absoluteOffset : absoluteOffset
+  }
+
+  return 0
+}
+
+function dayOfISOYear (isoYear, week, day) {
+  week = week || 0
+  day = day || 0
+  var date = new Date(0)
+  date.setUTCFullYear(isoYear, 0, 4)
+  var fourthOfJanuaryDay = date.getUTCDay() || 7
+  var diff = week * 7 + day + 1 - fourthOfJanuaryDay
+  date.setUTCDate(date.getUTCDate() + diff)
+  return date
+}
+
+module.exports = parse
+
+},{"../_lib/getTimezoneOffsetInMilliseconds/index.js":"../node_modules/date-fns/_lib/getTimezoneOffsetInMilliseconds/index.js","../is_date/index.js":"../node_modules/date-fns/is_date/index.js"}],"../node_modules/date-fns/add_days/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Add the specified number of days to the given date.
+ *
+ * @description
+ * Add the specified number of days to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of days to be added
+ * @returns {Date} the new date with the days added
+ *
+ * @example
+ * // Add 10 days to 1 September 2014:
+ * var result = addDays(new Date(2014, 8, 1), 10)
+ * //=> Thu Sep 11 2014 00:00:00
+ */
+function addDays (dirtyDate, dirtyAmount) {
+  var date = parse(dirtyDate)
+  var amount = Number(dirtyAmount)
+  date.setDate(date.getDate() + amount)
+  return date
+}
+
+module.exports = addDays
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/add_milliseconds/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Millisecond Helpers
+ * @summary Add the specified number of milliseconds to the given date.
+ *
+ * @description
+ * Add the specified number of milliseconds to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of milliseconds to be added
+ * @returns {Date} the new date with the milliseconds added
+ *
+ * @example
+ * // Add 750 milliseconds to 10 July 2014 12:45:30.000:
+ * var result = addMilliseconds(new Date(2014, 6, 10, 12, 45, 30, 0), 750)
+ * //=> Thu Jul 10 2014 12:45:30.750
+ */
+function addMilliseconds (dirtyDate, dirtyAmount) {
+  var timestamp = parse(dirtyDate).getTime()
+  var amount = Number(dirtyAmount)
+  return new Date(timestamp + amount)
+}
+
+module.exports = addMilliseconds
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/add_hours/index.js":[function(require,module,exports) {
+var addMilliseconds = require('../add_milliseconds/index.js')
+
+var MILLISECONDS_IN_HOUR = 3600000
+
+/**
+ * @category Hour Helpers
+ * @summary Add the specified number of hours to the given date.
+ *
+ * @description
+ * Add the specified number of hours to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of hours to be added
+ * @returns {Date} the new date with the hours added
+ *
+ * @example
+ * // Add 2 hours to 10 July 2014 23:00:00:
+ * var result = addHours(new Date(2014, 6, 10, 23, 0), 2)
+ * //=> Fri Jul 11 2014 01:00:00
+ */
+function addHours (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addMilliseconds(dirtyDate, amount * MILLISECONDS_IN_HOUR)
+}
+
+module.exports = addHours
+
+},{"../add_milliseconds/index.js":"../node_modules/date-fns/add_milliseconds/index.js"}],"../node_modules/date-fns/start_of_week/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Week Helpers
+ * @summary Return the start of a week for the given date.
+ *
+ * @description
+ * Return the start of a week for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @param {Object} [options] - the object with options
+ * @param {Number} [options.weekStartsOn=0] - the index of the first day of the week (0 - Sunday)
+ * @returns {Date} the start of a week
+ *
+ * @example
+ * // The start of a week for 2 September 2014 11:55:00:
+ * var result = startOfWeek(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Sun Aug 31 2014 00:00:00
+ *
+ * @example
+ * // If the week starts on Monday, the start of the week for 2 September 2014 11:55:00:
+ * var result = startOfWeek(new Date(2014, 8, 2, 11, 55, 0), {weekStartsOn: 1})
+ * //=> Mon Sep 01 2014 00:00:00
+ */
+function startOfWeek (dirtyDate, dirtyOptions) {
+  var weekStartsOn = dirtyOptions ? (Number(dirtyOptions.weekStartsOn) || 0) : 0
+
+  var date = parse(dirtyDate)
+  var day = date.getDay()
+  var diff = (day < weekStartsOn ? 7 : 0) + day - weekStartsOn
+
+  date.setDate(date.getDate() - diff)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+module.exports = startOfWeek
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/start_of_iso_week/index.js":[function(require,module,exports) {
+var startOfWeek = require('../start_of_week/index.js')
+
+/**
+ * @category ISO Week Helpers
+ * @summary Return the start of an ISO week for the given date.
+ *
+ * @description
+ * Return the start of an ISO week for the given date.
+ * The result will be in the local timezone.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the start of an ISO week
+ *
+ * @example
+ * // The start of an ISO week for 2 September 2014 11:55:00:
+ * var result = startOfISOWeek(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Mon Sep 01 2014 00:00:00
+ */
+function startOfISOWeek (dirtyDate) {
+  return startOfWeek(dirtyDate, {weekStartsOn: 1})
+}
+
+module.exports = startOfISOWeek
+
+},{"../start_of_week/index.js":"../node_modules/date-fns/start_of_week/index.js"}],"../node_modules/date-fns/get_iso_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var startOfISOWeek = require('../start_of_iso_week/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Get the ISO week-numbering year of the given date.
+ *
+ * @description
+ * Get the ISO week-numbering year of the given date,
+ * which always starts 3 days before the year's first Thursday.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the ISO week-numbering year
+ *
+ * @example
+ * // Which ISO-week numbering year is 2 January 2005?
+ * var result = getISOYear(new Date(2005, 0, 2))
+ * //=> 2004
+ */
+function getISOYear (dirtyDate) {
+  var date = parse(dirtyDate)
+  var year = date.getFullYear()
+
+  var fourthOfJanuaryOfNextYear = new Date(0)
+  fourthOfJanuaryOfNextYear.setFullYear(year + 1, 0, 4)
+  fourthOfJanuaryOfNextYear.setHours(0, 0, 0, 0)
+  var startOfNextYear = startOfISOWeek(fourthOfJanuaryOfNextYear)
+
+  var fourthOfJanuaryOfThisYear = new Date(0)
+  fourthOfJanuaryOfThisYear.setFullYear(year, 0, 4)
+  fourthOfJanuaryOfThisYear.setHours(0, 0, 0, 0)
+  var startOfThisYear = startOfISOWeek(fourthOfJanuaryOfThisYear)
+
+  if (date.getTime() >= startOfNextYear.getTime()) {
+    return year + 1
+  } else if (date.getTime() >= startOfThisYear.getTime()) {
+    return year
+  } else {
+    return year - 1
+  }
+}
+
+module.exports = getISOYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../start_of_iso_week/index.js":"../node_modules/date-fns/start_of_iso_week/index.js"}],"../node_modules/date-fns/start_of_iso_year/index.js":[function(require,module,exports) {
+var getISOYear = require('../get_iso_year/index.js')
+var startOfISOWeek = require('../start_of_iso_week/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Return the start of an ISO week-numbering year for the given date.
+ *
+ * @description
+ * Return the start of an ISO week-numbering year,
+ * which always starts 3 days before the year's first Thursday.
+ * The result will be in the local timezone.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the start of an ISO year
+ *
+ * @example
+ * // The start of an ISO week-numbering year for 2 July 2005:
+ * var result = startOfISOYear(new Date(2005, 6, 2))
+ * //=> Mon Jan 03 2005 00:00:00
+ */
+function startOfISOYear (dirtyDate) {
+  var year = getISOYear(dirtyDate)
+  var fourthOfJanuary = new Date(0)
+  fourthOfJanuary.setFullYear(year, 0, 4)
+  fourthOfJanuary.setHours(0, 0, 0, 0)
+  var date = startOfISOWeek(fourthOfJanuary)
+  return date
+}
+
+module.exports = startOfISOYear
+
+},{"../get_iso_year/index.js":"../node_modules/date-fns/get_iso_year/index.js","../start_of_iso_week/index.js":"../node_modules/date-fns/start_of_iso_week/index.js"}],"../node_modules/date-fns/start_of_day/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Return the start of a day for the given date.
+ *
+ * @description
+ * Return the start of a day for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the start of a day
+ *
+ * @example
+ * // The start of a day for 2 September 2014 11:55:00:
+ * var result = startOfDay(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Tue Sep 02 2014 00:00:00
+ */
+function startOfDay (dirtyDate) {
+  var date = parse(dirtyDate)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+module.exports = startOfDay
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/difference_in_calendar_days/index.js":[function(require,module,exports) {
+var startOfDay = require('../start_of_day/index.js')
+
+var MILLISECONDS_IN_MINUTE = 60000
+var MILLISECONDS_IN_DAY = 86400000
+
+/**
+ * @category Day Helpers
+ * @summary Get the number of calendar days between the given dates.
+ *
+ * @description
+ * Get the number of calendar days between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of calendar days
+ *
+ * @example
+ * // How many calendar days are between
+ * // 2 July 2011 23:00:00 and 2 July 2012 00:00:00?
+ * var result = differenceInCalendarDays(
+ *   new Date(2012, 6, 2, 0, 0),
+ *   new Date(2011, 6, 2, 23, 0)
+ * )
+ * //=> 366
+ */
+function differenceInCalendarDays (dirtyDateLeft, dirtyDateRight) {
+  var startOfDayLeft = startOfDay(dirtyDateLeft)
+  var startOfDayRight = startOfDay(dirtyDateRight)
+
+  var timestampLeft = startOfDayLeft.getTime() -
+    startOfDayLeft.getTimezoneOffset() * MILLISECONDS_IN_MINUTE
+  var timestampRight = startOfDayRight.getTime() -
+    startOfDayRight.getTimezoneOffset() * MILLISECONDS_IN_MINUTE
+
+  // Round the number of days to the nearest integer
+  // because the number of milliseconds in a day is not constant
+  // (e.g. it's different in the day of the daylight saving time clock shift)
+  return Math.round((timestampLeft - timestampRight) / MILLISECONDS_IN_DAY)
+}
+
+module.exports = differenceInCalendarDays
+
+},{"../start_of_day/index.js":"../node_modules/date-fns/start_of_day/index.js"}],"../node_modules/date-fns/set_iso_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var startOfISOYear = require('../start_of_iso_year/index.js')
+var differenceInCalendarDays = require('../difference_in_calendar_days/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Set the ISO week-numbering year to the given date.
+ *
+ * @description
+ * Set the ISO week-numbering year to the given date,
+ * saving the week number and the weekday number.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} isoYear - the ISO week-numbering year of the new date
+ * @returns {Date} the new date with the ISO week-numbering year setted
+ *
+ * @example
+ * // Set ISO week-numbering year 2007 to 29 December 2008:
+ * var result = setISOYear(new Date(2008, 11, 29), 2007)
+ * //=> Mon Jan 01 2007 00:00:00
+ */
+function setISOYear (dirtyDate, dirtyISOYear) {
+  var date = parse(dirtyDate)
+  var isoYear = Number(dirtyISOYear)
+  var diff = differenceInCalendarDays(date, startOfISOYear(date))
+  var fourthOfJanuary = new Date(0)
+  fourthOfJanuary.setFullYear(isoYear, 0, 4)
+  fourthOfJanuary.setHours(0, 0, 0, 0)
+  date = startOfISOYear(fourthOfJanuary)
+  date.setDate(date.getDate() + diff)
+  return date
+}
+
+module.exports = setISOYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../start_of_iso_year/index.js":"../node_modules/date-fns/start_of_iso_year/index.js","../difference_in_calendar_days/index.js":"../node_modules/date-fns/difference_in_calendar_days/index.js"}],"../node_modules/date-fns/add_iso_years/index.js":[function(require,module,exports) {
+var getISOYear = require('../get_iso_year/index.js')
+var setISOYear = require('../set_iso_year/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Add the specified number of ISO week-numbering years to the given date.
+ *
+ * @description
+ * Add the specified number of ISO week-numbering years to the given date.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of ISO week-numbering years to be added
+ * @returns {Date} the new date with the ISO week-numbering years added
+ *
+ * @example
+ * // Add 5 ISO week-numbering years to 2 July 2010:
+ * var result = addISOYears(new Date(2010, 6, 2), 5)
+ * //=> Fri Jun 26 2015 00:00:00
+ */
+function addISOYears (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return setISOYear(dirtyDate, getISOYear(dirtyDate) + amount)
+}
+
+module.exports = addISOYears
+
+},{"../get_iso_year/index.js":"../node_modules/date-fns/get_iso_year/index.js","../set_iso_year/index.js":"../node_modules/date-fns/set_iso_year/index.js"}],"../node_modules/date-fns/add_minutes/index.js":[function(require,module,exports) {
+var addMilliseconds = require('../add_milliseconds/index.js')
+
+var MILLISECONDS_IN_MINUTE = 60000
+
+/**
+ * @category Minute Helpers
+ * @summary Add the specified number of minutes to the given date.
+ *
+ * @description
+ * Add the specified number of minutes to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of minutes to be added
+ * @returns {Date} the new date with the minutes added
+ *
+ * @example
+ * // Add 30 minutes to 10 July 2014 12:00:00:
+ * var result = addMinutes(new Date(2014, 6, 10, 12, 0), 30)
+ * //=> Thu Jul 10 2014 12:30:00
+ */
+function addMinutes (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addMilliseconds(dirtyDate, amount * MILLISECONDS_IN_MINUTE)
+}
+
+module.exports = addMinutes
+
+},{"../add_milliseconds/index.js":"../node_modules/date-fns/add_milliseconds/index.js"}],"../node_modules/date-fns/get_days_in_month/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Get the number of days in a month of the given date.
+ *
+ * @description
+ * Get the number of days in a month of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the number of days in a month
+ *
+ * @example
+ * // How many days are in February 2000?
+ * var result = getDaysInMonth(new Date(2000, 1))
+ * //=> 29
+ */
+function getDaysInMonth (dirtyDate) {
+  var date = parse(dirtyDate)
+  var year = date.getFullYear()
+  var monthIndex = date.getMonth()
+  var lastDayOfMonth = new Date(0)
+  lastDayOfMonth.setFullYear(year, monthIndex + 1, 0)
+  lastDayOfMonth.setHours(0, 0, 0, 0)
+  return lastDayOfMonth.getDate()
+}
+
+module.exports = getDaysInMonth
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/add_months/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var getDaysInMonth = require('../get_days_in_month/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Add the specified number of months to the given date.
+ *
+ * @description
+ * Add the specified number of months to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of months to be added
+ * @returns {Date} the new date with the months added
+ *
+ * @example
+ * // Add 5 months to 1 September 2014:
+ * var result = addMonths(new Date(2014, 8, 1), 5)
+ * //=> Sun Feb 01 2015 00:00:00
+ */
+function addMonths (dirtyDate, dirtyAmount) {
+  var date = parse(dirtyDate)
+  var amount = Number(dirtyAmount)
+  var desiredMonth = date.getMonth() + amount
+  var dateWithDesiredMonth = new Date(0)
+  dateWithDesiredMonth.setFullYear(date.getFullYear(), desiredMonth, 1)
+  dateWithDesiredMonth.setHours(0, 0, 0, 0)
+  var daysInMonth = getDaysInMonth(dateWithDesiredMonth)
+  // Set the last day of the new month
+  // if the original date was the last day of the longer month
+  date.setMonth(desiredMonth, Math.min(daysInMonth, date.getDate()))
+  return date
+}
+
+module.exports = addMonths
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../get_days_in_month/index.js":"../node_modules/date-fns/get_days_in_month/index.js"}],"../node_modules/date-fns/add_quarters/index.js":[function(require,module,exports) {
+var addMonths = require('../add_months/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Add the specified number of year quarters to the given date.
+ *
+ * @description
+ * Add the specified number of year quarters to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of quarters to be added
+ * @returns {Date} the new date with the quarters added
+ *
+ * @example
+ * // Add 1 quarter to 1 September 2014:
+ * var result = addQuarters(new Date(2014, 8, 1), 1)
+ * //=> Mon Dec 01 2014 00:00:00
+ */
+function addQuarters (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  var months = amount * 3
+  return addMonths(dirtyDate, months)
+}
+
+module.exports = addQuarters
+
+},{"../add_months/index.js":"../node_modules/date-fns/add_months/index.js"}],"../node_modules/date-fns/add_seconds/index.js":[function(require,module,exports) {
+var addMilliseconds = require('../add_milliseconds/index.js')
+
+/**
+ * @category Second Helpers
+ * @summary Add the specified number of seconds to the given date.
+ *
+ * @description
+ * Add the specified number of seconds to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of seconds to be added
+ * @returns {Date} the new date with the seconds added
+ *
+ * @example
+ * // Add 30 seconds to 10 July 2014 12:45:00:
+ * var result = addSeconds(new Date(2014, 6, 10, 12, 45, 0), 30)
+ * //=> Thu Jul 10 2014 12:45:30
+ */
+function addSeconds (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addMilliseconds(dirtyDate, amount * 1000)
+}
+
+module.exports = addSeconds
+
+},{"../add_milliseconds/index.js":"../node_modules/date-fns/add_milliseconds/index.js"}],"../node_modules/date-fns/add_weeks/index.js":[function(require,module,exports) {
+var addDays = require('../add_days/index.js')
+
+/**
+ * @category Week Helpers
+ * @summary Add the specified number of weeks to the given date.
+ *
+ * @description
+ * Add the specified number of week to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of weeks to be added
+ * @returns {Date} the new date with the weeks added
+ *
+ * @example
+ * // Add 4 weeks to 1 September 2014:
+ * var result = addWeeks(new Date(2014, 8, 1), 4)
+ * //=> Mon Sep 29 2014 00:00:00
+ */
+function addWeeks (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  var days = amount * 7
+  return addDays(dirtyDate, days)
+}
+
+module.exports = addWeeks
+
+},{"../add_days/index.js":"../node_modules/date-fns/add_days/index.js"}],"../node_modules/date-fns/add_years/index.js":[function(require,module,exports) {
+var addMonths = require('../add_months/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Add the specified number of years to the given date.
+ *
+ * @description
+ * Add the specified number of years to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of years to be added
+ * @returns {Date} the new date with the years added
+ *
+ * @example
+ * // Add 5 years to 1 September 2014:
+ * var result = addYears(new Date(2014, 8, 1), 5)
+ * //=> Sun Sep 01 2019 00:00:00
+ */
+function addYears (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addMonths(dirtyDate, amount * 12)
+}
+
+module.exports = addYears
+
+},{"../add_months/index.js":"../node_modules/date-fns/add_months/index.js"}],"../node_modules/date-fns/are_ranges_overlapping/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Range Helpers
+ * @summary Is the given date range overlapping with another date range?
+ *
+ * @description
+ * Is the given date range overlapping with another date range?
+ *
+ * @param {Date|String|Number} initialRangeStartDate - the start of the initial range
+ * @param {Date|String|Number} initialRangeEndDate - the end of the initial range
+ * @param {Date|String|Number} comparedRangeStartDate - the start of the range to compare it with
+ * @param {Date|String|Number} comparedRangeEndDate - the end of the range to compare it with
+ * @returns {Boolean} whether the date ranges are overlapping
+ * @throws {Error} startDate of a date range cannot be after its endDate
+ *
+ * @example
+ * // For overlapping date ranges:
+ * areRangesOverlapping(
+ *   new Date(2014, 0, 10), new Date(2014, 0, 20), new Date(2014, 0, 17), new Date(2014, 0, 21)
+ * )
+ * //=> true
+ *
+ * @example
+ * // For non-overlapping date ranges:
+ * areRangesOverlapping(
+ *   new Date(2014, 0, 10), new Date(2014, 0, 20), new Date(2014, 0, 21), new Date(2014, 0, 22)
+ * )
+ * //=> false
+ */
+function areRangesOverlapping (dirtyInitialRangeStartDate, dirtyInitialRangeEndDate, dirtyComparedRangeStartDate, dirtyComparedRangeEndDate) {
+  var initialStartTime = parse(dirtyInitialRangeStartDate).getTime()
+  var initialEndTime = parse(dirtyInitialRangeEndDate).getTime()
+  var comparedStartTime = parse(dirtyComparedRangeStartDate).getTime()
+  var comparedEndTime = parse(dirtyComparedRangeEndDate).getTime()
+
+  if (initialStartTime > initialEndTime || comparedStartTime > comparedEndTime) {
+    throw new Error('The start of the range cannot be after the end of the range')
+  }
+
+  return initialStartTime < comparedEndTime && comparedStartTime < initialEndTime
+}
+
+module.exports = areRangesOverlapping
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/closest_index_to/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Return an index of the closest date from the array comparing to the given date.
+ *
+ * @description
+ * Return an index of the closest date from the array comparing to the given date.
+ *
+ * @param {Date|String|Number} dateToCompare - the date to compare with
+ * @param {Date[]|String[]|Number[]} datesArray - the array to search
+ * @returns {Number} an index of the date closest to the given date
+ * @throws {TypeError} the second argument must be an instance of Array
+ *
+ * @example
+ * // Which date is closer to 6 September 2015?
+ * var dateToCompare = new Date(2015, 8, 6)
+ * var datesArray = [
+ *   new Date(2015, 0, 1),
+ *   new Date(2016, 0, 1),
+ *   new Date(2017, 0, 1)
+ * ]
+ * var result = closestIndexTo(dateToCompare, datesArray)
+ * //=> 1
+ */
+function closestIndexTo (dirtyDateToCompare, dirtyDatesArray) {
+  if (!(dirtyDatesArray instanceof Array)) {
+    throw new TypeError(toString.call(dirtyDatesArray) + ' is not an instance of Array')
+  }
+
+  var dateToCompare = parse(dirtyDateToCompare)
+  var timeToCompare = dateToCompare.getTime()
+
+  var result
+  var minDistance
+
+  dirtyDatesArray.forEach(function (dirtyDate, index) {
+    var currentDate = parse(dirtyDate)
+    var distance = Math.abs(timeToCompare - currentDate.getTime())
+    if (result === undefined || distance < minDistance) {
+      result = index
+      minDistance = distance
+    }
+  })
+
+  return result
+}
+
+module.exports = closestIndexTo
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/closest_to/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Return a date from the array closest to the given date.
+ *
+ * @description
+ * Return a date from the array closest to the given date.
+ *
+ * @param {Date|String|Number} dateToCompare - the date to compare with
+ * @param {Date[]|String[]|Number[]} datesArray - the array to search
+ * @returns {Date} the date from the array closest to the given date
+ * @throws {TypeError} the second argument must be an instance of Array
+ *
+ * @example
+ * // Which date is closer to 6 September 2015: 1 January 2000 or 1 January 2030?
+ * var dateToCompare = new Date(2015, 8, 6)
+ * var result = closestTo(dateToCompare, [
+ *   new Date(2000, 0, 1),
+ *   new Date(2030, 0, 1)
+ * ])
+ * //=> Tue Jan 01 2030 00:00:00
+ */
+function closestTo (dirtyDateToCompare, dirtyDatesArray) {
+  if (!(dirtyDatesArray instanceof Array)) {
+    throw new TypeError(toString.call(dirtyDatesArray) + ' is not an instance of Array')
+  }
+
+  var dateToCompare = parse(dirtyDateToCompare)
+  var timeToCompare = dateToCompare.getTime()
+
+  var result
+  var minDistance
+
+  dirtyDatesArray.forEach(function (dirtyDate) {
+    var currentDate = parse(dirtyDate)
+    var distance = Math.abs(timeToCompare - currentDate.getTime())
+    if (result === undefined || distance < minDistance) {
+      result = currentDate
+      minDistance = distance
+    }
+  })
+
+  return result
+}
+
+module.exports = closestTo
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/compare_asc/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Compare the two dates and return -1, 0 or 1.
+ *
+ * @description
+ * Compare the two dates and return 1 if the first date is after the second,
+ * -1 if the first date is before the second or 0 if dates are equal.
+ *
+ * @param {Date|String|Number} dateLeft - the first date to compare
+ * @param {Date|String|Number} dateRight - the second date to compare
+ * @returns {Number} the result of the comparison
+ *
+ * @example
+ * // Compare 11 February 1987 and 10 July 1989:
+ * var result = compareAsc(
+ *   new Date(1987, 1, 11),
+ *   new Date(1989, 6, 10)
+ * )
+ * //=> -1
+ *
+ * @example
+ * // Sort the array of dates:
+ * var result = [
+ *   new Date(1995, 6, 2),
+ *   new Date(1987, 1, 11),
+ *   new Date(1989, 6, 10)
+ * ].sort(compareAsc)
+ * //=> [
+ * //   Wed Feb 11 1987 00:00:00,
+ * //   Mon Jul 10 1989 00:00:00,
+ * //   Sun Jul 02 1995 00:00:00
+ * // ]
+ */
+function compareAsc (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var timeLeft = dateLeft.getTime()
+  var dateRight = parse(dirtyDateRight)
+  var timeRight = dateRight.getTime()
+
+  if (timeLeft < timeRight) {
+    return -1
+  } else if (timeLeft > timeRight) {
+    return 1
+  } else {
+    return 0
+  }
+}
+
+module.exports = compareAsc
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/compare_desc/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Compare the two dates reverse chronologically and return -1, 0 or 1.
+ *
+ * @description
+ * Compare the two dates and return -1 if the first date is after the second,
+ * 1 if the first date is before the second or 0 if dates are equal.
+ *
+ * @param {Date|String|Number} dateLeft - the first date to compare
+ * @param {Date|String|Number} dateRight - the second date to compare
+ * @returns {Number} the result of the comparison
+ *
+ * @example
+ * // Compare 11 February 1987 and 10 July 1989 reverse chronologically:
+ * var result = compareDesc(
+ *   new Date(1987, 1, 11),
+ *   new Date(1989, 6, 10)
+ * )
+ * //=> 1
+ *
+ * @example
+ * // Sort the array of dates in reverse chronological order:
+ * var result = [
+ *   new Date(1995, 6, 2),
+ *   new Date(1987, 1, 11),
+ *   new Date(1989, 6, 10)
+ * ].sort(compareDesc)
+ * //=> [
+ * //   Sun Jul 02 1995 00:00:00,
+ * //   Mon Jul 10 1989 00:00:00,
+ * //   Wed Feb 11 1987 00:00:00
+ * // ]
+ */
+function compareDesc (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var timeLeft = dateLeft.getTime()
+  var dateRight = parse(dirtyDateRight)
+  var timeRight = dateRight.getTime()
+
+  if (timeLeft > timeRight) {
+    return -1
+  } else if (timeLeft < timeRight) {
+    return 1
+  } else {
+    return 0
+  }
+}
+
+module.exports = compareDesc
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/difference_in_calendar_iso_weeks/index.js":[function(require,module,exports) {
+var startOfISOWeek = require('../start_of_iso_week/index.js')
+
+var MILLISECONDS_IN_MINUTE = 60000
+var MILLISECONDS_IN_WEEK = 604800000
+
+/**
+ * @category ISO Week Helpers
+ * @summary Get the number of calendar ISO weeks between the given dates.
+ *
+ * @description
+ * Get the number of calendar ISO weeks between the given dates.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of calendar ISO weeks
+ *
+ * @example
+ * // How many calendar ISO weeks are between 6 July 2014 and 21 July 2014?
+ * var result = differenceInCalendarISOWeeks(
+ *   new Date(2014, 6, 21),
+ *   new Date(2014, 6, 6)
+ * )
+ * //=> 3
+ */
+function differenceInCalendarISOWeeks (dirtyDateLeft, dirtyDateRight) {
+  var startOfISOWeekLeft = startOfISOWeek(dirtyDateLeft)
+  var startOfISOWeekRight = startOfISOWeek(dirtyDateRight)
+
+  var timestampLeft = startOfISOWeekLeft.getTime() -
+    startOfISOWeekLeft.getTimezoneOffset() * MILLISECONDS_IN_MINUTE
+  var timestampRight = startOfISOWeekRight.getTime() -
+    startOfISOWeekRight.getTimezoneOffset() * MILLISECONDS_IN_MINUTE
+
+  // Round the number of days to the nearest integer
+  // because the number of milliseconds in a week is not constant
+  // (e.g. it's different in the week of the daylight saving time clock shift)
+  return Math.round((timestampLeft - timestampRight) / MILLISECONDS_IN_WEEK)
+}
+
+module.exports = differenceInCalendarISOWeeks
+
+},{"../start_of_iso_week/index.js":"../node_modules/date-fns/start_of_iso_week/index.js"}],"../node_modules/date-fns/difference_in_calendar_iso_years/index.js":[function(require,module,exports) {
+var getISOYear = require('../get_iso_year/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Get the number of calendar ISO week-numbering years between the given dates.
+ *
+ * @description
+ * Get the number of calendar ISO week-numbering years between the given dates.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of calendar ISO week-numbering years
+ *
+ * @example
+ * // How many calendar ISO week-numbering years are 1 January 2010 and 1 January 2012?
+ * var result = differenceInCalendarISOYears(
+ *   new Date(2012, 0, 1),
+ *   new Date(2010, 0, 1)
+ * )
+ * //=> 2
+ */
+function differenceInCalendarISOYears (dirtyDateLeft, dirtyDateRight) {
+  return getISOYear(dirtyDateLeft) - getISOYear(dirtyDateRight)
+}
+
+module.exports = differenceInCalendarISOYears
+
+},{"../get_iso_year/index.js":"../node_modules/date-fns/get_iso_year/index.js"}],"../node_modules/date-fns/difference_in_calendar_months/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Get the number of calendar months between the given dates.
+ *
+ * @description
+ * Get the number of calendar months between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of calendar months
+ *
+ * @example
+ * // How many calendar months are between 31 January 2014 and 1 September 2014?
+ * var result = differenceInCalendarMonths(
+ *   new Date(2014, 8, 1),
+ *   new Date(2014, 0, 31)
+ * )
+ * //=> 8
+ */
+function differenceInCalendarMonths (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var dateRight = parse(dirtyDateRight)
+
+  var yearDiff = dateLeft.getFullYear() - dateRight.getFullYear()
+  var monthDiff = dateLeft.getMonth() - dateRight.getMonth()
+
+  return yearDiff * 12 + monthDiff
+}
+
+module.exports = differenceInCalendarMonths
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_quarter/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Get the year quarter of the given date.
+ *
+ * @description
+ * Get the year quarter of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the quarter
+ *
+ * @example
+ * // Which quarter is 2 July 2014?
+ * var result = getQuarter(new Date(2014, 6, 2))
+ * //=> 3
+ */
+function getQuarter (dirtyDate) {
+  var date = parse(dirtyDate)
+  var quarter = Math.floor(date.getMonth() / 3) + 1
+  return quarter
+}
+
+module.exports = getQuarter
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/difference_in_calendar_quarters/index.js":[function(require,module,exports) {
+var getQuarter = require('../get_quarter/index.js')
+var parse = require('../parse/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Get the number of calendar quarters between the given dates.
+ *
+ * @description
+ * Get the number of calendar quarters between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of calendar quarters
+ *
+ * @example
+ * // How many calendar quarters are between 31 December 2013 and 2 July 2014?
+ * var result = differenceInCalendarQuarters(
+ *   new Date(2014, 6, 2),
+ *   new Date(2013, 11, 31)
+ * )
+ * //=> 3
+ */
+function differenceInCalendarQuarters (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var dateRight = parse(dirtyDateRight)
+
+  var yearDiff = dateLeft.getFullYear() - dateRight.getFullYear()
+  var quarterDiff = getQuarter(dateLeft) - getQuarter(dateRight)
+
+  return yearDiff * 4 + quarterDiff
+}
+
+module.exports = differenceInCalendarQuarters
+
+},{"../get_quarter/index.js":"../node_modules/date-fns/get_quarter/index.js","../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/difference_in_calendar_weeks/index.js":[function(require,module,exports) {
+var startOfWeek = require('../start_of_week/index.js')
+
+var MILLISECONDS_IN_MINUTE = 60000
+var MILLISECONDS_IN_WEEK = 604800000
+
+/**
+ * @category Week Helpers
+ * @summary Get the number of calendar weeks between the given dates.
+ *
+ * @description
+ * Get the number of calendar weeks between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @param {Object} [options] - the object with options
+ * @param {Number} [options.weekStartsOn=0] - the index of the first day of the week (0 - Sunday)
+ * @returns {Number} the number of calendar weeks
+ *
+ * @example
+ * // How many calendar weeks are between 5 July 2014 and 20 July 2014?
+ * var result = differenceInCalendarWeeks(
+ *   new Date(2014, 6, 20),
+ *   new Date(2014, 6, 5)
+ * )
+ * //=> 3
+ *
+ * @example
+ * // If the week starts on Monday,
+ * // how many calendar weeks are between 5 July 2014 and 20 July 2014?
+ * var result = differenceInCalendarWeeks(
+ *   new Date(2014, 6, 20),
+ *   new Date(2014, 6, 5),
+ *   {weekStartsOn: 1}
+ * )
+ * //=> 2
+ */
+function differenceInCalendarWeeks (dirtyDateLeft, dirtyDateRight, dirtyOptions) {
+  var startOfWeekLeft = startOfWeek(dirtyDateLeft, dirtyOptions)
+  var startOfWeekRight = startOfWeek(dirtyDateRight, dirtyOptions)
+
+  var timestampLeft = startOfWeekLeft.getTime() -
+    startOfWeekLeft.getTimezoneOffset() * MILLISECONDS_IN_MINUTE
+  var timestampRight = startOfWeekRight.getTime() -
+    startOfWeekRight.getTimezoneOffset() * MILLISECONDS_IN_MINUTE
+
+  // Round the number of days to the nearest integer
+  // because the number of milliseconds in a week is not constant
+  // (e.g. it's different in the week of the daylight saving time clock shift)
+  return Math.round((timestampLeft - timestampRight) / MILLISECONDS_IN_WEEK)
+}
+
+module.exports = differenceInCalendarWeeks
+
+},{"../start_of_week/index.js":"../node_modules/date-fns/start_of_week/index.js"}],"../node_modules/date-fns/difference_in_calendar_years/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Get the number of calendar years between the given dates.
+ *
+ * @description
+ * Get the number of calendar years between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of calendar years
+ *
+ * @example
+ * // How many calendar years are between 31 December 2013 and 11 February 2015?
+ * var result = differenceInCalendarYears(
+ *   new Date(2015, 1, 11),
+ *   new Date(2013, 11, 31)
+ * )
+ * //=> 2
+ */
+function differenceInCalendarYears (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var dateRight = parse(dirtyDateRight)
+
+  return dateLeft.getFullYear() - dateRight.getFullYear()
+}
+
+module.exports = differenceInCalendarYears
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/difference_in_days/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var differenceInCalendarDays = require('../difference_in_calendar_days/index.js')
+var compareAsc = require('../compare_asc/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Get the number of full days between the given dates.
+ *
+ * @description
+ * Get the number of full days between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of full days
+ *
+ * @example
+ * // How many full days are between
+ * // 2 July 2011 23:00:00 and 2 July 2012 00:00:00?
+ * var result = differenceInDays(
+ *   new Date(2012, 6, 2, 0, 0),
+ *   new Date(2011, 6, 2, 23, 0)
+ * )
+ * //=> 365
+ */
+function differenceInDays (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var dateRight = parse(dirtyDateRight)
+
+  var sign = compareAsc(dateLeft, dateRight)
+  var difference = Math.abs(differenceInCalendarDays(dateLeft, dateRight))
+  dateLeft.setDate(dateLeft.getDate() - sign * difference)
+
+  // Math.abs(diff in full days - diff in calendar days) === 1 if last calendar day is not full
+  // If so, result must be decreased by 1 in absolute value
+  var isLastDayNotFull = compareAsc(dateLeft, dateRight) === -sign
+  return sign * (difference - isLastDayNotFull)
+}
+
+module.exports = differenceInDays
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../difference_in_calendar_days/index.js":"../node_modules/date-fns/difference_in_calendar_days/index.js","../compare_asc/index.js":"../node_modules/date-fns/compare_asc/index.js"}],"../node_modules/date-fns/difference_in_milliseconds/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Millisecond Helpers
+ * @summary Get the number of milliseconds between the given dates.
+ *
+ * @description
+ * Get the number of milliseconds between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of milliseconds
+ *
+ * @example
+ * // How many milliseconds are between
+ * // 2 July 2014 12:30:20.600 and 2 July 2014 12:30:21.700?
+ * var result = differenceInMilliseconds(
+ *   new Date(2014, 6, 2, 12, 30, 21, 700),
+ *   new Date(2014, 6, 2, 12, 30, 20, 600)
+ * )
+ * //=> 1100
+ */
+function differenceInMilliseconds (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var dateRight = parse(dirtyDateRight)
+  return dateLeft.getTime() - dateRight.getTime()
+}
+
+module.exports = differenceInMilliseconds
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/difference_in_hours/index.js":[function(require,module,exports) {
+var differenceInMilliseconds = require('../difference_in_milliseconds/index.js')
+
+var MILLISECONDS_IN_HOUR = 3600000
+
+/**
+ * @category Hour Helpers
+ * @summary Get the number of hours between the given dates.
+ *
+ * @description
+ * Get the number of hours between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of hours
+ *
+ * @example
+ * // How many hours are between 2 July 2014 06:50:00 and 2 July 2014 19:00:00?
+ * var result = differenceInHours(
+ *   new Date(2014, 6, 2, 19, 0),
+ *   new Date(2014, 6, 2, 6, 50)
+ * )
+ * //=> 12
+ */
+function differenceInHours (dirtyDateLeft, dirtyDateRight) {
+  var diff = differenceInMilliseconds(dirtyDateLeft, dirtyDateRight) / MILLISECONDS_IN_HOUR
+  return diff > 0 ? Math.floor(diff) : Math.ceil(diff)
+}
+
+module.exports = differenceInHours
+
+},{"../difference_in_milliseconds/index.js":"../node_modules/date-fns/difference_in_milliseconds/index.js"}],"../node_modules/date-fns/sub_iso_years/index.js":[function(require,module,exports) {
+var addISOYears = require('../add_iso_years/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Subtract the specified number of ISO week-numbering years from the given date.
+ *
+ * @description
+ * Subtract the specified number of ISO week-numbering years from the given date.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of ISO week-numbering years to be subtracted
+ * @returns {Date} the new date with the ISO week-numbering years subtracted
+ *
+ * @example
+ * // Subtract 5 ISO week-numbering years from 1 September 2014:
+ * var result = subISOYears(new Date(2014, 8, 1), 5)
+ * //=> Mon Aug 31 2009 00:00:00
+ */
+function subISOYears (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addISOYears(dirtyDate, -amount)
+}
+
+module.exports = subISOYears
+
+},{"../add_iso_years/index.js":"../node_modules/date-fns/add_iso_years/index.js"}],"../node_modules/date-fns/difference_in_iso_years/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var differenceInCalendarISOYears = require('../difference_in_calendar_iso_years/index.js')
+var compareAsc = require('../compare_asc/index.js')
+var subISOYears = require('../sub_iso_years/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Get the number of full ISO week-numbering years between the given dates.
+ *
+ * @description
+ * Get the number of full ISO week-numbering years between the given dates.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of full ISO week-numbering years
+ *
+ * @example
+ * // How many full ISO week-numbering years are between 1 January 2010 and 1 January 2012?
+ * var result = differenceInISOYears(
+ *   new Date(2012, 0, 1),
+ *   new Date(2010, 0, 1)
+ * )
+ * //=> 1
+ */
+function differenceInISOYears (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var dateRight = parse(dirtyDateRight)
+
+  var sign = compareAsc(dateLeft, dateRight)
+  var difference = Math.abs(differenceInCalendarISOYears(dateLeft, dateRight))
+  dateLeft = subISOYears(dateLeft, sign * difference)
+
+  // Math.abs(diff in full ISO years - diff in calendar ISO years) === 1
+  // if last calendar ISO year is not full
+  // If so, result must be decreased by 1 in absolute value
+  var isLastISOYearNotFull = compareAsc(dateLeft, dateRight) === -sign
+  return sign * (difference - isLastISOYearNotFull)
+}
+
+module.exports = differenceInISOYears
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../difference_in_calendar_iso_years/index.js":"../node_modules/date-fns/difference_in_calendar_iso_years/index.js","../compare_asc/index.js":"../node_modules/date-fns/compare_asc/index.js","../sub_iso_years/index.js":"../node_modules/date-fns/sub_iso_years/index.js"}],"../node_modules/date-fns/difference_in_minutes/index.js":[function(require,module,exports) {
+var differenceInMilliseconds = require('../difference_in_milliseconds/index.js')
+
+var MILLISECONDS_IN_MINUTE = 60000
+
+/**
+ * @category Minute Helpers
+ * @summary Get the number of minutes between the given dates.
+ *
+ * @description
+ * Get the number of minutes between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of minutes
+ *
+ * @example
+ * // How many minutes are between 2 July 2014 12:07:59 and 2 July 2014 12:20:00?
+ * var result = differenceInMinutes(
+ *   new Date(2014, 6, 2, 12, 20, 0),
+ *   new Date(2014, 6, 2, 12, 7, 59)
+ * )
+ * //=> 12
+ */
+function differenceInMinutes (dirtyDateLeft, dirtyDateRight) {
+  var diff = differenceInMilliseconds(dirtyDateLeft, dirtyDateRight) / MILLISECONDS_IN_MINUTE
+  return diff > 0 ? Math.floor(diff) : Math.ceil(diff)
+}
+
+module.exports = differenceInMinutes
+
+},{"../difference_in_milliseconds/index.js":"../node_modules/date-fns/difference_in_milliseconds/index.js"}],"../node_modules/date-fns/difference_in_months/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var differenceInCalendarMonths = require('../difference_in_calendar_months/index.js')
+var compareAsc = require('../compare_asc/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Get the number of full months between the given dates.
+ *
+ * @description
+ * Get the number of full months between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of full months
+ *
+ * @example
+ * // How many full months are between 31 January 2014 and 1 September 2014?
+ * var result = differenceInMonths(
+ *   new Date(2014, 8, 1),
+ *   new Date(2014, 0, 31)
+ * )
+ * //=> 7
+ */
+function differenceInMonths (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var dateRight = parse(dirtyDateRight)
+
+  var sign = compareAsc(dateLeft, dateRight)
+  var difference = Math.abs(differenceInCalendarMonths(dateLeft, dateRight))
+  dateLeft.setMonth(dateLeft.getMonth() - sign * difference)
+
+  // Math.abs(diff in full months - diff in calendar months) === 1 if last calendar month is not full
+  // If so, result must be decreased by 1 in absolute value
+  var isLastMonthNotFull = compareAsc(dateLeft, dateRight) === -sign
+  return sign * (difference - isLastMonthNotFull)
+}
+
+module.exports = differenceInMonths
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../difference_in_calendar_months/index.js":"../node_modules/date-fns/difference_in_calendar_months/index.js","../compare_asc/index.js":"../node_modules/date-fns/compare_asc/index.js"}],"../node_modules/date-fns/difference_in_quarters/index.js":[function(require,module,exports) {
+var differenceInMonths = require('../difference_in_months/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Get the number of full quarters between the given dates.
+ *
+ * @description
+ * Get the number of full quarters between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of full quarters
+ *
+ * @example
+ * // How many full quarters are between 31 December 2013 and 2 July 2014?
+ * var result = differenceInQuarters(
+ *   new Date(2014, 6, 2),
+ *   new Date(2013, 11, 31)
+ * )
+ * //=> 2
+ */
+function differenceInQuarters (dirtyDateLeft, dirtyDateRight) {
+  var diff = differenceInMonths(dirtyDateLeft, dirtyDateRight) / 3
+  return diff > 0 ? Math.floor(diff) : Math.ceil(diff)
+}
+
+module.exports = differenceInQuarters
+
+},{"../difference_in_months/index.js":"../node_modules/date-fns/difference_in_months/index.js"}],"../node_modules/date-fns/difference_in_seconds/index.js":[function(require,module,exports) {
+var differenceInMilliseconds = require('../difference_in_milliseconds/index.js')
+
+/**
+ * @category Second Helpers
+ * @summary Get the number of seconds between the given dates.
+ *
+ * @description
+ * Get the number of seconds between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of seconds
+ *
+ * @example
+ * // How many seconds are between
+ * // 2 July 2014 12:30:07.999 and 2 July 2014 12:30:20.000?
+ * var result = differenceInSeconds(
+ *   new Date(2014, 6, 2, 12, 30, 20, 0),
+ *   new Date(2014, 6, 2, 12, 30, 7, 999)
+ * )
+ * //=> 12
+ */
+function differenceInSeconds (dirtyDateLeft, dirtyDateRight) {
+  var diff = differenceInMilliseconds(dirtyDateLeft, dirtyDateRight) / 1000
+  return diff > 0 ? Math.floor(diff) : Math.ceil(diff)
+}
+
+module.exports = differenceInSeconds
+
+},{"../difference_in_milliseconds/index.js":"../node_modules/date-fns/difference_in_milliseconds/index.js"}],"../node_modules/date-fns/difference_in_weeks/index.js":[function(require,module,exports) {
+var differenceInDays = require('../difference_in_days/index.js')
+
+/**
+ * @category Week Helpers
+ * @summary Get the number of full weeks between the given dates.
+ *
+ * @description
+ * Get the number of full weeks between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of full weeks
+ *
+ * @example
+ * // How many full weeks are between 5 July 2014 and 20 July 2014?
+ * var result = differenceInWeeks(
+ *   new Date(2014, 6, 20),
+ *   new Date(2014, 6, 5)
+ * )
+ * //=> 2
+ */
+function differenceInWeeks (dirtyDateLeft, dirtyDateRight) {
+  var diff = differenceInDays(dirtyDateLeft, dirtyDateRight) / 7
+  return diff > 0 ? Math.floor(diff) : Math.ceil(diff)
+}
+
+module.exports = differenceInWeeks
+
+},{"../difference_in_days/index.js":"../node_modules/date-fns/difference_in_days/index.js"}],"../node_modules/date-fns/difference_in_years/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var differenceInCalendarYears = require('../difference_in_calendar_years/index.js')
+var compareAsc = require('../compare_asc/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Get the number of full years between the given dates.
+ *
+ * @description
+ * Get the number of full years between the given dates.
+ *
+ * @param {Date|String|Number} dateLeft - the later date
+ * @param {Date|String|Number} dateRight - the earlier date
+ * @returns {Number} the number of full years
+ *
+ * @example
+ * // How many full years are between 31 December 2013 and 11 February 2015?
+ * var result = differenceInYears(
+ *   new Date(2015, 1, 11),
+ *   new Date(2013, 11, 31)
+ * )
+ * //=> 1
+ */
+function differenceInYears (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var dateRight = parse(dirtyDateRight)
+
+  var sign = compareAsc(dateLeft, dateRight)
+  var difference = Math.abs(differenceInCalendarYears(dateLeft, dateRight))
+  dateLeft.setFullYear(dateLeft.getFullYear() - sign * difference)
+
+  // Math.abs(diff in full years - diff in calendar years) === 1 if last calendar year is not full
+  // If so, result must be decreased by 1 in absolute value
+  var isLastYearNotFull = compareAsc(dateLeft, dateRight) === -sign
+  return sign * (difference - isLastYearNotFull)
+}
+
+module.exports = differenceInYears
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../difference_in_calendar_years/index.js":"../node_modules/date-fns/difference_in_calendar_years/index.js","../compare_asc/index.js":"../node_modules/date-fns/compare_asc/index.js"}],"../node_modules/date-fns/locale/en/build_distance_in_words_locale/index.js":[function(require,module,exports) {
+function buildDistanceInWordsLocale () {
+  var distanceInWordsLocale = {
+    lessThanXSeconds: {
+      one: 'less than a second',
+      other: 'less than {{count}} seconds'
+    },
+
+    xSeconds: {
+      one: '1 second',
+      other: '{{count}} seconds'
+    },
+
+    halfAMinute: 'half a minute',
+
+    lessThanXMinutes: {
+      one: 'less than a minute',
+      other: 'less than {{count}} minutes'
+    },
+
+    xMinutes: {
+      one: '1 minute',
+      other: '{{count}} minutes'
+    },
+
+    aboutXHours: {
+      one: 'about 1 hour',
+      other: 'about {{count}} hours'
+    },
+
+    xHours: {
+      one: '1 hour',
+      other: '{{count}} hours'
+    },
+
+    xDays: {
+      one: '1 day',
+      other: '{{count}} days'
+    },
+
+    aboutXMonths: {
+      one: 'about 1 month',
+      other: 'about {{count}} months'
+    },
+
+    xMonths: {
+      one: '1 month',
+      other: '{{count}} months'
+    },
+
+    aboutXYears: {
+      one: 'about 1 year',
+      other: 'about {{count}} years'
+    },
+
+    xYears: {
+      one: '1 year',
+      other: '{{count}} years'
+    },
+
+    overXYears: {
+      one: 'over 1 year',
+      other: 'over {{count}} years'
+    },
+
+    almostXYears: {
+      one: 'almost 1 year',
+      other: 'almost {{count}} years'
+    }
+  }
+
+  function localize (token, count, options) {
+    options = options || {}
+
+    var result
+    if (typeof distanceInWordsLocale[token] === 'string') {
+      result = distanceInWordsLocale[token]
+    } else if (count === 1) {
+      result = distanceInWordsLocale[token].one
+    } else {
+      result = distanceInWordsLocale[token].other.replace('{{count}}', count)
+    }
+
+    if (options.addSuffix) {
+      if (options.comparison > 0) {
+        return 'in ' + result
+      } else {
+        return result + ' ago'
+      }
+    }
+
+    return result
+  }
+
+  return {
+    localize: localize
+  }
+}
+
+module.exports = buildDistanceInWordsLocale
+
+},{}],"../node_modules/date-fns/locale/_lib/build_formatting_tokens_reg_exp/index.js":[function(require,module,exports) {
+var commonFormatterKeys = [
+  'M', 'MM', 'Q', 'D', 'DD', 'DDD', 'DDDD', 'd',
+  'E', 'W', 'WW', 'YY', 'YYYY', 'GG', 'GGGG',
+  'H', 'HH', 'h', 'hh', 'm', 'mm',
+  's', 'ss', 'S', 'SS', 'SSS',
+  'Z', 'ZZ', 'X', 'x'
+]
+
+function buildFormattingTokensRegExp (formatters) {
+  var formatterKeys = []
+  for (var key in formatters) {
+    if (formatters.hasOwnProperty(key)) {
+      formatterKeys.push(key)
+    }
+  }
+
+  var formattingTokens = commonFormatterKeys
+    .concat(formatterKeys)
+    .sort()
+    .reverse()
+  var formattingTokensRegExp = new RegExp(
+    '(\\[[^\\[]*\\])|(\\\\)?' + '(' + formattingTokens.join('|') + '|.)', 'g'
+  )
+
+  return formattingTokensRegExp
+}
+
+module.exports = buildFormattingTokensRegExp
+
+},{}],"../node_modules/date-fns/locale/en/build_format_locale/index.js":[function(require,module,exports) {
+var buildFormattingTokensRegExp = require('../../_lib/build_formatting_tokens_reg_exp/index.js')
+
+function buildFormatLocale () {
+  // Note: in English, the names of days of the week and months are capitalized.
+  // If you are making a new locale based on this one, check if the same is true for the language you're working on.
+  // Generally, formatted dates should look like they are in the middle of a sentence,
+  // e.g. in Spanish language the weekdays and months should be in the lowercase.
+  var months3char = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  var monthsFull = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  var weekdays2char = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+  var weekdays3char = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  var weekdaysFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  var meridiemUppercase = ['AM', 'PM']
+  var meridiemLowercase = ['am', 'pm']
+  var meridiemFull = ['a.m.', 'p.m.']
+
+  var formatters = {
+    // Month: Jan, Feb, ..., Dec
+    'MMM': function (date) {
+      return months3char[date.getMonth()]
+    },
+
+    // Month: January, February, ..., December
+    'MMMM': function (date) {
+      return monthsFull[date.getMonth()]
+    },
+
+    // Day of week: Su, Mo, ..., Sa
+    'dd': function (date) {
+      return weekdays2char[date.getDay()]
+    },
+
+    // Day of week: Sun, Mon, ..., Sat
+    'ddd': function (date) {
+      return weekdays3char[date.getDay()]
+    },
+
+    // Day of week: Sunday, Monday, ..., Saturday
+    'dddd': function (date) {
+      return weekdaysFull[date.getDay()]
+    },
+
+    // AM, PM
+    'A': function (date) {
+      return (date.getHours() / 12) >= 1 ? meridiemUppercase[1] : meridiemUppercase[0]
+    },
+
+    // am, pm
+    'a': function (date) {
+      return (date.getHours() / 12) >= 1 ? meridiemLowercase[1] : meridiemLowercase[0]
+    },
+
+    // a.m., p.m.
+    'aa': function (date) {
+      return (date.getHours() / 12) >= 1 ? meridiemFull[1] : meridiemFull[0]
+    }
+  }
+
+  // Generate ordinal version of formatters: M -> Mo, D -> Do, etc.
+  var ordinalFormatters = ['M', 'D', 'DDD', 'd', 'Q', 'W']
+  ordinalFormatters.forEach(function (formatterToken) {
+    formatters[formatterToken + 'o'] = function (date, formatters) {
+      return ordinal(formatters[formatterToken](date))
+    }
+  })
+
+  return {
+    formatters: formatters,
+    formattingTokensRegExp: buildFormattingTokensRegExp(formatters)
+  }
+}
+
+function ordinal (number) {
+  var rem100 = number % 100
+  if (rem100 > 20 || rem100 < 10) {
+    switch (rem100 % 10) {
+      case 1:
+        return number + 'st'
+      case 2:
+        return number + 'nd'
+      case 3:
+        return number + 'rd'
+    }
+  }
+  return number + 'th'
+}
+
+module.exports = buildFormatLocale
+
+},{"../../_lib/build_formatting_tokens_reg_exp/index.js":"../node_modules/date-fns/locale/_lib/build_formatting_tokens_reg_exp/index.js"}],"../node_modules/date-fns/locale/en/index.js":[function(require,module,exports) {
+var buildDistanceInWordsLocale = require('./build_distance_in_words_locale/index.js')
+var buildFormatLocale = require('./build_format_locale/index.js')
+
+/**
+ * @category Locales
+ * @summary English locale.
+ */
+module.exports = {
+  distanceInWords: buildDistanceInWordsLocale(),
+  format: buildFormatLocale()
+}
+
+},{"./build_distance_in_words_locale/index.js":"../node_modules/date-fns/locale/en/build_distance_in_words_locale/index.js","./build_format_locale/index.js":"../node_modules/date-fns/locale/en/build_format_locale/index.js"}],"../node_modules/date-fns/distance_in_words/index.js":[function(require,module,exports) {
+var compareDesc = require('../compare_desc/index.js')
+var parse = require('../parse/index.js')
+var differenceInSeconds = require('../difference_in_seconds/index.js')
+var differenceInMonths = require('../difference_in_months/index.js')
+var enLocale = require('../locale/en/index.js')
+
+var MINUTES_IN_DAY = 1440
+var MINUTES_IN_ALMOST_TWO_DAYS = 2520
+var MINUTES_IN_MONTH = 43200
+var MINUTES_IN_TWO_MONTHS = 86400
+
+/**
+ * @category Common Helpers
+ * @summary Return the distance between the given dates in words.
+ *
+ * @description
+ * Return the distance between the given dates in words.
+ *
+ * | Distance between dates                                            | Result              |
+ * |-------------------------------------------------------------------|---------------------|
+ * | 0 ... 30 secs                                                     | less than a minute  |
+ * | 30 secs ... 1 min 30 secs                                         | 1 minute            |
+ * | 1 min 30 secs ... 44 mins 30 secs                                 | [2..44] minutes     |
+ * | 44 mins ... 30 secs ... 89 mins 30 secs                           | about 1 hour        |
+ * | 89 mins 30 secs ... 23 hrs 59 mins 30 secs                        | about [2..24] hours |
+ * | 23 hrs 59 mins 30 secs ... 41 hrs 59 mins 30 secs                 | 1 day               |
+ * | 41 hrs 59 mins 30 secs ... 29 days 23 hrs 59 mins 30 secs         | [2..30] days        |
+ * | 29 days 23 hrs 59 mins 30 secs ... 44 days 23 hrs 59 mins 30 secs | about 1 month       |
+ * | 44 days 23 hrs 59 mins 30 secs ... 59 days 23 hrs 59 mins 30 secs | about 2 months      |
+ * | 59 days 23 hrs 59 mins 30 secs ... 1 yr                           | [2..12] months      |
+ * | 1 yr ... 1 yr 3 months                                            | about 1 year        |
+ * | 1 yr 3 months ... 1 yr 9 month s                                  | over 1 year         |
+ * | 1 yr 9 months ... 2 yrs                                           | almost 2 years      |
+ * | N yrs ... N yrs 3 months                                          | about N years       |
+ * | N yrs 3 months ... N yrs 9 months                                 | over N years        |
+ * | N yrs 9 months ... N+1 yrs                                        | almost N+1 years    |
+ *
+ * With `options.includeSeconds == true`:
+ * | Distance between dates | Result               |
+ * |------------------------|----------------------|
+ * | 0 secs ... 5 secs      | less than 5 seconds  |
+ * | 5 secs ... 10 secs     | less than 10 seconds |
+ * | 10 secs ... 20 secs    | less than 20 seconds |
+ * | 20 secs ... 40 secs    | half a minute        |
+ * | 40 secs ... 60 secs    | less than a minute   |
+ * | 60 secs ... 90 secs    | 1 minute             |
+ *
+ * @param {Date|String|Number} dateToCompare - the date to compare with
+ * @param {Date|String|Number} date - the other date
+ * @param {Object} [options] - the object with options
+ * @param {Boolean} [options.includeSeconds=false] - distances less than a minute are more detailed
+ * @param {Boolean} [options.addSuffix=false] - result indicates if the second date is earlier or later than the first
+ * @param {Object} [options.locale=enLocale] - the locale object
+ * @returns {String} the distance in words
+ *
+ * @example
+ * // What is the distance between 2 July 2014 and 1 January 2015?
+ * var result = distanceInWords(
+ *   new Date(2014, 6, 2),
+ *   new Date(2015, 0, 1)
+ * )
+ * //=> '6 months'
+ *
+ * @example
+ * // What is the distance between 1 January 2015 00:00:15
+ * // and 1 January 2015 00:00:00, including seconds?
+ * var result = distanceInWords(
+ *   new Date(2015, 0, 1, 0, 0, 15),
+ *   new Date(2015, 0, 1, 0, 0, 0),
+ *   {includeSeconds: true}
+ * )
+ * //=> 'less than 20 seconds'
+ *
+ * @example
+ * // What is the distance from 1 January 2016
+ * // to 1 January 2015, with a suffix?
+ * var result = distanceInWords(
+ *   new Date(2016, 0, 1),
+ *   new Date(2015, 0, 1),
+ *   {addSuffix: true}
+ * )
+ * //=> 'about 1 year ago'
+ *
+ * @example
+ * // What is the distance between 1 August 2016 and 1 January 2015 in Esperanto?
+ * var eoLocale = require('date-fns/locale/eo')
+ * var result = distanceInWords(
+ *   new Date(2016, 7, 1),
+ *   new Date(2015, 0, 1),
+ *   {locale: eoLocale}
+ * )
+ * //=> 'pli ol 1 jaro'
+ */
+function distanceInWords (dirtyDateToCompare, dirtyDate, dirtyOptions) {
+  var options = dirtyOptions || {}
+
+  var comparison = compareDesc(dirtyDateToCompare, dirtyDate)
+
+  var locale = options.locale
+  var localize = enLocale.distanceInWords.localize
+  if (locale && locale.distanceInWords && locale.distanceInWords.localize) {
+    localize = locale.distanceInWords.localize
+  }
+
+  var localizeOptions = {
+    addSuffix: Boolean(options.addSuffix),
+    comparison: comparison
+  }
+
+  var dateLeft, dateRight
+  if (comparison > 0) {
+    dateLeft = parse(dirtyDateToCompare)
+    dateRight = parse(dirtyDate)
+  } else {
+    dateLeft = parse(dirtyDate)
+    dateRight = parse(dirtyDateToCompare)
+  }
+
+  var seconds = differenceInSeconds(dateRight, dateLeft)
+  var offset = dateRight.getTimezoneOffset() - dateLeft.getTimezoneOffset()
+  var minutes = Math.round(seconds / 60) - offset
+  var months
+
+  // 0 up to 2 mins
+  if (minutes < 2) {
+    if (options.includeSeconds) {
+      if (seconds < 5) {
+        return localize('lessThanXSeconds', 5, localizeOptions)
+      } else if (seconds < 10) {
+        return localize('lessThanXSeconds', 10, localizeOptions)
+      } else if (seconds < 20) {
+        return localize('lessThanXSeconds', 20, localizeOptions)
+      } else if (seconds < 40) {
+        return localize('halfAMinute', null, localizeOptions)
+      } else if (seconds < 60) {
+        return localize('lessThanXMinutes', 1, localizeOptions)
+      } else {
+        return localize('xMinutes', 1, localizeOptions)
+      }
+    } else {
+      if (minutes === 0) {
+        return localize('lessThanXMinutes', 1, localizeOptions)
+      } else {
+        return localize('xMinutes', minutes, localizeOptions)
+      }
+    }
+
+  // 2 mins up to 0.75 hrs
+  } else if (minutes < 45) {
+    return localize('xMinutes', minutes, localizeOptions)
+
+  // 0.75 hrs up to 1.5 hrs
+  } else if (minutes < 90) {
+    return localize('aboutXHours', 1, localizeOptions)
+
+  // 1.5 hrs up to 24 hrs
+  } else if (minutes < MINUTES_IN_DAY) {
+    var hours = Math.round(minutes / 60)
+    return localize('aboutXHours', hours, localizeOptions)
+
+  // 1 day up to 1.75 days
+  } else if (minutes < MINUTES_IN_ALMOST_TWO_DAYS) {
+    return localize('xDays', 1, localizeOptions)
+
+  // 1.75 days up to 30 days
+  } else if (minutes < MINUTES_IN_MONTH) {
+    var days = Math.round(minutes / MINUTES_IN_DAY)
+    return localize('xDays', days, localizeOptions)
+
+  // 1 month up to 2 months
+  } else if (minutes < MINUTES_IN_TWO_MONTHS) {
+    months = Math.round(minutes / MINUTES_IN_MONTH)
+    return localize('aboutXMonths', months, localizeOptions)
+  }
+
+  months = differenceInMonths(dateRight, dateLeft)
+
+  // 2 months up to 12 months
+  if (months < 12) {
+    var nearestMonth = Math.round(minutes / MINUTES_IN_MONTH)
+    return localize('xMonths', nearestMonth, localizeOptions)
+
+  // 1 year up to max Date
+  } else {
+    var monthsSinceStartOfYear = months % 12
+    var years = Math.floor(months / 12)
+
+    // N years up to 1 years 3 months
+    if (monthsSinceStartOfYear < 3) {
+      return localize('aboutXYears', years, localizeOptions)
+
+    // N years 3 months up to N years 9 months
+    } else if (monthsSinceStartOfYear < 9) {
+      return localize('overXYears', years, localizeOptions)
+
+    // N years 9 months up to N year 12 months
+    } else {
+      return localize('almostXYears', years + 1, localizeOptions)
+    }
+  }
+}
+
+module.exports = distanceInWords
+
+},{"../compare_desc/index.js":"../node_modules/date-fns/compare_desc/index.js","../parse/index.js":"../node_modules/date-fns/parse/index.js","../difference_in_seconds/index.js":"../node_modules/date-fns/difference_in_seconds/index.js","../difference_in_months/index.js":"../node_modules/date-fns/difference_in_months/index.js","../locale/en/index.js":"../node_modules/date-fns/locale/en/index.js"}],"../node_modules/date-fns/distance_in_words_strict/index.js":[function(require,module,exports) {
+var compareDesc = require('../compare_desc/index.js')
+var parse = require('../parse/index.js')
+var differenceInSeconds = require('../difference_in_seconds/index.js')
+var enLocale = require('../locale/en/index.js')
+
+var MINUTES_IN_DAY = 1440
+var MINUTES_IN_MONTH = 43200
+var MINUTES_IN_YEAR = 525600
+
+/**
+ * @category Common Helpers
+ * @summary Return the distance between the given dates in words.
+ *
+ * @description
+ * Return the distance between the given dates in words, using strict units.
+ * This is like `distanceInWords`, but does not use helpers like 'almost', 'over',
+ * 'less than' and the like.
+ *
+ * | Distance between dates | Result              |
+ * |------------------------|---------------------|
+ * | 0 ... 59 secs          | [0..59] seconds     |
+ * | 1 ... 59 mins          | [1..59] minutes     |
+ * | 1 ... 23 hrs           | [1..23] hours       |
+ * | 1 ... 29 days          | [1..29] days        |
+ * | 1 ... 11 months        | [1..11] months      |
+ * | 1 ... N years          | [1..N]  years       |
+ *
+ * @param {Date|String|Number} dateToCompare - the date to compare with
+ * @param {Date|String|Number} date - the other date
+ * @param {Object} [options] - the object with options
+ * @param {Boolean} [options.addSuffix=false] - result indicates if the second date is earlier or later than the first
+ * @param {'s'|'m'|'h'|'d'|'M'|'Y'} [options.unit] - if specified, will force a unit
+ * @param {'floor'|'ceil'|'round'} [options.partialMethod='floor'] - which way to round partial units
+ * @param {Object} [options.locale=enLocale] - the locale object
+ * @returns {String} the distance in words
+ *
+ * @example
+ * // What is the distance between 2 July 2014 and 1 January 2015?
+ * var result = distanceInWordsStrict(
+ *   new Date(2014, 6, 2),
+ *   new Date(2015, 0, 2)
+ * )
+ * //=> '6 months'
+ *
+ * @example
+ * // What is the distance between 1 January 2015 00:00:15
+ * // and 1 January 2015 00:00:00?
+ * var result = distanceInWordsStrict(
+ *   new Date(2015, 0, 1, 0, 0, 15),
+ *   new Date(2015, 0, 1, 0, 0, 0),
+ * )
+ * //=> '15 seconds'
+ *
+ * @example
+ * // What is the distance from 1 January 2016
+ * // to 1 January 2015, with a suffix?
+ * var result = distanceInWordsStrict(
+ *   new Date(2016, 0, 1),
+ *   new Date(2015, 0, 1),
+ *   {addSuffix: true}
+ * )
+ * //=> '1 year ago'
+ *
+ * @example
+ * // What is the distance from 1 January 2016
+ * // to 1 January 2015, in minutes?
+ * var result = distanceInWordsStrict(
+ *   new Date(2016, 0, 1),
+ *   new Date(2015, 0, 1),
+ *   {unit: 'm'}
+ * )
+ * //=> '525600 minutes'
+ *
+ * @example
+ * // What is the distance from 1 January 2016
+ * // to 28 January 2015, in months, rounded up?
+ * var result = distanceInWordsStrict(
+ *   new Date(2015, 0, 28),
+ *   new Date(2015, 0, 1),
+ *   {unit: 'M', partialMethod: 'ceil'}
+ * )
+ * //=> '1 month'
+ *
+ * @example
+ * // What is the distance between 1 August 2016 and 1 January 2015 in Esperanto?
+ * var eoLocale = require('date-fns/locale/eo')
+ * var result = distanceInWordsStrict(
+ *   new Date(2016, 7, 1),
+ *   new Date(2015, 0, 1),
+ *   {locale: eoLocale}
+ * )
+ * //=> '1 jaro'
+ */
+function distanceInWordsStrict (dirtyDateToCompare, dirtyDate, dirtyOptions) {
+  var options = dirtyOptions || {}
+
+  var comparison = compareDesc(dirtyDateToCompare, dirtyDate)
+
+  var locale = options.locale
+  var localize = enLocale.distanceInWords.localize
+  if (locale && locale.distanceInWords && locale.distanceInWords.localize) {
+    localize = locale.distanceInWords.localize
+  }
+
+  var localizeOptions = {
+    addSuffix: Boolean(options.addSuffix),
+    comparison: comparison
+  }
+
+  var dateLeft, dateRight
+  if (comparison > 0) {
+    dateLeft = parse(dirtyDateToCompare)
+    dateRight = parse(dirtyDate)
+  } else {
+    dateLeft = parse(dirtyDate)
+    dateRight = parse(dirtyDateToCompare)
+  }
+
+  var unit
+  var mathPartial = Math[options.partialMethod ? String(options.partialMethod) : 'floor']
+  var seconds = differenceInSeconds(dateRight, dateLeft)
+  var offset = dateRight.getTimezoneOffset() - dateLeft.getTimezoneOffset()
+  var minutes = mathPartial(seconds / 60) - offset
+  var hours, days, months, years
+
+  if (options.unit) {
+    unit = String(options.unit)
+  } else {
+    if (minutes < 1) {
+      unit = 's'
+    } else if (minutes < 60) {
+      unit = 'm'
+    } else if (minutes < MINUTES_IN_DAY) {
+      unit = 'h'
+    } else if (minutes < MINUTES_IN_MONTH) {
+      unit = 'd'
+    } else if (minutes < MINUTES_IN_YEAR) {
+      unit = 'M'
+    } else {
+      unit = 'Y'
+    }
+  }
+
+  // 0 up to 60 seconds
+  if (unit === 's') {
+    return localize('xSeconds', seconds, localizeOptions)
+
+  // 1 up to 60 mins
+  } else if (unit === 'm') {
+    return localize('xMinutes', minutes, localizeOptions)
+
+  // 1 up to 24 hours
+  } else if (unit === 'h') {
+    hours = mathPartial(minutes / 60)
+    return localize('xHours', hours, localizeOptions)
+
+  // 1 up to 30 days
+  } else if (unit === 'd') {
+    days = mathPartial(minutes / MINUTES_IN_DAY)
+    return localize('xDays', days, localizeOptions)
+
+  // 1 up to 12 months
+  } else if (unit === 'M') {
+    months = mathPartial(minutes / MINUTES_IN_MONTH)
+    return localize('xMonths', months, localizeOptions)
+
+  // 1 year up to max Date
+  } else if (unit === 'Y') {
+    years = mathPartial(minutes / MINUTES_IN_YEAR)
+    return localize('xYears', years, localizeOptions)
+  }
+
+  throw new Error('Unknown unit: ' + unit)
+}
+
+module.exports = distanceInWordsStrict
+
+},{"../compare_desc/index.js":"../node_modules/date-fns/compare_desc/index.js","../parse/index.js":"../node_modules/date-fns/parse/index.js","../difference_in_seconds/index.js":"../node_modules/date-fns/difference_in_seconds/index.js","../locale/en/index.js":"../node_modules/date-fns/locale/en/index.js"}],"../node_modules/date-fns/distance_in_words_to_now/index.js":[function(require,module,exports) {
+var distanceInWords = require('../distance_in_words/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Return the distance between the given date and now in words.
+ *
+ * @description
+ * Return the distance between the given date and now in words.
+ *
+ * | Distance to now                                                   | Result              |
+ * |-------------------------------------------------------------------|---------------------|
+ * | 0 ... 30 secs                                                     | less than a minute  |
+ * | 30 secs ... 1 min 30 secs                                         | 1 minute            |
+ * | 1 min 30 secs ... 44 mins 30 secs                                 | [2..44] minutes     |
+ * | 44 mins ... 30 secs ... 89 mins 30 secs                           | about 1 hour        |
+ * | 89 mins 30 secs ... 23 hrs 59 mins 30 secs                        | about [2..24] hours |
+ * | 23 hrs 59 mins 30 secs ... 41 hrs 59 mins 30 secs                 | 1 day               |
+ * | 41 hrs 59 mins 30 secs ... 29 days 23 hrs 59 mins 30 secs         | [2..30] days        |
+ * | 29 days 23 hrs 59 mins 30 secs ... 44 days 23 hrs 59 mins 30 secs | about 1 month       |
+ * | 44 days 23 hrs 59 mins 30 secs ... 59 days 23 hrs 59 mins 30 secs | about 2 months      |
+ * | 59 days 23 hrs 59 mins 30 secs ... 1 yr                           | [2..12] months      |
+ * | 1 yr ... 1 yr 3 months                                            | about 1 year        |
+ * | 1 yr 3 months ... 1 yr 9 month s                                  | over 1 year         |
+ * | 1 yr 9 months ... 2 yrs                                           | almost 2 years      |
+ * | N yrs ... N yrs 3 months                                          | about N years       |
+ * | N yrs 3 months ... N yrs 9 months                                 | over N years        |
+ * | N yrs 9 months ... N+1 yrs                                        | almost N+1 years    |
+ *
+ * With `options.includeSeconds == true`:
+ * | Distance to now     | Result               |
+ * |---------------------|----------------------|
+ * | 0 secs ... 5 secs   | less than 5 seconds  |
+ * | 5 secs ... 10 secs  | less than 10 seconds |
+ * | 10 secs ... 20 secs | less than 20 seconds |
+ * | 20 secs ... 40 secs | half a minute        |
+ * | 40 secs ... 60 secs | less than a minute   |
+ * | 60 secs ... 90 secs | 1 minute             |
+ *
+ * @param {Date|String|Number} date - the given date
+ * @param {Object} [options] - the object with options
+ * @param {Boolean} [options.includeSeconds=false] - distances less than a minute are more detailed
+ * @param {Boolean} [options.addSuffix=false] - result specifies if the second date is earlier or later than the first
+ * @param {Object} [options.locale=enLocale] - the locale object
+ * @returns {String} the distance in words
+ *
+ * @example
+ * // If today is 1 January 2015, what is the distance to 2 July 2014?
+ * var result = distanceInWordsToNow(
+ *   new Date(2014, 6, 2)
+ * )
+ * //=> '6 months'
+ *
+ * @example
+ * // If now is 1 January 2015 00:00:00,
+ * // what is the distance to 1 January 2015 00:00:15, including seconds?
+ * var result = distanceInWordsToNow(
+ *   new Date(2015, 0, 1, 0, 0, 15),
+ *   {includeSeconds: true}
+ * )
+ * //=> 'less than 20 seconds'
+ *
+ * @example
+ * // If today is 1 January 2015,
+ * // what is the distance to 1 January 2016, with a suffix?
+ * var result = distanceInWordsToNow(
+ *   new Date(2016, 0, 1),
+ *   {addSuffix: true}
+ * )
+ * //=> 'in about 1 year'
+ *
+ * @example
+ * // If today is 1 January 2015,
+ * // what is the distance to 1 August 2016 in Esperanto?
+ * var eoLocale = require('date-fns/locale/eo')
+ * var result = distanceInWordsToNow(
+ *   new Date(2016, 7, 1),
+ *   {locale: eoLocale}
+ * )
+ * //=> 'pli ol 1 jaro'
+ */
+function distanceInWordsToNow (dirtyDate, dirtyOptions) {
+  return distanceInWords(Date.now(), dirtyDate, dirtyOptions)
+}
+
+module.exports = distanceInWordsToNow
+
+},{"../distance_in_words/index.js":"../node_modules/date-fns/distance_in_words/index.js"}],"../node_modules/date-fns/each_day/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Return the array of dates within the specified range.
+ *
+ * @description
+ * Return the array of dates within the specified range.
+ *
+ * @param {Date|String|Number} startDate - the first date
+ * @param {Date|String|Number} endDate - the last date
+ * @param {Number} [step=1] - the step between each day
+ * @returns {Date[]} the array with starts of days from the day of startDate to the day of endDate
+ * @throws {Error} startDate cannot be after endDate
+ *
+ * @example
+ * // Each day between 6 October 2014 and 10 October 2014:
+ * var result = eachDay(
+ *   new Date(2014, 9, 6),
+ *   new Date(2014, 9, 10)
+ * )
+ * //=> [
+ * //   Mon Oct 06 2014 00:00:00,
+ * //   Tue Oct 07 2014 00:00:00,
+ * //   Wed Oct 08 2014 00:00:00,
+ * //   Thu Oct 09 2014 00:00:00,
+ * //   Fri Oct 10 2014 00:00:00
+ * // ]
+ */
+function eachDay (dirtyStartDate, dirtyEndDate, dirtyStep) {
+  var startDate = parse(dirtyStartDate)
+  var endDate = parse(dirtyEndDate)
+  var step = dirtyStep !== undefined ? dirtyStep : 1
+
+  var endTime = endDate.getTime()
+
+  if (startDate.getTime() > endTime) {
+    throw new Error('The first date cannot be after the second date')
+  }
+
+  var dates = []
+
+  var currentDate = startDate
+  currentDate.setHours(0, 0, 0, 0)
+
+  while (currentDate.getTime() <= endTime) {
+    dates.push(parse(currentDate))
+    currentDate.setDate(currentDate.getDate() + step)
+  }
+
+  return dates
+}
+
+module.exports = eachDay
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/end_of_day/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Return the end of a day for the given date.
+ *
+ * @description
+ * Return the end of a day for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the end of a day
+ *
+ * @example
+ * // The end of a day for 2 September 2014 11:55:00:
+ * var result = endOfDay(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Tue Sep 02 2014 23:59:59.999
+ */
+function endOfDay (dirtyDate) {
+  var date = parse(dirtyDate)
+  date.setHours(23, 59, 59, 999)
+  return date
+}
+
+module.exports = endOfDay
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/end_of_hour/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Hour Helpers
+ * @summary Return the end of an hour for the given date.
+ *
+ * @description
+ * Return the end of an hour for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the end of an hour
+ *
+ * @example
+ * // The end of an hour for 2 September 2014 11:55:00:
+ * var result = endOfHour(new Date(2014, 8, 2, 11, 55))
+ * //=> Tue Sep 02 2014 11:59:59.999
+ */
+function endOfHour (dirtyDate) {
+  var date = parse(dirtyDate)
+  date.setMinutes(59, 59, 999)
+  return date
+}
+
+module.exports = endOfHour
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/end_of_week/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Week Helpers
+ * @summary Return the end of a week for the given date.
+ *
+ * @description
+ * Return the end of a week for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @param {Object} [options] - the object with options
+ * @param {Number} [options.weekStartsOn=0] - the index of the first day of the week (0 - Sunday)
+ * @returns {Date} the end of a week
+ *
+ * @example
+ * // The end of a week for 2 September 2014 11:55:00:
+ * var result = endOfWeek(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Sat Sep 06 2014 23:59:59.999
+ *
+ * @example
+ * // If the week starts on Monday, the end of the week for 2 September 2014 11:55:00:
+ * var result = endOfWeek(new Date(2014, 8, 2, 11, 55, 0), {weekStartsOn: 1})
+ * //=> Sun Sep 07 2014 23:59:59.999
+ */
+function endOfWeek (dirtyDate, dirtyOptions) {
+  var weekStartsOn = dirtyOptions ? (Number(dirtyOptions.weekStartsOn) || 0) : 0
+
+  var date = parse(dirtyDate)
+  var day = date.getDay()
+  var diff = (day < weekStartsOn ? -7 : 0) + 6 - (day - weekStartsOn)
+
+  date.setDate(date.getDate() + diff)
+  date.setHours(23, 59, 59, 999)
+  return date
+}
+
+module.exports = endOfWeek
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/end_of_iso_week/index.js":[function(require,module,exports) {
+var endOfWeek = require('../end_of_week/index.js')
+
+/**
+ * @category ISO Week Helpers
+ * @summary Return the end of an ISO week for the given date.
+ *
+ * @description
+ * Return the end of an ISO week for the given date.
+ * The result will be in the local timezone.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the end of an ISO week
+ *
+ * @example
+ * // The end of an ISO week for 2 September 2014 11:55:00:
+ * var result = endOfISOWeek(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Sun Sep 07 2014 23:59:59.999
+ */
+function endOfISOWeek (dirtyDate) {
+  return endOfWeek(dirtyDate, {weekStartsOn: 1})
+}
+
+module.exports = endOfISOWeek
+
+},{"../end_of_week/index.js":"../node_modules/date-fns/end_of_week/index.js"}],"../node_modules/date-fns/end_of_iso_year/index.js":[function(require,module,exports) {
+var getISOYear = require('../get_iso_year/index.js')
+var startOfISOWeek = require('../start_of_iso_week/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Return the end of an ISO week-numbering year for the given date.
+ *
+ * @description
+ * Return the end of an ISO week-numbering year,
+ * which always starts 3 days before the year's first Thursday.
+ * The result will be in the local timezone.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the end of an ISO week-numbering year
+ *
+ * @example
+ * // The end of an ISO week-numbering year for 2 July 2005:
+ * var result = endOfISOYear(new Date(2005, 6, 2))
+ * //=> Sun Jan 01 2006 23:59:59.999
+ */
+function endOfISOYear (dirtyDate) {
+  var year = getISOYear(dirtyDate)
+  var fourthOfJanuaryOfNextYear = new Date(0)
+  fourthOfJanuaryOfNextYear.setFullYear(year + 1, 0, 4)
+  fourthOfJanuaryOfNextYear.setHours(0, 0, 0, 0)
+  var date = startOfISOWeek(fourthOfJanuaryOfNextYear)
+  date.setMilliseconds(date.getMilliseconds() - 1)
+  return date
+}
+
+module.exports = endOfISOYear
+
+},{"../get_iso_year/index.js":"../node_modules/date-fns/get_iso_year/index.js","../start_of_iso_week/index.js":"../node_modules/date-fns/start_of_iso_week/index.js"}],"../node_modules/date-fns/end_of_minute/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Minute Helpers
+ * @summary Return the end of a minute for the given date.
+ *
+ * @description
+ * Return the end of a minute for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the end of a minute
+ *
+ * @example
+ * // The end of a minute for 1 December 2014 22:15:45.400:
+ * var result = endOfMinute(new Date(2014, 11, 1, 22, 15, 45, 400))
+ * //=> Mon Dec 01 2014 22:15:59.999
+ */
+function endOfMinute (dirtyDate) {
+  var date = parse(dirtyDate)
+  date.setSeconds(59, 999)
+  return date
+}
+
+module.exports = endOfMinute
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/end_of_month/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Return the end of a month for the given date.
+ *
+ * @description
+ * Return the end of a month for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the end of a month
+ *
+ * @example
+ * // The end of a month for 2 September 2014 11:55:00:
+ * var result = endOfMonth(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Tue Sep 30 2014 23:59:59.999
+ */
+function endOfMonth (dirtyDate) {
+  var date = parse(dirtyDate)
+  var month = date.getMonth()
+  date.setFullYear(date.getFullYear(), month + 1, 0)
+  date.setHours(23, 59, 59, 999)
+  return date
+}
+
+module.exports = endOfMonth
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/end_of_quarter/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Return the end of a year quarter for the given date.
+ *
+ * @description
+ * Return the end of a year quarter for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the end of a quarter
+ *
+ * @example
+ * // The end of a quarter for 2 September 2014 11:55:00:
+ * var result = endOfQuarter(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Tue Sep 30 2014 23:59:59.999
+ */
+function endOfQuarter (dirtyDate) {
+  var date = parse(dirtyDate)
+  var currentMonth = date.getMonth()
+  var month = currentMonth - currentMonth % 3 + 3
+  date.setMonth(month, 0)
+  date.setHours(23, 59, 59, 999)
+  return date
+}
+
+module.exports = endOfQuarter
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/end_of_second/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Second Helpers
+ * @summary Return the end of a second for the given date.
+ *
+ * @description
+ * Return the end of a second for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the end of a second
+ *
+ * @example
+ * // The end of a second for 1 December 2014 22:15:45.400:
+ * var result = endOfSecond(new Date(2014, 11, 1, 22, 15, 45, 400))
+ * //=> Mon Dec 01 2014 22:15:45.999
+ */
+function endOfSecond (dirtyDate) {
+  var date = parse(dirtyDate)
+  date.setMilliseconds(999)
+  return date
+}
+
+module.exports = endOfSecond
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/end_of_today/index.js":[function(require,module,exports) {
+var endOfDay = require('../end_of_day/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Return the end of today.
+ *
+ * @description
+ * Return the end of today.
+ *
+ * @returns {Date} the end of today
+ *
+ * @example
+ * // If today is 6 October 2014:
+ * var result = endOfToday()
+ * //=> Mon Oct 6 2014 23:59:59.999
+ */
+function endOfToday () {
+  return endOfDay(new Date())
+}
+
+module.exports = endOfToday
+
+},{"../end_of_day/index.js":"../node_modules/date-fns/end_of_day/index.js"}],"../node_modules/date-fns/end_of_tomorrow/index.js":[function(require,module,exports) {
+/**
+ * @category Day Helpers
+ * @summary Return the end of tomorrow.
+ *
+ * @description
+ * Return the end of tomorrow.
+ *
+ * @returns {Date} the end of tomorrow
+ *
+ * @example
+ * // If today is 6 October 2014:
+ * var result = endOfTomorrow()
+ * //=> Tue Oct 7 2014 23:59:59.999
+ */
+function endOfTomorrow () {
+  var now = new Date()
+  var year = now.getFullYear()
+  var month = now.getMonth()
+  var day = now.getDate()
+
+  var date = new Date(0)
+  date.setFullYear(year, month, day + 1)
+  date.setHours(23, 59, 59, 999)
+  return date
+}
+
+module.exports = endOfTomorrow
+
+},{}],"../node_modules/date-fns/end_of_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Return the end of a year for the given date.
+ *
+ * @description
+ * Return the end of a year for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the end of a year
+ *
+ * @example
+ * // The end of a year for 2 September 2014 11:55:00:
+ * var result = endOfYear(new Date(2014, 8, 2, 11, 55, 00))
+ * //=> Wed Dec 31 2014 23:59:59.999
+ */
+function endOfYear (dirtyDate) {
+  var date = parse(dirtyDate)
+  var year = date.getFullYear()
+  date.setFullYear(year + 1, 0, 0)
+  date.setHours(23, 59, 59, 999)
+  return date
+}
+
+module.exports = endOfYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/end_of_yesterday/index.js":[function(require,module,exports) {
+/**
+ * @category Day Helpers
+ * @summary Return the end of yesterday.
+ *
+ * @description
+ * Return the end of yesterday.
+ *
+ * @returns {Date} the end of yesterday
+ *
+ * @example
+ * // If today is 6 October 2014:
+ * var result = endOfYesterday()
+ * //=> Sun Oct 5 2014 23:59:59.999
+ */
+function endOfYesterday () {
+  var now = new Date()
+  var year = now.getFullYear()
+  var month = now.getMonth()
+  var day = now.getDate()
+
+  var date = new Date(0)
+  date.setFullYear(year, month, day - 1)
+  date.setHours(23, 59, 59, 999)
+  return date
+}
+
+module.exports = endOfYesterday
+
+},{}],"../node_modules/date-fns/start_of_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Return the start of a year for the given date.
+ *
+ * @description
+ * Return the start of a year for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the start of a year
+ *
+ * @example
+ * // The start of a year for 2 September 2014 11:55:00:
+ * var result = startOfYear(new Date(2014, 8, 2, 11, 55, 00))
+ * //=> Wed Jan 01 2014 00:00:00
+ */
+function startOfYear (dirtyDate) {
+  var cleanDate = parse(dirtyDate)
+  var date = new Date(0)
+  date.setFullYear(cleanDate.getFullYear(), 0, 1)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+module.exports = startOfYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_day_of_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var startOfYear = require('../start_of_year/index.js')
+var differenceInCalendarDays = require('../difference_in_calendar_days/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Get the day of the year of the given date.
+ *
+ * @description
+ * Get the day of the year of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the day of year
+ *
+ * @example
+ * // Which day of the year is 2 July 2014?
+ * var result = getDayOfYear(new Date(2014, 6, 2))
+ * //=> 183
+ */
+function getDayOfYear (dirtyDate) {
+  var date = parse(dirtyDate)
+  var diff = differenceInCalendarDays(date, startOfYear(date))
+  var dayOfYear = diff + 1
+  return dayOfYear
+}
+
+module.exports = getDayOfYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../start_of_year/index.js":"../node_modules/date-fns/start_of_year/index.js","../difference_in_calendar_days/index.js":"../node_modules/date-fns/difference_in_calendar_days/index.js"}],"../node_modules/date-fns/get_iso_week/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var startOfISOWeek = require('../start_of_iso_week/index.js')
+var startOfISOYear = require('../start_of_iso_year/index.js')
+
+var MILLISECONDS_IN_WEEK = 604800000
+
+/**
+ * @category ISO Week Helpers
+ * @summary Get the ISO week of the given date.
+ *
+ * @description
+ * Get the ISO week of the given date.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the ISO week
+ *
+ * @example
+ * // Which week of the ISO-week numbering year is 2 January 2005?
+ * var result = getISOWeek(new Date(2005, 0, 2))
+ * //=> 53
+ */
+function getISOWeek (dirtyDate) {
+  var date = parse(dirtyDate)
+  var diff = startOfISOWeek(date).getTime() - startOfISOYear(date).getTime()
+
+  // Round the number of days to the nearest integer
+  // because the number of milliseconds in a week is not constant
+  // (e.g. it's different in the week of the daylight saving time clock shift)
+  return Math.round(diff / MILLISECONDS_IN_WEEK) + 1
+}
+
+module.exports = getISOWeek
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../start_of_iso_week/index.js":"../node_modules/date-fns/start_of_iso_week/index.js","../start_of_iso_year/index.js":"../node_modules/date-fns/start_of_iso_year/index.js"}],"../node_modules/date-fns/is_valid/index.js":[function(require,module,exports) {
+var isDate = require('../is_date/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Is the given date valid?
+ *
+ * @description
+ * Returns false if argument is Invalid Date and true otherwise.
+ * Invalid Date is a Date, whose time value is NaN.
+ *
+ * Time value of Date: http://es5.github.io/#x15.9.1.1
+ *
+ * @param {Date} date - the date to check
+ * @returns {Boolean} the date is valid
+ * @throws {TypeError} argument must be an instance of Date
+ *
+ * @example
+ * // For the valid date:
+ * var result = isValid(new Date(2014, 1, 31))
+ * //=> true
+ *
+ * @example
+ * // For the invalid date:
+ * var result = isValid(new Date(''))
+ * //=> false
+ */
+function isValid (dirtyDate) {
+  if (isDate(dirtyDate)) {
+    return !isNaN(dirtyDate)
+  } else {
+    throw new TypeError(toString.call(dirtyDate) + ' is not an instance of Date')
+  }
+}
+
+module.exports = isValid
+
+},{"../is_date/index.js":"../node_modules/date-fns/is_date/index.js"}],"../node_modules/date-fns/format/index.js":[function(require,module,exports) {
+var getDayOfYear = require('../get_day_of_year/index.js')
+var getISOWeek = require('../get_iso_week/index.js')
+var getISOYear = require('../get_iso_year/index.js')
+var parse = require('../parse/index.js')
+var isValid = require('../is_valid/index.js')
+var enLocale = require('../locale/en/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Format the date.
+ *
+ * @description
+ * Return the formatted date string in the given format.
+ *
+ * Accepted tokens:
+ * | Unit                    | Token | Result examples                  |
+ * |-------------------------|-------|----------------------------------|
+ * | Month                   | M     | 1, 2, ..., 12                    |
+ * |                         | Mo    | 1st, 2nd, ..., 12th              |
+ * |                         | MM    | 01, 02, ..., 12                  |
+ * |                         | MMM   | Jan, Feb, ..., Dec               |
+ * |                         | MMMM  | January, February, ..., December |
+ * | Quarter                 | Q     | 1, 2, 3, 4                       |
+ * |                         | Qo    | 1st, 2nd, 3rd, 4th               |
+ * | Day of month            | D     | 1, 2, ..., 31                    |
+ * |                         | Do    | 1st, 2nd, ..., 31st              |
+ * |                         | DD    | 01, 02, ..., 31                  |
+ * | Day of year             | DDD   | 1, 2, ..., 366                   |
+ * |                         | DDDo  | 1st, 2nd, ..., 366th             |
+ * |                         | DDDD  | 001, 002, ..., 366               |
+ * | Day of week             | d     | 0, 1, ..., 6                     |
+ * |                         | do    | 0th, 1st, ..., 6th               |
+ * |                         | dd    | Su, Mo, ..., Sa                  |
+ * |                         | ddd   | Sun, Mon, ..., Sat               |
+ * |                         | dddd  | Sunday, Monday, ..., Saturday    |
+ * | Day of ISO week         | E     | 1, 2, ..., 7                     |
+ * | ISO week                | W     | 1, 2, ..., 53                    |
+ * |                         | Wo    | 1st, 2nd, ..., 53rd              |
+ * |                         | WW    | 01, 02, ..., 53                  |
+ * | Year                    | YY    | 00, 01, ..., 99                  |
+ * |                         | YYYY  | 1900, 1901, ..., 2099            |
+ * | ISO week-numbering year | GG    | 00, 01, ..., 99                  |
+ * |                         | GGGG  | 1900, 1901, ..., 2099            |
+ * | AM/PM                   | A     | AM, PM                           |
+ * |                         | a     | am, pm                           |
+ * |                         | aa    | a.m., p.m.                       |
+ * | Hour                    | H     | 0, 1, ... 23                     |
+ * |                         | HH    | 00, 01, ... 23                   |
+ * |                         | h     | 1, 2, ..., 12                    |
+ * |                         | hh    | 01, 02, ..., 12                  |
+ * | Minute                  | m     | 0, 1, ..., 59                    |
+ * |                         | mm    | 00, 01, ..., 59                  |
+ * | Second                  | s     | 0, 1, ..., 59                    |
+ * |                         | ss    | 00, 01, ..., 59                  |
+ * | 1/10 of second          | S     | 0, 1, ..., 9                     |
+ * | 1/100 of second         | SS    | 00, 01, ..., 99                  |
+ * | Millisecond             | SSS   | 000, 001, ..., 999               |
+ * | Timezone                | Z     | -01:00, +00:00, ... +12:00       |
+ * |                         | ZZ    | -0100, +0000, ..., +1200         |
+ * | Seconds timestamp       | X     | 512969520                        |
+ * | Milliseconds timestamp  | x     | 512969520900                     |
+ *
+ * The characters wrapped in square brackets are escaped.
+ *
+ * The result may vary by locale.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @param {String} [format='YYYY-MM-DDTHH:mm:ss.SSSZ'] - the string of tokens
+ * @param {Object} [options] - the object with options
+ * @param {Object} [options.locale=enLocale] - the locale object
+ * @returns {String} the formatted date string
+ *
+ * @example
+ * // Represent 11 February 2014 in middle-endian format:
+ * var result = format(
+ *   new Date(2014, 1, 11),
+ *   'MM/DD/YYYY'
+ * )
+ * //=> '02/11/2014'
+ *
+ * @example
+ * // Represent 2 July 2014 in Esperanto:
+ * var eoLocale = require('date-fns/locale/eo')
+ * var result = format(
+ *   new Date(2014, 6, 2),
+ *   'Do [de] MMMM YYYY',
+ *   {locale: eoLocale}
+ * )
+ * //=> '2-a de julio 2014'
+ */
+function format (dirtyDate, dirtyFormatStr, dirtyOptions) {
+  var formatStr = dirtyFormatStr ? String(dirtyFormatStr) : 'YYYY-MM-DDTHH:mm:ss.SSSZ'
+  var options = dirtyOptions || {}
+
+  var locale = options.locale
+  var localeFormatters = enLocale.format.formatters
+  var formattingTokensRegExp = enLocale.format.formattingTokensRegExp
+  if (locale && locale.format && locale.format.formatters) {
+    localeFormatters = locale.format.formatters
+
+    if (locale.format.formattingTokensRegExp) {
+      formattingTokensRegExp = locale.format.formattingTokensRegExp
+    }
+  }
+
+  var date = parse(dirtyDate)
+
+  if (!isValid(date)) {
+    return 'Invalid Date'
+  }
+
+  var formatFn = buildFormatFn(formatStr, localeFormatters, formattingTokensRegExp)
+
+  return formatFn(date)
+}
+
+var formatters = {
+  // Month: 1, 2, ..., 12
+  'M': function (date) {
+    return date.getMonth() + 1
+  },
+
+  // Month: 01, 02, ..., 12
+  'MM': function (date) {
+    return addLeadingZeros(date.getMonth() + 1, 2)
+  },
+
+  // Quarter: 1, 2, 3, 4
+  'Q': function (date) {
+    return Math.ceil((date.getMonth() + 1) / 3)
+  },
+
+  // Day of month: 1, 2, ..., 31
+  'D': function (date) {
+    return date.getDate()
+  },
+
+  // Day of month: 01, 02, ..., 31
+  'DD': function (date) {
+    return addLeadingZeros(date.getDate(), 2)
+  },
+
+  // Day of year: 1, 2, ..., 366
+  'DDD': function (date) {
+    return getDayOfYear(date)
+  },
+
+  // Day of year: 001, 002, ..., 366
+  'DDDD': function (date) {
+    return addLeadingZeros(getDayOfYear(date), 3)
+  },
+
+  // Day of week: 0, 1, ..., 6
+  'd': function (date) {
+    return date.getDay()
+  },
+
+  // Day of ISO week: 1, 2, ..., 7
+  'E': function (date) {
+    return date.getDay() || 7
+  },
+
+  // ISO week: 1, 2, ..., 53
+  'W': function (date) {
+    return getISOWeek(date)
+  },
+
+  // ISO week: 01, 02, ..., 53
+  'WW': function (date) {
+    return addLeadingZeros(getISOWeek(date), 2)
+  },
+
+  // Year: 00, 01, ..., 99
+  'YY': function (date) {
+    return addLeadingZeros(date.getFullYear(), 4).substr(2)
+  },
+
+  // Year: 1900, 1901, ..., 2099
+  'YYYY': function (date) {
+    return addLeadingZeros(date.getFullYear(), 4)
+  },
+
+  // ISO week-numbering year: 00, 01, ..., 99
+  'GG': function (date) {
+    return String(getISOYear(date)).substr(2)
+  },
+
+  // ISO week-numbering year: 1900, 1901, ..., 2099
+  'GGGG': function (date) {
+    return getISOYear(date)
+  },
+
+  // Hour: 0, 1, ... 23
+  'H': function (date) {
+    return date.getHours()
+  },
+
+  // Hour: 00, 01, ..., 23
+  'HH': function (date) {
+    return addLeadingZeros(date.getHours(), 2)
+  },
+
+  // Hour: 1, 2, ..., 12
+  'h': function (date) {
+    var hours = date.getHours()
+    if (hours === 0) {
+      return 12
+    } else if (hours > 12) {
+      return hours % 12
+    } else {
+      return hours
+    }
+  },
+
+  // Hour: 01, 02, ..., 12
+  'hh': function (date) {
+    return addLeadingZeros(formatters['h'](date), 2)
+  },
+
+  // Minute: 0, 1, ..., 59
+  'm': function (date) {
+    return date.getMinutes()
+  },
+
+  // Minute: 00, 01, ..., 59
+  'mm': function (date) {
+    return addLeadingZeros(date.getMinutes(), 2)
+  },
+
+  // Second: 0, 1, ..., 59
+  's': function (date) {
+    return date.getSeconds()
+  },
+
+  // Second: 00, 01, ..., 59
+  'ss': function (date) {
+    return addLeadingZeros(date.getSeconds(), 2)
+  },
+
+  // 1/10 of second: 0, 1, ..., 9
+  'S': function (date) {
+    return Math.floor(date.getMilliseconds() / 100)
+  },
+
+  // 1/100 of second: 00, 01, ..., 99
+  'SS': function (date) {
+    return addLeadingZeros(Math.floor(date.getMilliseconds() / 10), 2)
+  },
+
+  // Millisecond: 000, 001, ..., 999
+  'SSS': function (date) {
+    return addLeadingZeros(date.getMilliseconds(), 3)
+  },
+
+  // Timezone: -01:00, +00:00, ... +12:00
+  'Z': function (date) {
+    return formatTimezone(date.getTimezoneOffset(), ':')
+  },
+
+  // Timezone: -0100, +0000, ... +1200
+  'ZZ': function (date) {
+    return formatTimezone(date.getTimezoneOffset())
+  },
+
+  // Seconds timestamp: 512969520
+  'X': function (date) {
+    return Math.floor(date.getTime() / 1000)
+  },
+
+  // Milliseconds timestamp: 512969520900
+  'x': function (date) {
+    return date.getTime()
+  }
+}
+
+function buildFormatFn (formatStr, localeFormatters, formattingTokensRegExp) {
+  var array = formatStr.match(formattingTokensRegExp)
+  var length = array.length
+
+  var i
+  var formatter
+  for (i = 0; i < length; i++) {
+    formatter = localeFormatters[array[i]] || formatters[array[i]]
+    if (formatter) {
+      array[i] = formatter
+    } else {
+      array[i] = removeFormattingTokens(array[i])
+    }
+  }
+
+  return function (date) {
+    var output = ''
+    for (var i = 0; i < length; i++) {
+      if (array[i] instanceof Function) {
+        output += array[i](date, formatters)
+      } else {
+        output += array[i]
+      }
+    }
+    return output
+  }
+}
+
+function removeFormattingTokens (input) {
+  if (input.match(/\[[\s\S]/)) {
+    return input.replace(/^\[|]$/g, '')
+  }
+  return input.replace(/\\/g, '')
+}
+
+function formatTimezone (offset, delimeter) {
+  delimeter = delimeter || ''
+  var sign = offset > 0 ? '-' : '+'
+  var absOffset = Math.abs(offset)
+  var hours = Math.floor(absOffset / 60)
+  var minutes = absOffset % 60
+  return sign + addLeadingZeros(hours, 2) + delimeter + addLeadingZeros(minutes, 2)
+}
+
+function addLeadingZeros (number, targetLength) {
+  var output = Math.abs(number).toString()
+  while (output.length < targetLength) {
+    output = '0' + output
+  }
+  return output
+}
+
+module.exports = format
+
+},{"../get_day_of_year/index.js":"../node_modules/date-fns/get_day_of_year/index.js","../get_iso_week/index.js":"../node_modules/date-fns/get_iso_week/index.js","../get_iso_year/index.js":"../node_modules/date-fns/get_iso_year/index.js","../parse/index.js":"../node_modules/date-fns/parse/index.js","../is_valid/index.js":"../node_modules/date-fns/is_valid/index.js","../locale/en/index.js":"../node_modules/date-fns/locale/en/index.js"}],"../node_modules/date-fns/get_date/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Get the day of the month of the given date.
+ *
+ * @description
+ * Get the day of the month of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the day of month
+ *
+ * @example
+ * // Which day of the month is 29 February 2012?
+ * var result = getDate(new Date(2012, 1, 29))
+ * //=> 29
+ */
+function getDate (dirtyDate) {
+  var date = parse(dirtyDate)
+  var dayOfMonth = date.getDate()
+  return dayOfMonth
+}
+
+module.exports = getDate
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_day/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Get the day of the week of the given date.
+ *
+ * @description
+ * Get the day of the week of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the day of week
+ *
+ * @example
+ * // Which day of the week is 29 February 2012?
+ * var result = getDay(new Date(2012, 1, 29))
+ * //=> 3
+ */
+function getDay (dirtyDate) {
+  var date = parse(dirtyDate)
+  var day = date.getDay()
+  return day
+}
+
+module.exports = getDay
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_leap_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Is the given date in the leap year?
+ *
+ * @description
+ * Is the given date in the leap year?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in the leap year
+ *
+ * @example
+ * // Is 1 September 2012 in the leap year?
+ * var result = isLeapYear(new Date(2012, 8, 1))
+ * //=> true
+ */
+function isLeapYear (dirtyDate) {
+  var date = parse(dirtyDate)
+  var year = date.getFullYear()
+  return year % 400 === 0 || year % 4 === 0 && year % 100 !== 0
+}
+
+module.exports = isLeapYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_days_in_year/index.js":[function(require,module,exports) {
+var isLeapYear = require('../is_leap_year/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Get the number of days in a year of the given date.
+ *
+ * @description
+ * Get the number of days in a year of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the number of days in a year
+ *
+ * @example
+ * // How many days are in 2012?
+ * var result = getDaysInYear(new Date(2012, 0, 1))
+ * //=> 366
+ */
+function getDaysInYear (dirtyDate) {
+  return isLeapYear(dirtyDate) ? 366 : 365
+}
+
+module.exports = getDaysInYear
+
+},{"../is_leap_year/index.js":"../node_modules/date-fns/is_leap_year/index.js"}],"../node_modules/date-fns/get_hours/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Hour Helpers
+ * @summary Get the hours of the given date.
+ *
+ * @description
+ * Get the hours of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the hours
+ *
+ * @example
+ * // Get the hours of 29 February 2012 11:45:00:
+ * var result = getHours(new Date(2012, 1, 29, 11, 45))
+ * //=> 11
+ */
+function getHours (dirtyDate) {
+  var date = parse(dirtyDate)
+  var hours = date.getHours()
+  return hours
+}
+
+module.exports = getHours
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_iso_day/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Get the day of the ISO week of the given date.
+ *
+ * @description
+ * Get the day of the ISO week of the given date,
+ * which is 7 for Sunday, 1 for Monday etc.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the day of ISO week
+ *
+ * @example
+ * // Which day of the ISO week is 26 February 2012?
+ * var result = getISODay(new Date(2012, 1, 26))
+ * //=> 7
+ */
+function getISODay (dirtyDate) {
+  var date = parse(dirtyDate)
+  var day = date.getDay()
+
+  if (day === 0) {
+    day = 7
+  }
+
+  return day
+}
+
+module.exports = getISODay
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_iso_weeks_in_year/index.js":[function(require,module,exports) {
+var startOfISOYear = require('../start_of_iso_year/index.js')
+var addWeeks = require('../add_weeks/index.js')
+
+var MILLISECONDS_IN_WEEK = 604800000
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Get the number of weeks in an ISO week-numbering year of the given date.
+ *
+ * @description
+ * Get the number of weeks in an ISO week-numbering year of the given date.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the number of ISO weeks in a year
+ *
+ * @example
+ * // How many weeks are in ISO week-numbering year 2015?
+ * var result = getISOWeeksInYear(new Date(2015, 1, 11))
+ * //=> 53
+ */
+function getISOWeeksInYear (dirtyDate) {
+  var thisYear = startOfISOYear(dirtyDate)
+  var nextYear = startOfISOYear(addWeeks(thisYear, 60))
+  var diff = nextYear.valueOf() - thisYear.valueOf()
+  // Round the number of weeks to the nearest integer
+  // because the number of milliseconds in a week is not constant
+  // (e.g. it's different in the week of the daylight saving time clock shift)
+  return Math.round(diff / MILLISECONDS_IN_WEEK)
+}
+
+module.exports = getISOWeeksInYear
+
+},{"../start_of_iso_year/index.js":"../node_modules/date-fns/start_of_iso_year/index.js","../add_weeks/index.js":"../node_modules/date-fns/add_weeks/index.js"}],"../node_modules/date-fns/get_milliseconds/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Millisecond Helpers
+ * @summary Get the milliseconds of the given date.
+ *
+ * @description
+ * Get the milliseconds of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the milliseconds
+ *
+ * @example
+ * // Get the milliseconds of 29 February 2012 11:45:05.123:
+ * var result = getMilliseconds(new Date(2012, 1, 29, 11, 45, 5, 123))
+ * //=> 123
+ */
+function getMilliseconds (dirtyDate) {
+  var date = parse(dirtyDate)
+  var milliseconds = date.getMilliseconds()
+  return milliseconds
+}
+
+module.exports = getMilliseconds
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_minutes/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Minute Helpers
+ * @summary Get the minutes of the given date.
+ *
+ * @description
+ * Get the minutes of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the minutes
+ *
+ * @example
+ * // Get the minutes of 29 February 2012 11:45:05:
+ * var result = getMinutes(new Date(2012, 1, 29, 11, 45, 5))
+ * //=> 45
+ */
+function getMinutes (dirtyDate) {
+  var date = parse(dirtyDate)
+  var minutes = date.getMinutes()
+  return minutes
+}
+
+module.exports = getMinutes
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_month/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Get the month of the given date.
+ *
+ * @description
+ * Get the month of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the month
+ *
+ * @example
+ * // Which month is 29 February 2012?
+ * var result = getMonth(new Date(2012, 1, 29))
+ * //=> 1
+ */
+function getMonth (dirtyDate) {
+  var date = parse(dirtyDate)
+  var month = date.getMonth()
+  return month
+}
+
+module.exports = getMonth
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_overlapping_days_in_ranges/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+var MILLISECONDS_IN_DAY = 24 * 60 * 60 * 1000
+
+/**
+ * @category Range Helpers
+ * @summary Get the number of days that overlap in two date ranges
+ *
+ * @description
+ * Get the number of days that overlap in two date ranges
+ *
+ * @param {Date|String|Number} initialRangeStartDate - the start of the initial range
+ * @param {Date|String|Number} initialRangeEndDate - the end of the initial range
+ * @param {Date|String|Number} comparedRangeStartDate - the start of the range to compare it with
+ * @param {Date|String|Number} comparedRangeEndDate - the end of the range to compare it with
+ * @returns {Number} the number of days that overlap in two date ranges
+ * @throws {Error} startDate of a date range cannot be after its endDate
+ *
+ * @example
+ * // For overlapping date ranges adds 1 for each started overlapping day:
+ * getOverlappingDaysInRanges(
+ *   new Date(2014, 0, 10), new Date(2014, 0, 20), new Date(2014, 0, 17), new Date(2014, 0, 21)
+ * )
+ * //=> 3
+ *
+ * @example
+ * // For non-overlapping date ranges returns 0:
+ * getOverlappingDaysInRanges(
+ *   new Date(2014, 0, 10), new Date(2014, 0, 20), new Date(2014, 0, 21), new Date(2014, 0, 22)
+ * )
+ * //=> 0
+ */
+function getOverlappingDaysInRanges (dirtyInitialRangeStartDate, dirtyInitialRangeEndDate, dirtyComparedRangeStartDate, dirtyComparedRangeEndDate) {
+  var initialStartTime = parse(dirtyInitialRangeStartDate).getTime()
+  var initialEndTime = parse(dirtyInitialRangeEndDate).getTime()
+  var comparedStartTime = parse(dirtyComparedRangeStartDate).getTime()
+  var comparedEndTime = parse(dirtyComparedRangeEndDate).getTime()
+
+  if (initialStartTime > initialEndTime || comparedStartTime > comparedEndTime) {
+    throw new Error('The start of the range cannot be after the end of the range')
+  }
+
+  var isOverlapping = initialStartTime < comparedEndTime && comparedStartTime < initialEndTime
+
+  if (!isOverlapping) {
+    return 0
+  }
+
+  var overlapStartDate = comparedStartTime < initialStartTime
+    ? initialStartTime
+    : comparedStartTime
+
+  var overlapEndDate = comparedEndTime > initialEndTime
+    ? initialEndTime
+    : comparedEndTime
+
+  var differenceInMs = overlapEndDate - overlapStartDate
+
+  return Math.ceil(differenceInMs / MILLISECONDS_IN_DAY)
+}
+
+module.exports = getOverlappingDaysInRanges
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_seconds/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Second Helpers
+ * @summary Get the seconds of the given date.
+ *
+ * @description
+ * Get the seconds of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the seconds
+ *
+ * @example
+ * // Get the seconds of 29 February 2012 11:45:05.123:
+ * var result = getSeconds(new Date(2012, 1, 29, 11, 45, 5, 123))
+ * //=> 5
+ */
+function getSeconds (dirtyDate) {
+  var date = parse(dirtyDate)
+  var seconds = date.getSeconds()
+  return seconds
+}
+
+module.exports = getSeconds
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_time/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Timestamp Helpers
+ * @summary Get the milliseconds timestamp of the given date.
+ *
+ * @description
+ * Get the milliseconds timestamp of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the timestamp
+ *
+ * @example
+ * // Get the timestamp of 29 February 2012 11:45:05.123:
+ * var result = getTime(new Date(2012, 1, 29, 11, 45, 5, 123))
+ * //=> 1330515905123
+ */
+function getTime (dirtyDate) {
+  var date = parse(dirtyDate)
+  var timestamp = date.getTime()
+  return timestamp
+}
+
+module.exports = getTime
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/get_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Get the year of the given date.
+ *
+ * @description
+ * Get the year of the given date.
+ *
+ * @param {Date|String|Number} date - the given date
+ * @returns {Number} the year
+ *
+ * @example
+ * // Which year is 2 July 2014?
+ * var result = getYear(new Date(2014, 6, 2))
+ * //=> 2014
+ */
+function getYear (dirtyDate) {
+  var date = parse(dirtyDate)
+  var year = date.getFullYear()
+  return year
+}
+
+module.exports = getYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_after/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Is the first date after the second one?
+ *
+ * @description
+ * Is the first date after the second one?
+ *
+ * @param {Date|String|Number} date - the date that should be after the other one to return true
+ * @param {Date|String|Number} dateToCompare - the date to compare with
+ * @returns {Boolean} the first date is after the second date
+ *
+ * @example
+ * // Is 10 July 1989 after 11 February 1987?
+ * var result = isAfter(new Date(1989, 6, 10), new Date(1987, 1, 11))
+ * //=> true
+ */
+function isAfter (dirtyDate, dirtyDateToCompare) {
+  var date = parse(dirtyDate)
+  var dateToCompare = parse(dirtyDateToCompare)
+  return date.getTime() > dateToCompare.getTime()
+}
+
+module.exports = isAfter
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_before/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Is the first date before the second one?
+ *
+ * @description
+ * Is the first date before the second one?
+ *
+ * @param {Date|String|Number} date - the date that should be before the other one to return true
+ * @param {Date|String|Number} dateToCompare - the date to compare with
+ * @returns {Boolean} the first date is before the second date
+ *
+ * @example
+ * // Is 10 July 1989 before 11 February 1987?
+ * var result = isBefore(new Date(1989, 6, 10), new Date(1987, 1, 11))
+ * //=> false
+ */
+function isBefore (dirtyDate, dirtyDateToCompare) {
+  var date = parse(dirtyDate)
+  var dateToCompare = parse(dirtyDateToCompare)
+  return date.getTime() < dateToCompare.getTime()
+}
+
+module.exports = isBefore
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_equal/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Are the given dates equal?
+ *
+ * @description
+ * Are the given dates equal?
+ *
+ * @param {Date|String|Number} dateLeft - the first date to compare
+ * @param {Date|String|Number} dateRight - the second date to compare
+ * @returns {Boolean} the dates are equal
+ *
+ * @example
+ * // Are 2 July 2014 06:30:45.000 and 2 July 2014 06:30:45.500 equal?
+ * var result = isEqual(
+ *   new Date(2014, 6, 2, 6, 30, 45, 0)
+ *   new Date(2014, 6, 2, 6, 30, 45, 500)
+ * )
+ * //=> false
+ */
+function isEqual (dirtyLeftDate, dirtyRightDate) {
+  var dateLeft = parse(dirtyLeftDate)
+  var dateRight = parse(dirtyRightDate)
+  return dateLeft.getTime() === dateRight.getTime()
+}
+
+module.exports = isEqual
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_first_day_of_month/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Is the given date the first day of a month?
+ *
+ * @description
+ * Is the given date the first day of a month?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is the first day of a month
+ *
+ * @example
+ * // Is 1 September 2014 the first day of a month?
+ * var result = isFirstDayOfMonth(new Date(2014, 8, 1))
+ * //=> true
+ */
+function isFirstDayOfMonth (dirtyDate) {
+  return parse(dirtyDate).getDate() === 1
+}
+
+module.exports = isFirstDayOfMonth
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_friday/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Is the given date Friday?
+ *
+ * @description
+ * Is the given date Friday?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is Friday
+ *
+ * @example
+ * // Is 26 September 2014 Friday?
+ * var result = isFriday(new Date(2014, 8, 26))
+ * //=> true
+ */
+function isFriday (dirtyDate) {
+  return parse(dirtyDate).getDay() === 5
+}
+
+module.exports = isFriday
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_future/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Is the given date in the future?
+ *
+ * @description
+ * Is the given date in the future?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in the future
+ *
+ * @example
+ * // If today is 6 October 2014, is 31 December 2014 in the future?
+ * var result = isFuture(new Date(2014, 11, 31))
+ * //=> true
+ */
+function isFuture (dirtyDate) {
+  return parse(dirtyDate).getTime() > new Date().getTime()
+}
+
+module.exports = isFuture
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_last_day_of_month/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var endOfDay = require('../end_of_day/index.js')
+var endOfMonth = require('../end_of_month/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Is the given date the last day of a month?
+ *
+ * @description
+ * Is the given date the last day of a month?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is the last day of a month
+ *
+ * @example
+ * // Is 28 February 2014 the last day of a month?
+ * var result = isLastDayOfMonth(new Date(2014, 1, 28))
+ * //=> true
+ */
+function isLastDayOfMonth (dirtyDate) {
+  var date = parse(dirtyDate)
+  return endOfDay(date).getTime() === endOfMonth(date).getTime()
+}
+
+module.exports = isLastDayOfMonth
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../end_of_day/index.js":"../node_modules/date-fns/end_of_day/index.js","../end_of_month/index.js":"../node_modules/date-fns/end_of_month/index.js"}],"../node_modules/date-fns/is_monday/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Is the given date Monday?
+ *
+ * @description
+ * Is the given date Monday?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is Monday
+ *
+ * @example
+ * // Is 22 September 2014 Monday?
+ * var result = isMonday(new Date(2014, 8, 22))
+ * //=> true
+ */
+function isMonday (dirtyDate) {
+  return parse(dirtyDate).getDay() === 1
+}
+
+module.exports = isMonday
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_past/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Is the given date in the past?
+ *
+ * @description
+ * Is the given date in the past?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in the past
+ *
+ * @example
+ * // If today is 6 October 2014, is 2 July 2014 in the past?
+ * var result = isPast(new Date(2014, 6, 2))
+ * //=> true
+ */
+function isPast (dirtyDate) {
+  return parse(dirtyDate).getTime() < new Date().getTime()
+}
+
+module.exports = isPast
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_same_day/index.js":[function(require,module,exports) {
+var startOfDay = require('../start_of_day/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Are the given dates in the same day?
+ *
+ * @description
+ * Are the given dates in the same day?
+ *
+ * @param {Date|String|Number} dateLeft - the first date to check
+ * @param {Date|String|Number} dateRight - the second date to check
+ * @returns {Boolean} the dates are in the same day
+ *
+ * @example
+ * // Are 4 September 06:00:00 and 4 September 18:00:00 in the same day?
+ * var result = isSameDay(
+ *   new Date(2014, 8, 4, 6, 0),
+ *   new Date(2014, 8, 4, 18, 0)
+ * )
+ * //=> true
+ */
+function isSameDay (dirtyDateLeft, dirtyDateRight) {
+  var dateLeftStartOfDay = startOfDay(dirtyDateLeft)
+  var dateRightStartOfDay = startOfDay(dirtyDateRight)
+
+  return dateLeftStartOfDay.getTime() === dateRightStartOfDay.getTime()
+}
+
+module.exports = isSameDay
+
+},{"../start_of_day/index.js":"../node_modules/date-fns/start_of_day/index.js"}],"../node_modules/date-fns/start_of_hour/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Hour Helpers
+ * @summary Return the start of an hour for the given date.
+ *
+ * @description
+ * Return the start of an hour for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the start of an hour
+ *
+ * @example
+ * // The start of an hour for 2 September 2014 11:55:00:
+ * var result = startOfHour(new Date(2014, 8, 2, 11, 55))
+ * //=> Tue Sep 02 2014 11:00:00
+ */
+function startOfHour (dirtyDate) {
+  var date = parse(dirtyDate)
+  date.setMinutes(0, 0, 0)
+  return date
+}
+
+module.exports = startOfHour
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_same_hour/index.js":[function(require,module,exports) {
+var startOfHour = require('../start_of_hour/index.js')
+
+/**
+ * @category Hour Helpers
+ * @summary Are the given dates in the same hour?
+ *
+ * @description
+ * Are the given dates in the same hour?
+ *
+ * @param {Date|String|Number} dateLeft - the first date to check
+ * @param {Date|String|Number} dateRight - the second date to check
+ * @returns {Boolean} the dates are in the same hour
+ *
+ * @example
+ * // Are 4 September 2014 06:00:00 and 4 September 06:30:00 in the same hour?
+ * var result = isSameHour(
+ *   new Date(2014, 8, 4, 6, 0),
+ *   new Date(2014, 8, 4, 6, 30)
+ * )
+ * //=> true
+ */
+function isSameHour (dirtyDateLeft, dirtyDateRight) {
+  var dateLeftStartOfHour = startOfHour(dirtyDateLeft)
+  var dateRightStartOfHour = startOfHour(dirtyDateRight)
+
+  return dateLeftStartOfHour.getTime() === dateRightStartOfHour.getTime()
+}
+
+module.exports = isSameHour
+
+},{"../start_of_hour/index.js":"../node_modules/date-fns/start_of_hour/index.js"}],"../node_modules/date-fns/is_same_week/index.js":[function(require,module,exports) {
+var startOfWeek = require('../start_of_week/index.js')
+
+/**
+ * @category Week Helpers
+ * @summary Are the given dates in the same week?
+ *
+ * @description
+ * Are the given dates in the same week?
+ *
+ * @param {Date|String|Number} dateLeft - the first date to check
+ * @param {Date|String|Number} dateRight - the second date to check
+ * @param {Object} [options] - the object with options
+ * @param {Number} [options.weekStartsOn=0] - the index of the first day of the week (0 - Sunday)
+ * @returns {Boolean} the dates are in the same week
+ *
+ * @example
+ * // Are 31 August 2014 and 4 September 2014 in the same week?
+ * var result = isSameWeek(
+ *   new Date(2014, 7, 31),
+ *   new Date(2014, 8, 4)
+ * )
+ * //=> true
+ *
+ * @example
+ * // If week starts with Monday,
+ * // are 31 August 2014 and 4 September 2014 in the same week?
+ * var result = isSameWeek(
+ *   new Date(2014, 7, 31),
+ *   new Date(2014, 8, 4),
+ *   {weekStartsOn: 1}
+ * )
+ * //=> false
+ */
+function isSameWeek (dirtyDateLeft, dirtyDateRight, dirtyOptions) {
+  var dateLeftStartOfWeek = startOfWeek(dirtyDateLeft, dirtyOptions)
+  var dateRightStartOfWeek = startOfWeek(dirtyDateRight, dirtyOptions)
+
+  return dateLeftStartOfWeek.getTime() === dateRightStartOfWeek.getTime()
+}
+
+module.exports = isSameWeek
+
+},{"../start_of_week/index.js":"../node_modules/date-fns/start_of_week/index.js"}],"../node_modules/date-fns/is_same_iso_week/index.js":[function(require,module,exports) {
+var isSameWeek = require('../is_same_week/index.js')
+
+/**
+ * @category ISO Week Helpers
+ * @summary Are the given dates in the same ISO week?
+ *
+ * @description
+ * Are the given dates in the same ISO week?
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} dateLeft - the first date to check
+ * @param {Date|String|Number} dateRight - the second date to check
+ * @returns {Boolean} the dates are in the same ISO week
+ *
+ * @example
+ * // Are 1 September 2014 and 7 September 2014 in the same ISO week?
+ * var result = isSameISOWeek(
+ *   new Date(2014, 8, 1),
+ *   new Date(2014, 8, 7)
+ * )
+ * //=> true
+ */
+function isSameISOWeek (dirtyDateLeft, dirtyDateRight) {
+  return isSameWeek(dirtyDateLeft, dirtyDateRight, {weekStartsOn: 1})
+}
+
+module.exports = isSameISOWeek
+
+},{"../is_same_week/index.js":"../node_modules/date-fns/is_same_week/index.js"}],"../node_modules/date-fns/is_same_iso_year/index.js":[function(require,module,exports) {
+var startOfISOYear = require('../start_of_iso_year/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Are the given dates in the same ISO week-numbering year?
+ *
+ * @description
+ * Are the given dates in the same ISO week-numbering year?
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} dateLeft - the first date to check
+ * @param {Date|String|Number} dateRight - the second date to check
+ * @returns {Boolean} the dates are in the same ISO week-numbering year
+ *
+ * @example
+ * // Are 29 December 2003 and 2 January 2005 in the same ISO week-numbering year?
+ * var result = isSameISOYear(
+ *   new Date(2003, 11, 29),
+ *   new Date(2005, 0, 2)
+ * )
+ * //=> true
+ */
+function isSameISOYear (dirtyDateLeft, dirtyDateRight) {
+  var dateLeftStartOfYear = startOfISOYear(dirtyDateLeft)
+  var dateRightStartOfYear = startOfISOYear(dirtyDateRight)
+
+  return dateLeftStartOfYear.getTime() === dateRightStartOfYear.getTime()
+}
+
+module.exports = isSameISOYear
+
+},{"../start_of_iso_year/index.js":"../node_modules/date-fns/start_of_iso_year/index.js"}],"../node_modules/date-fns/start_of_minute/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Minute Helpers
+ * @summary Return the start of a minute for the given date.
+ *
+ * @description
+ * Return the start of a minute for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the start of a minute
+ *
+ * @example
+ * // The start of a minute for 1 December 2014 22:15:45.400:
+ * var result = startOfMinute(new Date(2014, 11, 1, 22, 15, 45, 400))
+ * //=> Mon Dec 01 2014 22:15:00
+ */
+function startOfMinute (dirtyDate) {
+  var date = parse(dirtyDate)
+  date.setSeconds(0, 0)
+  return date
+}
+
+module.exports = startOfMinute
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_same_minute/index.js":[function(require,module,exports) {
+var startOfMinute = require('../start_of_minute/index.js')
+
+/**
+ * @category Minute Helpers
+ * @summary Are the given dates in the same minute?
+ *
+ * @description
+ * Are the given dates in the same minute?
+ *
+ * @param {Date|String|Number} dateLeft - the first date to check
+ * @param {Date|String|Number} dateRight - the second date to check
+ * @returns {Boolean} the dates are in the same minute
+ *
+ * @example
+ * // Are 4 September 2014 06:30:00 and 4 September 2014 06:30:15
+ * // in the same minute?
+ * var result = isSameMinute(
+ *   new Date(2014, 8, 4, 6, 30),
+ *   new Date(2014, 8, 4, 6, 30, 15)
+ * )
+ * //=> true
+ */
+function isSameMinute (dirtyDateLeft, dirtyDateRight) {
+  var dateLeftStartOfMinute = startOfMinute(dirtyDateLeft)
+  var dateRightStartOfMinute = startOfMinute(dirtyDateRight)
+
+  return dateLeftStartOfMinute.getTime() === dateRightStartOfMinute.getTime()
+}
+
+module.exports = isSameMinute
+
+},{"../start_of_minute/index.js":"../node_modules/date-fns/start_of_minute/index.js"}],"../node_modules/date-fns/is_same_month/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Are the given dates in the same month?
+ *
+ * @description
+ * Are the given dates in the same month?
+ *
+ * @param {Date|String|Number} dateLeft - the first date to check
+ * @param {Date|String|Number} dateRight - the second date to check
+ * @returns {Boolean} the dates are in the same month
+ *
+ * @example
+ * // Are 2 September 2014 and 25 September 2014 in the same month?
+ * var result = isSameMonth(
+ *   new Date(2014, 8, 2),
+ *   new Date(2014, 8, 25)
+ * )
+ * //=> true
+ */
+function isSameMonth (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var dateRight = parse(dirtyDateRight)
+  return dateLeft.getFullYear() === dateRight.getFullYear() &&
+    dateLeft.getMonth() === dateRight.getMonth()
+}
+
+module.exports = isSameMonth
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/start_of_quarter/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Return the start of a year quarter for the given date.
+ *
+ * @description
+ * Return the start of a year quarter for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the start of a quarter
+ *
+ * @example
+ * // The start of a quarter for 2 September 2014 11:55:00:
+ * var result = startOfQuarter(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Tue Jul 01 2014 00:00:00
+ */
+function startOfQuarter (dirtyDate) {
+  var date = parse(dirtyDate)
+  var currentMonth = date.getMonth()
+  var month = currentMonth - currentMonth % 3
+  date.setMonth(month, 1)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+module.exports = startOfQuarter
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_same_quarter/index.js":[function(require,module,exports) {
+var startOfQuarter = require('../start_of_quarter/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Are the given dates in the same year quarter?
+ *
+ * @description
+ * Are the given dates in the same year quarter?
+ *
+ * @param {Date|String|Number} dateLeft - the first date to check
+ * @param {Date|String|Number} dateRight - the second date to check
+ * @returns {Boolean} the dates are in the same quarter
+ *
+ * @example
+ * // Are 1 January 2014 and 8 March 2014 in the same quarter?
+ * var result = isSameQuarter(
+ *   new Date(2014, 0, 1),
+ *   new Date(2014, 2, 8)
+ * )
+ * //=> true
+ */
+function isSameQuarter (dirtyDateLeft, dirtyDateRight) {
+  var dateLeftStartOfQuarter = startOfQuarter(dirtyDateLeft)
+  var dateRightStartOfQuarter = startOfQuarter(dirtyDateRight)
+
+  return dateLeftStartOfQuarter.getTime() === dateRightStartOfQuarter.getTime()
+}
+
+module.exports = isSameQuarter
+
+},{"../start_of_quarter/index.js":"../node_modules/date-fns/start_of_quarter/index.js"}],"../node_modules/date-fns/start_of_second/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Second Helpers
+ * @summary Return the start of a second for the given date.
+ *
+ * @description
+ * Return the start of a second for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the start of a second
+ *
+ * @example
+ * // The start of a second for 1 December 2014 22:15:45.400:
+ * var result = startOfSecond(new Date(2014, 11, 1, 22, 15, 45, 400))
+ * //=> Mon Dec 01 2014 22:15:45.000
+ */
+function startOfSecond (dirtyDate) {
+  var date = parse(dirtyDate)
+  date.setMilliseconds(0)
+  return date
+}
+
+module.exports = startOfSecond
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_same_second/index.js":[function(require,module,exports) {
+var startOfSecond = require('../start_of_second/index.js')
+
+/**
+ * @category Second Helpers
+ * @summary Are the given dates in the same second?
+ *
+ * @description
+ * Are the given dates in the same second?
+ *
+ * @param {Date|String|Number} dateLeft - the first date to check
+ * @param {Date|String|Number} dateRight - the second date to check
+ * @returns {Boolean} the dates are in the same second
+ *
+ * @example
+ * // Are 4 September 2014 06:30:15.000 and 4 September 2014 06:30.15.500
+ * // in the same second?
+ * var result = isSameSecond(
+ *   new Date(2014, 8, 4, 6, 30, 15),
+ *   new Date(2014, 8, 4, 6, 30, 15, 500)
+ * )
+ * //=> true
+ */
+function isSameSecond (dirtyDateLeft, dirtyDateRight) {
+  var dateLeftStartOfSecond = startOfSecond(dirtyDateLeft)
+  var dateRightStartOfSecond = startOfSecond(dirtyDateRight)
+
+  return dateLeftStartOfSecond.getTime() === dateRightStartOfSecond.getTime()
+}
+
+module.exports = isSameSecond
+
+},{"../start_of_second/index.js":"../node_modules/date-fns/start_of_second/index.js"}],"../node_modules/date-fns/is_same_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Are the given dates in the same year?
+ *
+ * @description
+ * Are the given dates in the same year?
+ *
+ * @param {Date|String|Number} dateLeft - the first date to check
+ * @param {Date|String|Number} dateRight - the second date to check
+ * @returns {Boolean} the dates are in the same year
+ *
+ * @example
+ * // Are 2 September 2014 and 25 September 2014 in the same year?
+ * var result = isSameYear(
+ *   new Date(2014, 8, 2),
+ *   new Date(2014, 8, 25)
+ * )
+ * //=> true
+ */
+function isSameYear (dirtyDateLeft, dirtyDateRight) {
+  var dateLeft = parse(dirtyDateLeft)
+  var dateRight = parse(dirtyDateRight)
+  return dateLeft.getFullYear() === dateRight.getFullYear()
+}
+
+module.exports = isSameYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_saturday/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Is the given date Saturday?
+ *
+ * @description
+ * Is the given date Saturday?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is Saturday
+ *
+ * @example
+ * // Is 27 September 2014 Saturday?
+ * var result = isSaturday(new Date(2014, 8, 27))
+ * //=> true
+ */
+function isSaturday (dirtyDate) {
+  return parse(dirtyDate).getDay() === 6
+}
+
+module.exports = isSaturday
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_sunday/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Is the given date Sunday?
+ *
+ * @description
+ * Is the given date Sunday?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is Sunday
+ *
+ * @example
+ * // Is 21 September 2014 Sunday?
+ * var result = isSunday(new Date(2014, 8, 21))
+ * //=> true
+ */
+function isSunday (dirtyDate) {
+  return parse(dirtyDate).getDay() === 0
+}
+
+module.exports = isSunday
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_this_hour/index.js":[function(require,module,exports) {
+var isSameHour = require('../is_same_hour/index.js')
+
+/**
+ * @category Hour Helpers
+ * @summary Is the given date in the same hour as the current date?
+ *
+ * @description
+ * Is the given date in the same hour as the current date?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in this hour
+ *
+ * @example
+ * // If now is 25 September 2014 18:30:15.500,
+ * // is 25 September 2014 18:00:00 in this hour?
+ * var result = isThisHour(new Date(2014, 8, 25, 18))
+ * //=> true
+ */
+function isThisHour (dirtyDate) {
+  return isSameHour(new Date(), dirtyDate)
+}
+
+module.exports = isThisHour
+
+},{"../is_same_hour/index.js":"../node_modules/date-fns/is_same_hour/index.js"}],"../node_modules/date-fns/is_this_iso_week/index.js":[function(require,module,exports) {
+var isSameISOWeek = require('../is_same_iso_week/index.js')
+
+/**
+ * @category ISO Week Helpers
+ * @summary Is the given date in the same ISO week as the current date?
+ *
+ * @description
+ * Is the given date in the same ISO week as the current date?
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in this ISO week
+ *
+ * @example
+ * // If today is 25 September 2014, is 22 September 2014 in this ISO week?
+ * var result = isThisISOWeek(new Date(2014, 8, 22))
+ * //=> true
+ */
+function isThisISOWeek (dirtyDate) {
+  return isSameISOWeek(new Date(), dirtyDate)
+}
+
+module.exports = isThisISOWeek
+
+},{"../is_same_iso_week/index.js":"../node_modules/date-fns/is_same_iso_week/index.js"}],"../node_modules/date-fns/is_this_iso_year/index.js":[function(require,module,exports) {
+var isSameISOYear = require('../is_same_iso_year/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Is the given date in the same ISO week-numbering year as the current date?
+ *
+ * @description
+ * Is the given date in the same ISO week-numbering year as the current date?
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in this ISO week-numbering year
+ *
+ * @example
+ * // If today is 25 September 2014,
+ * // is 30 December 2013 in this ISO week-numbering year?
+ * var result = isThisISOYear(new Date(2013, 11, 30))
+ * //=> true
+ */
+function isThisISOYear (dirtyDate) {
+  return isSameISOYear(new Date(), dirtyDate)
+}
+
+module.exports = isThisISOYear
+
+},{"../is_same_iso_year/index.js":"../node_modules/date-fns/is_same_iso_year/index.js"}],"../node_modules/date-fns/is_this_minute/index.js":[function(require,module,exports) {
+var isSameMinute = require('../is_same_minute/index.js')
+
+/**
+ * @category Minute Helpers
+ * @summary Is the given date in the same minute as the current date?
+ *
+ * @description
+ * Is the given date in the same minute as the current date?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in this minute
+ *
+ * @example
+ * // If now is 25 September 2014 18:30:15.500,
+ * // is 25 September 2014 18:30:00 in this minute?
+ * var result = isThisMinute(new Date(2014, 8, 25, 18, 30))
+ * //=> true
+ */
+function isThisMinute (dirtyDate) {
+  return isSameMinute(new Date(), dirtyDate)
+}
+
+module.exports = isThisMinute
+
+},{"../is_same_minute/index.js":"../node_modules/date-fns/is_same_minute/index.js"}],"../node_modules/date-fns/is_this_month/index.js":[function(require,module,exports) {
+var isSameMonth = require('../is_same_month/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Is the given date in the same month as the current date?
+ *
+ * @description
+ * Is the given date in the same month as the current date?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in this month
+ *
+ * @example
+ * // If today is 25 September 2014, is 15 September 2014 in this month?
+ * var result = isThisMonth(new Date(2014, 8, 15))
+ * //=> true
+ */
+function isThisMonth (dirtyDate) {
+  return isSameMonth(new Date(), dirtyDate)
+}
+
+module.exports = isThisMonth
+
+},{"../is_same_month/index.js":"../node_modules/date-fns/is_same_month/index.js"}],"../node_modules/date-fns/is_this_quarter/index.js":[function(require,module,exports) {
+var isSameQuarter = require('../is_same_quarter/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Is the given date in the same quarter as the current date?
+ *
+ * @description
+ * Is the given date in the same quarter as the current date?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in this quarter
+ *
+ * @example
+ * // If today is 25 September 2014, is 2 July 2014 in this quarter?
+ * var result = isThisQuarter(new Date(2014, 6, 2))
+ * //=> true
+ */
+function isThisQuarter (dirtyDate) {
+  return isSameQuarter(new Date(), dirtyDate)
+}
+
+module.exports = isThisQuarter
+
+},{"../is_same_quarter/index.js":"../node_modules/date-fns/is_same_quarter/index.js"}],"../node_modules/date-fns/is_this_second/index.js":[function(require,module,exports) {
+var isSameSecond = require('../is_same_second/index.js')
+
+/**
+ * @category Second Helpers
+ * @summary Is the given date in the same second as the current date?
+ *
+ * @description
+ * Is the given date in the same second as the current date?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in this second
+ *
+ * @example
+ * // If now is 25 September 2014 18:30:15.500,
+ * // is 25 September 2014 18:30:15.000 in this second?
+ * var result = isThisSecond(new Date(2014, 8, 25, 18, 30, 15))
+ * //=> true
+ */
+function isThisSecond (dirtyDate) {
+  return isSameSecond(new Date(), dirtyDate)
+}
+
+module.exports = isThisSecond
+
+},{"../is_same_second/index.js":"../node_modules/date-fns/is_same_second/index.js"}],"../node_modules/date-fns/is_this_week/index.js":[function(require,module,exports) {
+var isSameWeek = require('../is_same_week/index.js')
+
+/**
+ * @category Week Helpers
+ * @summary Is the given date in the same week as the current date?
+ *
+ * @description
+ * Is the given date in the same week as the current date?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @param {Object} [options] - the object with options
+ * @param {Number} [options.weekStartsOn=0] - the index of the first day of the week (0 - Sunday)
+ * @returns {Boolean} the date is in this week
+ *
+ * @example
+ * // If today is 25 September 2014, is 21 September 2014 in this week?
+ * var result = isThisWeek(new Date(2014, 8, 21))
+ * //=> true
+ *
+ * @example
+ * // If today is 25 September 2014 and week starts with Monday
+ * // is 21 September 2014 in this week?
+ * var result = isThisWeek(new Date(2014, 8, 21), {weekStartsOn: 1})
+ * //=> false
+ */
+function isThisWeek (dirtyDate, dirtyOptions) {
+  return isSameWeek(new Date(), dirtyDate, dirtyOptions)
+}
+
+module.exports = isThisWeek
+
+},{"../is_same_week/index.js":"../node_modules/date-fns/is_same_week/index.js"}],"../node_modules/date-fns/is_this_year/index.js":[function(require,module,exports) {
+var isSameYear = require('../is_same_year/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Is the given date in the same year as the current date?
+ *
+ * @description
+ * Is the given date in the same year as the current date?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is in this year
+ *
+ * @example
+ * // If today is 25 September 2014, is 2 July 2014 in this year?
+ * var result = isThisYear(new Date(2014, 6, 2))
+ * //=> true
+ */
+function isThisYear (dirtyDate) {
+  return isSameYear(new Date(), dirtyDate)
+}
+
+module.exports = isThisYear
+
+},{"../is_same_year/index.js":"../node_modules/date-fns/is_same_year/index.js"}],"../node_modules/date-fns/is_thursday/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Is the given date Thursday?
+ *
+ * @description
+ * Is the given date Thursday?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is Thursday
+ *
+ * @example
+ * // Is 25 September 2014 Thursday?
+ * var result = isThursday(new Date(2014, 8, 25))
+ * //=> true
+ */
+function isThursday (dirtyDate) {
+  return parse(dirtyDate).getDay() === 4
+}
+
+module.exports = isThursday
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_today/index.js":[function(require,module,exports) {
+var startOfDay = require('../start_of_day/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Is the given date today?
+ *
+ * @description
+ * Is the given date today?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is today
+ *
+ * @example
+ * // If today is 6 October 2014, is 6 October 14:00:00 today?
+ * var result = isToday(new Date(2014, 9, 6, 14, 0))
+ * //=> true
+ */
+function isToday (dirtyDate) {
+  return startOfDay(dirtyDate).getTime() === startOfDay(new Date()).getTime()
+}
+
+module.exports = isToday
+
+},{"../start_of_day/index.js":"../node_modules/date-fns/start_of_day/index.js"}],"../node_modules/date-fns/is_tomorrow/index.js":[function(require,module,exports) {
+var startOfDay = require('../start_of_day/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Is the given date tomorrow?
+ *
+ * @description
+ * Is the given date tomorrow?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is tomorrow
+ *
+ * @example
+ * // If today is 6 October 2014, is 7 October 14:00:00 tomorrow?
+ * var result = isTomorrow(new Date(2014, 9, 7, 14, 0))
+ * //=> true
+ */
+function isTomorrow (dirtyDate) {
+  var tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return startOfDay(dirtyDate).getTime() === startOfDay(tomorrow).getTime()
+}
+
+module.exports = isTomorrow
+
+},{"../start_of_day/index.js":"../node_modules/date-fns/start_of_day/index.js"}],"../node_modules/date-fns/is_tuesday/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Is the given date Tuesday?
+ *
+ * @description
+ * Is the given date Tuesday?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is Tuesday
+ *
+ * @example
+ * // Is 23 September 2014 Tuesday?
+ * var result = isTuesday(new Date(2014, 8, 23))
+ * //=> true
+ */
+function isTuesday (dirtyDate) {
+  return parse(dirtyDate).getDay() === 2
+}
+
+module.exports = isTuesday
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_wednesday/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Is the given date Wednesday?
+ *
+ * @description
+ * Is the given date Wednesday?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is Wednesday
+ *
+ * @example
+ * // Is 24 September 2014 Wednesday?
+ * var result = isWednesday(new Date(2014, 8, 24))
+ * //=> true
+ */
+function isWednesday (dirtyDate) {
+  return parse(dirtyDate).getDay() === 3
+}
+
+module.exports = isWednesday
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_weekend/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Does the given date fall on a weekend?
+ *
+ * @description
+ * Does the given date fall on a weekend?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date falls on a weekend
+ *
+ * @example
+ * // Does 5 October 2014 fall on a weekend?
+ * var result = isWeekend(new Date(2014, 9, 5))
+ * //=> true
+ */
+function isWeekend (dirtyDate) {
+  var date = parse(dirtyDate)
+  var day = date.getDay()
+  return day === 0 || day === 6
+}
+
+module.exports = isWeekend
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_within_range/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Range Helpers
+ * @summary Is the given date within the range?
+ *
+ * @description
+ * Is the given date within the range?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @param {Date|String|Number} startDate - the start of range
+ * @param {Date|String|Number} endDate - the end of range
+ * @returns {Boolean} the date is within the range
+ * @throws {Error} startDate cannot be after endDate
+ *
+ * @example
+ * // For the date within the range:
+ * isWithinRange(
+ *   new Date(2014, 0, 3), new Date(2014, 0, 1), new Date(2014, 0, 7)
+ * )
+ * //=> true
+ *
+ * @example
+ * // For the date outside of the range:
+ * isWithinRange(
+ *   new Date(2014, 0, 10), new Date(2014, 0, 1), new Date(2014, 0, 7)
+ * )
+ * //=> false
+ */
+function isWithinRange (dirtyDate, dirtyStartDate, dirtyEndDate) {
+  var time = parse(dirtyDate).getTime()
+  var startTime = parse(dirtyStartDate).getTime()
+  var endTime = parse(dirtyEndDate).getTime()
+
+  if (startTime > endTime) {
+    throw new Error('The start of the range cannot be after the end of the range')
+  }
+
+  return time >= startTime && time <= endTime
+}
+
+module.exports = isWithinRange
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/is_yesterday/index.js":[function(require,module,exports) {
+var startOfDay = require('../start_of_day/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Is the given date yesterday?
+ *
+ * @description
+ * Is the given date yesterday?
+ *
+ * @param {Date|String|Number} date - the date to check
+ * @returns {Boolean} the date is yesterday
+ *
+ * @example
+ * // If today is 6 October 2014, is 5 October 14:00:00 yesterday?
+ * var result = isYesterday(new Date(2014, 9, 5, 14, 0))
+ * //=> true
+ */
+function isYesterday (dirtyDate) {
+  var yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  return startOfDay(dirtyDate).getTime() === startOfDay(yesterday).getTime()
+}
+
+module.exports = isYesterday
+
+},{"../start_of_day/index.js":"../node_modules/date-fns/start_of_day/index.js"}],"../node_modules/date-fns/last_day_of_week/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Week Helpers
+ * @summary Return the last day of a week for the given date.
+ *
+ * @description
+ * Return the last day of a week for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @param {Object} [options] - the object with options
+ * @param {Number} [options.weekStartsOn=0] - the index of the first day of the week (0 - Sunday)
+ * @returns {Date} the last day of a week
+ *
+ * @example
+ * // The last day of a week for 2 September 2014 11:55:00:
+ * var result = lastDayOfWeek(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Sat Sep 06 2014 00:00:00
+ *
+ * @example
+ * // If the week starts on Monday, the last day of the week for 2 September 2014 11:55:00:
+ * var result = lastDayOfWeek(new Date(2014, 8, 2, 11, 55, 0), {weekStartsOn: 1})
+ * //=> Sun Sep 07 2014 00:00:00
+ */
+function lastDayOfWeek (dirtyDate, dirtyOptions) {
+  var weekStartsOn = dirtyOptions ? (Number(dirtyOptions.weekStartsOn) || 0) : 0
+
+  var date = parse(dirtyDate)
+  var day = date.getDay()
+  var diff = (day < weekStartsOn ? -7 : 0) + 6 - (day - weekStartsOn)
+
+  date.setHours(0, 0, 0, 0)
+  date.setDate(date.getDate() + diff)
+  return date
+}
+
+module.exports = lastDayOfWeek
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/last_day_of_iso_week/index.js":[function(require,module,exports) {
+var lastDayOfWeek = require('../last_day_of_week/index.js')
+
+/**
+ * @category ISO Week Helpers
+ * @summary Return the last day of an ISO week for the given date.
+ *
+ * @description
+ * Return the last day of an ISO week for the given date.
+ * The result will be in the local timezone.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the last day of an ISO week
+ *
+ * @example
+ * // The last day of an ISO week for 2 September 2014 11:55:00:
+ * var result = lastDayOfISOWeek(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Sun Sep 07 2014 00:00:00
+ */
+function lastDayOfISOWeek (dirtyDate) {
+  return lastDayOfWeek(dirtyDate, {weekStartsOn: 1})
+}
+
+module.exports = lastDayOfISOWeek
+
+},{"../last_day_of_week/index.js":"../node_modules/date-fns/last_day_of_week/index.js"}],"../node_modules/date-fns/last_day_of_iso_year/index.js":[function(require,module,exports) {
+var getISOYear = require('../get_iso_year/index.js')
+var startOfISOWeek = require('../start_of_iso_week/index.js')
+
+/**
+ * @category ISO Week-Numbering Year Helpers
+ * @summary Return the last day of an ISO week-numbering year for the given date.
+ *
+ * @description
+ * Return the last day of an ISO week-numbering year,
+ * which always starts 3 days before the year's first Thursday.
+ * The result will be in the local timezone.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the end of an ISO week-numbering year
+ *
+ * @example
+ * // The last day of an ISO week-numbering year for 2 July 2005:
+ * var result = lastDayOfISOYear(new Date(2005, 6, 2))
+ * //=> Sun Jan 01 2006 00:00:00
+ */
+function lastDayOfISOYear (dirtyDate) {
+  var year = getISOYear(dirtyDate)
+  var fourthOfJanuary = new Date(0)
+  fourthOfJanuary.setFullYear(year + 1, 0, 4)
+  fourthOfJanuary.setHours(0, 0, 0, 0)
+  var date = startOfISOWeek(fourthOfJanuary)
+  date.setDate(date.getDate() - 1)
+  return date
+}
+
+module.exports = lastDayOfISOYear
+
+},{"../get_iso_year/index.js":"../node_modules/date-fns/get_iso_year/index.js","../start_of_iso_week/index.js":"../node_modules/date-fns/start_of_iso_week/index.js"}],"../node_modules/date-fns/last_day_of_month/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Return the last day of a month for the given date.
+ *
+ * @description
+ * Return the last day of a month for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the last day of a month
+ *
+ * @example
+ * // The last day of a month for 2 September 2014 11:55:00:
+ * var result = lastDayOfMonth(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Tue Sep 30 2014 00:00:00
+ */
+function lastDayOfMonth (dirtyDate) {
+  var date = parse(dirtyDate)
+  var month = date.getMonth()
+  date.setFullYear(date.getFullYear(), month + 1, 0)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+module.exports = lastDayOfMonth
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/last_day_of_quarter/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Return the last day of a year quarter for the given date.
+ *
+ * @description
+ * Return the last day of a year quarter for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the last day of a quarter
+ *
+ * @example
+ * // The last day of a quarter for 2 September 2014 11:55:00:
+ * var result = lastDayOfQuarter(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Tue Sep 30 2014 00:00:00
+ */
+function lastDayOfQuarter (dirtyDate) {
+  var date = parse(dirtyDate)
+  var currentMonth = date.getMonth()
+  var month = currentMonth - currentMonth % 3 + 3
+  date.setMonth(month, 0)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+module.exports = lastDayOfQuarter
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/last_day_of_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Return the last day of a year for the given date.
+ *
+ * @description
+ * Return the last day of a year for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the last day of a year
+ *
+ * @example
+ * // The last day of a year for 2 September 2014 11:55:00:
+ * var result = lastDayOfYear(new Date(2014, 8, 2, 11, 55, 00))
+ * //=> Wed Dec 31 2014 00:00:00
+ */
+function lastDayOfYear (dirtyDate) {
+  var date = parse(dirtyDate)
+  var year = date.getFullYear()
+  date.setFullYear(year + 1, 0, 0)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+module.exports = lastDayOfYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/max/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Return the latest of the given dates.
+ *
+ * @description
+ * Return the latest of the given dates.
+ *
+ * @param {...(Date|String|Number)} dates - the dates to compare
+ * @returns {Date} the latest of the dates
+ *
+ * @example
+ * // Which of these dates is the latest?
+ * var result = max(
+ *   new Date(1989, 6, 10),
+ *   new Date(1987, 1, 11),
+ *   new Date(1995, 6, 2),
+ *   new Date(1990, 0, 1)
+ * )
+ * //=> Sun Jul 02 1995 00:00:00
+ */
+function max () {
+  var dirtyDates = Array.prototype.slice.call(arguments)
+  var dates = dirtyDates.map(function (dirtyDate) {
+    return parse(dirtyDate)
+  })
+  var latestTimestamp = Math.max.apply(null, dates)
+  return new Date(latestTimestamp)
+}
+
+module.exports = max
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/min/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Common Helpers
+ * @summary Return the earliest of the given dates.
+ *
+ * @description
+ * Return the earliest of the given dates.
+ *
+ * @param {...(Date|String|Number)} dates - the dates to compare
+ * @returns {Date} the earliest of the dates
+ *
+ * @example
+ * // Which of these dates is the earliest?
+ * var result = min(
+ *   new Date(1989, 6, 10),
+ *   new Date(1987, 1, 11),
+ *   new Date(1995, 6, 2),
+ *   new Date(1990, 0, 1)
+ * )
+ * //=> Wed Feb 11 1987 00:00:00
+ */
+function min () {
+  var dirtyDates = Array.prototype.slice.call(arguments)
+  var dates = dirtyDates.map(function (dirtyDate) {
+    return parse(dirtyDate)
+  })
+  var earliestTimestamp = Math.min.apply(null, dates)
+  return new Date(earliestTimestamp)
+}
+
+module.exports = min
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/set_date/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Set the day of the month to the given date.
+ *
+ * @description
+ * Set the day of the month to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} dayOfMonth - the day of the month of the new date
+ * @returns {Date} the new date with the day of the month setted
+ *
+ * @example
+ * // Set the 30th day of the month to 1 September 2014:
+ * var result = setDate(new Date(2014, 8, 1), 30)
+ * //=> Tue Sep 30 2014 00:00:00
+ */
+function setDate (dirtyDate, dirtyDayOfMonth) {
+  var date = parse(dirtyDate)
+  var dayOfMonth = Number(dirtyDayOfMonth)
+  date.setDate(dayOfMonth)
+  return date
+}
+
+module.exports = setDate
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/set_day/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var addDays = require('../add_days/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Set the day of the week to the given date.
+ *
+ * @description
+ * Set the day of the week to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} day - the day of the week of the new date
+ * @param {Object} [options] - the object with options
+ * @param {Number} [options.weekStartsOn=0] - the index of the first day of the week (0 - Sunday)
+ * @returns {Date} the new date with the day of the week setted
+ *
+ * @example
+ * // Set Sunday to 1 September 2014:
+ * var result = setDay(new Date(2014, 8, 1), 0)
+ * //=> Sun Aug 31 2014 00:00:00
+ *
+ * @example
+ * // If week starts with Monday, set Sunday to 1 September 2014:
+ * var result = setDay(new Date(2014, 8, 1), 0, {weekStartsOn: 1})
+ * //=> Sun Sep 07 2014 00:00:00
+ */
+function setDay (dirtyDate, dirtyDay, dirtyOptions) {
+  var weekStartsOn = dirtyOptions ? (Number(dirtyOptions.weekStartsOn) || 0) : 0
+  var date = parse(dirtyDate)
+  var day = Number(dirtyDay)
+  var currentDay = date.getDay()
+
+  var remainder = day % 7
+  var dayIndex = (remainder + 7) % 7
+
+  var diff = (dayIndex < weekStartsOn ? 7 : 0) + day - currentDay
+  return addDays(date, diff)
+}
+
+module.exports = setDay
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../add_days/index.js":"../node_modules/date-fns/add_days/index.js"}],"../node_modules/date-fns/set_day_of_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Set the day of the year to the given date.
+ *
+ * @description
+ * Set the day of the year to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} dayOfYear - the day of the year of the new date
+ * @returns {Date} the new date with the day of the year setted
+ *
+ * @example
+ * // Set the 2nd day of the year to 2 July 2014:
+ * var result = setDayOfYear(new Date(2014, 6, 2), 2)
+ * //=> Thu Jan 02 2014 00:00:00
+ */
+function setDayOfYear (dirtyDate, dirtyDayOfYear) {
+  var date = parse(dirtyDate)
+  var dayOfYear = Number(dirtyDayOfYear)
+  date.setMonth(0)
+  date.setDate(dayOfYear)
+  return date
+}
+
+module.exports = setDayOfYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/set_hours/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Hour Helpers
+ * @summary Set the hours to the given date.
+ *
+ * @description
+ * Set the hours to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} hours - the hours of the new date
+ * @returns {Date} the new date with the hours setted
+ *
+ * @example
+ * // Set 4 hours to 1 September 2014 11:30:00:
+ * var result = setHours(new Date(2014, 8, 1, 11, 30), 4)
+ * //=> Mon Sep 01 2014 04:30:00
+ */
+function setHours (dirtyDate, dirtyHours) {
+  var date = parse(dirtyDate)
+  var hours = Number(dirtyHours)
+  date.setHours(hours)
+  return date
+}
+
+module.exports = setHours
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/set_iso_day/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var addDays = require('../add_days/index.js')
+var getISODay = require('../get_iso_day/index.js')
+
+/**
+ * @category Weekday Helpers
+ * @summary Set the day of the ISO week to the given date.
+ *
+ * @description
+ * Set the day of the ISO week to the given date.
+ * ISO week starts with Monday.
+ * 7 is the index of Sunday, 1 is the index of Monday etc.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} day - the day of the ISO week of the new date
+ * @returns {Date} the new date with the day of the ISO week setted
+ *
+ * @example
+ * // Set Sunday to 1 September 2014:
+ * var result = setISODay(new Date(2014, 8, 1), 7)
+ * //=> Sun Sep 07 2014 00:00:00
+ */
+function setISODay (dirtyDate, dirtyDay) {
+  var date = parse(dirtyDate)
+  var day = Number(dirtyDay)
+  var currentDay = getISODay(date)
+  var diff = day - currentDay
+  return addDays(date, diff)
+}
+
+module.exports = setISODay
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../add_days/index.js":"../node_modules/date-fns/add_days/index.js","../get_iso_day/index.js":"../node_modules/date-fns/get_iso_day/index.js"}],"../node_modules/date-fns/set_iso_week/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var getISOWeek = require('../get_iso_week/index.js')
+
+/**
+ * @category ISO Week Helpers
+ * @summary Set the ISO week to the given date.
+ *
+ * @description
+ * Set the ISO week to the given date, saving the weekday number.
+ *
+ * ISO week-numbering year: http://en.wikipedia.org/wiki/ISO_week_date
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} isoWeek - the ISO week of the new date
+ * @returns {Date} the new date with the ISO week setted
+ *
+ * @example
+ * // Set the 53rd ISO week to 7 August 2004:
+ * var result = setISOWeek(new Date(2004, 7, 7), 53)
+ * //=> Sat Jan 01 2005 00:00:00
+ */
+function setISOWeek (dirtyDate, dirtyISOWeek) {
+  var date = parse(dirtyDate)
+  var isoWeek = Number(dirtyISOWeek)
+  var diff = getISOWeek(date) - isoWeek
+  date.setDate(date.getDate() - diff * 7)
+  return date
+}
+
+module.exports = setISOWeek
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../get_iso_week/index.js":"../node_modules/date-fns/get_iso_week/index.js"}],"../node_modules/date-fns/set_milliseconds/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Millisecond Helpers
+ * @summary Set the milliseconds to the given date.
+ *
+ * @description
+ * Set the milliseconds to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} milliseconds - the milliseconds of the new date
+ * @returns {Date} the new date with the milliseconds setted
+ *
+ * @example
+ * // Set 300 milliseconds to 1 September 2014 11:30:40.500:
+ * var result = setMilliseconds(new Date(2014, 8, 1, 11, 30, 40, 500), 300)
+ * //=> Mon Sep 01 2014 11:30:40.300
+ */
+function setMilliseconds (dirtyDate, dirtyMilliseconds) {
+  var date = parse(dirtyDate)
+  var milliseconds = Number(dirtyMilliseconds)
+  date.setMilliseconds(milliseconds)
+  return date
+}
+
+module.exports = setMilliseconds
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/set_minutes/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Minute Helpers
+ * @summary Set the minutes to the given date.
+ *
+ * @description
+ * Set the minutes to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} minutes - the minutes of the new date
+ * @returns {Date} the new date with the minutes setted
+ *
+ * @example
+ * // Set 45 minutes to 1 September 2014 11:30:40:
+ * var result = setMinutes(new Date(2014, 8, 1, 11, 30, 40), 45)
+ * //=> Mon Sep 01 2014 11:45:40
+ */
+function setMinutes (dirtyDate, dirtyMinutes) {
+  var date = parse(dirtyDate)
+  var minutes = Number(dirtyMinutes)
+  date.setMinutes(minutes)
+  return date
+}
+
+module.exports = setMinutes
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/set_month/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var getDaysInMonth = require('../get_days_in_month/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Set the month to the given date.
+ *
+ * @description
+ * Set the month to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} month - the month of the new date
+ * @returns {Date} the new date with the month setted
+ *
+ * @example
+ * // Set February to 1 September 2014:
+ * var result = setMonth(new Date(2014, 8, 1), 1)
+ * //=> Sat Feb 01 2014 00:00:00
+ */
+function setMonth (dirtyDate, dirtyMonth) {
+  var date = parse(dirtyDate)
+  var month = Number(dirtyMonth)
+  var year = date.getFullYear()
+  var day = date.getDate()
+
+  var dateWithDesiredMonth = new Date(0)
+  dateWithDesiredMonth.setFullYear(year, month, 15)
+  dateWithDesiredMonth.setHours(0, 0, 0, 0)
+  var daysInMonth = getDaysInMonth(dateWithDesiredMonth)
+  // Set the last day of the new month
+  // if the original date was the last day of the longer month
+  date.setMonth(month, Math.min(day, daysInMonth))
+  return date
+}
+
+module.exports = setMonth
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../get_days_in_month/index.js":"../node_modules/date-fns/get_days_in_month/index.js"}],"../node_modules/date-fns/set_quarter/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+var setMonth = require('../set_month/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Set the year quarter to the given date.
+ *
+ * @description
+ * Set the year quarter to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} quarter - the quarter of the new date
+ * @returns {Date} the new date with the quarter setted
+ *
+ * @example
+ * // Set the 2nd quarter to 2 July 2014:
+ * var result = setQuarter(new Date(2014, 6, 2), 2)
+ * //=> Wed Apr 02 2014 00:00:00
+ */
+function setQuarter (dirtyDate, dirtyQuarter) {
+  var date = parse(dirtyDate)
+  var quarter = Number(dirtyQuarter)
+  var oldQuarter = Math.floor(date.getMonth() / 3) + 1
+  var diff = quarter - oldQuarter
+  return setMonth(date, date.getMonth() + diff * 3)
+}
+
+module.exports = setQuarter
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js","../set_month/index.js":"../node_modules/date-fns/set_month/index.js"}],"../node_modules/date-fns/set_seconds/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Second Helpers
+ * @summary Set the seconds to the given date.
+ *
+ * @description
+ * Set the seconds to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} seconds - the seconds of the new date
+ * @returns {Date} the new date with the seconds setted
+ *
+ * @example
+ * // Set 45 seconds to 1 September 2014 11:30:40:
+ * var result = setSeconds(new Date(2014, 8, 1, 11, 30, 40), 45)
+ * //=> Mon Sep 01 2014 11:30:45
+ */
+function setSeconds (dirtyDate, dirtySeconds) {
+  var date = parse(dirtyDate)
+  var seconds = Number(dirtySeconds)
+  date.setSeconds(seconds)
+  return date
+}
+
+module.exports = setSeconds
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/set_year/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Set the year to the given date.
+ *
+ * @description
+ * Set the year to the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} year - the year of the new date
+ * @returns {Date} the new date with the year setted
+ *
+ * @example
+ * // Set year 2013 to 1 September 2014:
+ * var result = setYear(new Date(2014, 8, 1), 2013)
+ * //=> Sun Sep 01 2013 00:00:00
+ */
+function setYear (dirtyDate, dirtyYear) {
+  var date = parse(dirtyDate)
+  var year = Number(dirtyYear)
+  date.setFullYear(year)
+  return date
+}
+
+module.exports = setYear
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/start_of_month/index.js":[function(require,module,exports) {
+var parse = require('../parse/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Return the start of a month for the given date.
+ *
+ * @description
+ * Return the start of a month for the given date.
+ * The result will be in the local timezone.
+ *
+ * @param {Date|String|Number} date - the original date
+ * @returns {Date} the start of a month
+ *
+ * @example
+ * // The start of a month for 2 September 2014 11:55:00:
+ * var result = startOfMonth(new Date(2014, 8, 2, 11, 55, 0))
+ * //=> Mon Sep 01 2014 00:00:00
+ */
+function startOfMonth (dirtyDate) {
+  var date = parse(dirtyDate)
+  date.setDate(1)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+module.exports = startOfMonth
+
+},{"../parse/index.js":"../node_modules/date-fns/parse/index.js"}],"../node_modules/date-fns/start_of_today/index.js":[function(require,module,exports) {
+var startOfDay = require('../start_of_day/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Return the start of today.
+ *
+ * @description
+ * Return the start of today.
+ *
+ * @returns {Date} the start of today
+ *
+ * @example
+ * // If today is 6 October 2014:
+ * var result = startOfToday()
+ * //=> Mon Oct 6 2014 00:00:00
+ */
+function startOfToday () {
+  return startOfDay(new Date())
+}
+
+module.exports = startOfToday
+
+},{"../start_of_day/index.js":"../node_modules/date-fns/start_of_day/index.js"}],"../node_modules/date-fns/start_of_tomorrow/index.js":[function(require,module,exports) {
+/**
+ * @category Day Helpers
+ * @summary Return the start of tomorrow.
+ *
+ * @description
+ * Return the start of tomorrow.
+ *
+ * @returns {Date} the start of tomorrow
+ *
+ * @example
+ * // If today is 6 October 2014:
+ * var result = startOfTomorrow()
+ * //=> Tue Oct 7 2014 00:00:00
+ */
+function startOfTomorrow () {
+  var now = new Date()
+  var year = now.getFullYear()
+  var month = now.getMonth()
+  var day = now.getDate()
+
+  var date = new Date(0)
+  date.setFullYear(year, month, day + 1)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+module.exports = startOfTomorrow
+
+},{}],"../node_modules/date-fns/start_of_yesterday/index.js":[function(require,module,exports) {
+/**
+ * @category Day Helpers
+ * @summary Return the start of yesterday.
+ *
+ * @description
+ * Return the start of yesterday.
+ *
+ * @returns {Date} the start of yesterday
+ *
+ * @example
+ * // If today is 6 October 2014:
+ * var result = startOfYesterday()
+ * //=> Sun Oct 5 2014 00:00:00
+ */
+function startOfYesterday () {
+  var now = new Date()
+  var year = now.getFullYear()
+  var month = now.getMonth()
+  var day = now.getDate()
+
+  var date = new Date(0)
+  date.setFullYear(year, month, day - 1)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+module.exports = startOfYesterday
+
+},{}],"../node_modules/date-fns/sub_days/index.js":[function(require,module,exports) {
+var addDays = require('../add_days/index.js')
+
+/**
+ * @category Day Helpers
+ * @summary Subtract the specified number of days from the given date.
+ *
+ * @description
+ * Subtract the specified number of days from the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of days to be subtracted
+ * @returns {Date} the new date with the days subtracted
+ *
+ * @example
+ * // Subtract 10 days from 1 September 2014:
+ * var result = subDays(new Date(2014, 8, 1), 10)
+ * //=> Fri Aug 22 2014 00:00:00
+ */
+function subDays (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addDays(dirtyDate, -amount)
+}
+
+module.exports = subDays
+
+},{"../add_days/index.js":"../node_modules/date-fns/add_days/index.js"}],"../node_modules/date-fns/sub_hours/index.js":[function(require,module,exports) {
+var addHours = require('../add_hours/index.js')
+
+/**
+ * @category Hour Helpers
+ * @summary Subtract the specified number of hours from the given date.
+ *
+ * @description
+ * Subtract the specified number of hours from the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of hours to be subtracted
+ * @returns {Date} the new date with the hours subtracted
+ *
+ * @example
+ * // Subtract 2 hours from 11 July 2014 01:00:00:
+ * var result = subHours(new Date(2014, 6, 11, 1, 0), 2)
+ * //=> Thu Jul 10 2014 23:00:00
+ */
+function subHours (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addHours(dirtyDate, -amount)
+}
+
+module.exports = subHours
+
+},{"../add_hours/index.js":"../node_modules/date-fns/add_hours/index.js"}],"../node_modules/date-fns/sub_milliseconds/index.js":[function(require,module,exports) {
+var addMilliseconds = require('../add_milliseconds/index.js')
+
+/**
+ * @category Millisecond Helpers
+ * @summary Subtract the specified number of milliseconds from the given date.
+ *
+ * @description
+ * Subtract the specified number of milliseconds from the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of milliseconds to be subtracted
+ * @returns {Date} the new date with the milliseconds subtracted
+ *
+ * @example
+ * // Subtract 750 milliseconds from 10 July 2014 12:45:30.000:
+ * var result = subMilliseconds(new Date(2014, 6, 10, 12, 45, 30, 0), 750)
+ * //=> Thu Jul 10 2014 12:45:29.250
+ */
+function subMilliseconds (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addMilliseconds(dirtyDate, -amount)
+}
+
+module.exports = subMilliseconds
+
+},{"../add_milliseconds/index.js":"../node_modules/date-fns/add_milliseconds/index.js"}],"../node_modules/date-fns/sub_minutes/index.js":[function(require,module,exports) {
+var addMinutes = require('../add_minutes/index.js')
+
+/**
+ * @category Minute Helpers
+ * @summary Subtract the specified number of minutes from the given date.
+ *
+ * @description
+ * Subtract the specified number of minutes from the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of minutes to be subtracted
+ * @returns {Date} the new date with the mintues subtracted
+ *
+ * @example
+ * // Subtract 30 minutes from 10 July 2014 12:00:00:
+ * var result = subMinutes(new Date(2014, 6, 10, 12, 0), 30)
+ * //=> Thu Jul 10 2014 11:30:00
+ */
+function subMinutes (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addMinutes(dirtyDate, -amount)
+}
+
+module.exports = subMinutes
+
+},{"../add_minutes/index.js":"../node_modules/date-fns/add_minutes/index.js"}],"../node_modules/date-fns/sub_months/index.js":[function(require,module,exports) {
+var addMonths = require('../add_months/index.js')
+
+/**
+ * @category Month Helpers
+ * @summary Subtract the specified number of months from the given date.
+ *
+ * @description
+ * Subtract the specified number of months from the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of months to be subtracted
+ * @returns {Date} the new date with the months subtracted
+ *
+ * @example
+ * // Subtract 5 months from 1 February 2015:
+ * var result = subMonths(new Date(2015, 1, 1), 5)
+ * //=> Mon Sep 01 2014 00:00:00
+ */
+function subMonths (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addMonths(dirtyDate, -amount)
+}
+
+module.exports = subMonths
+
+},{"../add_months/index.js":"../node_modules/date-fns/add_months/index.js"}],"../node_modules/date-fns/sub_quarters/index.js":[function(require,module,exports) {
+var addQuarters = require('../add_quarters/index.js')
+
+/**
+ * @category Quarter Helpers
+ * @summary Subtract the specified number of year quarters from the given date.
+ *
+ * @description
+ * Subtract the specified number of year quarters from the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of quarters to be subtracted
+ * @returns {Date} the new date with the quarters subtracted
+ *
+ * @example
+ * // Subtract 3 quarters from 1 September 2014:
+ * var result = subQuarters(new Date(2014, 8, 1), 3)
+ * //=> Sun Dec 01 2013 00:00:00
+ */
+function subQuarters (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addQuarters(dirtyDate, -amount)
+}
+
+module.exports = subQuarters
+
+},{"../add_quarters/index.js":"../node_modules/date-fns/add_quarters/index.js"}],"../node_modules/date-fns/sub_seconds/index.js":[function(require,module,exports) {
+var addSeconds = require('../add_seconds/index.js')
+
+/**
+ * @category Second Helpers
+ * @summary Subtract the specified number of seconds from the given date.
+ *
+ * @description
+ * Subtract the specified number of seconds from the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of seconds to be subtracted
+ * @returns {Date} the new date with the seconds subtracted
+ *
+ * @example
+ * // Subtract 30 seconds from 10 July 2014 12:45:00:
+ * var result = subSeconds(new Date(2014, 6, 10, 12, 45, 0), 30)
+ * //=> Thu Jul 10 2014 12:44:30
+ */
+function subSeconds (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addSeconds(dirtyDate, -amount)
+}
+
+module.exports = subSeconds
+
+},{"../add_seconds/index.js":"../node_modules/date-fns/add_seconds/index.js"}],"../node_modules/date-fns/sub_weeks/index.js":[function(require,module,exports) {
+var addWeeks = require('../add_weeks/index.js')
+
+/**
+ * @category Week Helpers
+ * @summary Subtract the specified number of weeks from the given date.
+ *
+ * @description
+ * Subtract the specified number of weeks from the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of weeks to be subtracted
+ * @returns {Date} the new date with the weeks subtracted
+ *
+ * @example
+ * // Subtract 4 weeks from 1 September 2014:
+ * var result = subWeeks(new Date(2014, 8, 1), 4)
+ * //=> Mon Aug 04 2014 00:00:00
+ */
+function subWeeks (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addWeeks(dirtyDate, -amount)
+}
+
+module.exports = subWeeks
+
+},{"../add_weeks/index.js":"../node_modules/date-fns/add_weeks/index.js"}],"../node_modules/date-fns/sub_years/index.js":[function(require,module,exports) {
+var addYears = require('../add_years/index.js')
+
+/**
+ * @category Year Helpers
+ * @summary Subtract the specified number of years from the given date.
+ *
+ * @description
+ * Subtract the specified number of years from the given date.
+ *
+ * @param {Date|String|Number} date - the date to be changed
+ * @param {Number} amount - the amount of years to be subtracted
+ * @returns {Date} the new date with the years subtracted
+ *
+ * @example
+ * // Subtract 5 years from 1 September 2014:
+ * var result = subYears(new Date(2014, 8, 1), 5)
+ * //=> Tue Sep 01 2009 00:00:00
+ */
+function subYears (dirtyDate, dirtyAmount) {
+  var amount = Number(dirtyAmount)
+  return addYears(dirtyDate, -amount)
+}
+
+module.exports = subYears
+
+},{"../add_years/index.js":"../node_modules/date-fns/add_years/index.js"}],"../node_modules/date-fns/index.js":[function(require,module,exports) {
+module.exports = {
+  addDays: require('./add_days/index.js'),
+  addHours: require('./add_hours/index.js'),
+  addISOYears: require('./add_iso_years/index.js'),
+  addMilliseconds: require('./add_milliseconds/index.js'),
+  addMinutes: require('./add_minutes/index.js'),
+  addMonths: require('./add_months/index.js'),
+  addQuarters: require('./add_quarters/index.js'),
+  addSeconds: require('./add_seconds/index.js'),
+  addWeeks: require('./add_weeks/index.js'),
+  addYears: require('./add_years/index.js'),
+  areRangesOverlapping: require('./are_ranges_overlapping/index.js'),
+  closestIndexTo: require('./closest_index_to/index.js'),
+  closestTo: require('./closest_to/index.js'),
+  compareAsc: require('./compare_asc/index.js'),
+  compareDesc: require('./compare_desc/index.js'),
+  differenceInCalendarDays: require('./difference_in_calendar_days/index.js'),
+  differenceInCalendarISOWeeks: require('./difference_in_calendar_iso_weeks/index.js'),
+  differenceInCalendarISOYears: require('./difference_in_calendar_iso_years/index.js'),
+  differenceInCalendarMonths: require('./difference_in_calendar_months/index.js'),
+  differenceInCalendarQuarters: require('./difference_in_calendar_quarters/index.js'),
+  differenceInCalendarWeeks: require('./difference_in_calendar_weeks/index.js'),
+  differenceInCalendarYears: require('./difference_in_calendar_years/index.js'),
+  differenceInDays: require('./difference_in_days/index.js'),
+  differenceInHours: require('./difference_in_hours/index.js'),
+  differenceInISOYears: require('./difference_in_iso_years/index.js'),
+  differenceInMilliseconds: require('./difference_in_milliseconds/index.js'),
+  differenceInMinutes: require('./difference_in_minutes/index.js'),
+  differenceInMonths: require('./difference_in_months/index.js'),
+  differenceInQuarters: require('./difference_in_quarters/index.js'),
+  differenceInSeconds: require('./difference_in_seconds/index.js'),
+  differenceInWeeks: require('./difference_in_weeks/index.js'),
+  differenceInYears: require('./difference_in_years/index.js'),
+  distanceInWords: require('./distance_in_words/index.js'),
+  distanceInWordsStrict: require('./distance_in_words_strict/index.js'),
+  distanceInWordsToNow: require('./distance_in_words_to_now/index.js'),
+  eachDay: require('./each_day/index.js'),
+  endOfDay: require('./end_of_day/index.js'),
+  endOfHour: require('./end_of_hour/index.js'),
+  endOfISOWeek: require('./end_of_iso_week/index.js'),
+  endOfISOYear: require('./end_of_iso_year/index.js'),
+  endOfMinute: require('./end_of_minute/index.js'),
+  endOfMonth: require('./end_of_month/index.js'),
+  endOfQuarter: require('./end_of_quarter/index.js'),
+  endOfSecond: require('./end_of_second/index.js'),
+  endOfToday: require('./end_of_today/index.js'),
+  endOfTomorrow: require('./end_of_tomorrow/index.js'),
+  endOfWeek: require('./end_of_week/index.js'),
+  endOfYear: require('./end_of_year/index.js'),
+  endOfYesterday: require('./end_of_yesterday/index.js'),
+  format: require('./format/index.js'),
+  getDate: require('./get_date/index.js'),
+  getDay: require('./get_day/index.js'),
+  getDayOfYear: require('./get_day_of_year/index.js'),
+  getDaysInMonth: require('./get_days_in_month/index.js'),
+  getDaysInYear: require('./get_days_in_year/index.js'),
+  getHours: require('./get_hours/index.js'),
+  getISODay: require('./get_iso_day/index.js'),
+  getISOWeek: require('./get_iso_week/index.js'),
+  getISOWeeksInYear: require('./get_iso_weeks_in_year/index.js'),
+  getISOYear: require('./get_iso_year/index.js'),
+  getMilliseconds: require('./get_milliseconds/index.js'),
+  getMinutes: require('./get_minutes/index.js'),
+  getMonth: require('./get_month/index.js'),
+  getOverlappingDaysInRanges: require('./get_overlapping_days_in_ranges/index.js'),
+  getQuarter: require('./get_quarter/index.js'),
+  getSeconds: require('./get_seconds/index.js'),
+  getTime: require('./get_time/index.js'),
+  getYear: require('./get_year/index.js'),
+  isAfter: require('./is_after/index.js'),
+  isBefore: require('./is_before/index.js'),
+  isDate: require('./is_date/index.js'),
+  isEqual: require('./is_equal/index.js'),
+  isFirstDayOfMonth: require('./is_first_day_of_month/index.js'),
+  isFriday: require('./is_friday/index.js'),
+  isFuture: require('./is_future/index.js'),
+  isLastDayOfMonth: require('./is_last_day_of_month/index.js'),
+  isLeapYear: require('./is_leap_year/index.js'),
+  isMonday: require('./is_monday/index.js'),
+  isPast: require('./is_past/index.js'),
+  isSameDay: require('./is_same_day/index.js'),
+  isSameHour: require('./is_same_hour/index.js'),
+  isSameISOWeek: require('./is_same_iso_week/index.js'),
+  isSameISOYear: require('./is_same_iso_year/index.js'),
+  isSameMinute: require('./is_same_minute/index.js'),
+  isSameMonth: require('./is_same_month/index.js'),
+  isSameQuarter: require('./is_same_quarter/index.js'),
+  isSameSecond: require('./is_same_second/index.js'),
+  isSameWeek: require('./is_same_week/index.js'),
+  isSameYear: require('./is_same_year/index.js'),
+  isSaturday: require('./is_saturday/index.js'),
+  isSunday: require('./is_sunday/index.js'),
+  isThisHour: require('./is_this_hour/index.js'),
+  isThisISOWeek: require('./is_this_iso_week/index.js'),
+  isThisISOYear: require('./is_this_iso_year/index.js'),
+  isThisMinute: require('./is_this_minute/index.js'),
+  isThisMonth: require('./is_this_month/index.js'),
+  isThisQuarter: require('./is_this_quarter/index.js'),
+  isThisSecond: require('./is_this_second/index.js'),
+  isThisWeek: require('./is_this_week/index.js'),
+  isThisYear: require('./is_this_year/index.js'),
+  isThursday: require('./is_thursday/index.js'),
+  isToday: require('./is_today/index.js'),
+  isTomorrow: require('./is_tomorrow/index.js'),
+  isTuesday: require('./is_tuesday/index.js'),
+  isValid: require('./is_valid/index.js'),
+  isWednesday: require('./is_wednesday/index.js'),
+  isWeekend: require('./is_weekend/index.js'),
+  isWithinRange: require('./is_within_range/index.js'),
+  isYesterday: require('./is_yesterday/index.js'),
+  lastDayOfISOWeek: require('./last_day_of_iso_week/index.js'),
+  lastDayOfISOYear: require('./last_day_of_iso_year/index.js'),
+  lastDayOfMonth: require('./last_day_of_month/index.js'),
+  lastDayOfQuarter: require('./last_day_of_quarter/index.js'),
+  lastDayOfWeek: require('./last_day_of_week/index.js'),
+  lastDayOfYear: require('./last_day_of_year/index.js'),
+  max: require('./max/index.js'),
+  min: require('./min/index.js'),
+  parse: require('./parse/index.js'),
+  setDate: require('./set_date/index.js'),
+  setDay: require('./set_day/index.js'),
+  setDayOfYear: require('./set_day_of_year/index.js'),
+  setHours: require('./set_hours/index.js'),
+  setISODay: require('./set_iso_day/index.js'),
+  setISOWeek: require('./set_iso_week/index.js'),
+  setISOYear: require('./set_iso_year/index.js'),
+  setMilliseconds: require('./set_milliseconds/index.js'),
+  setMinutes: require('./set_minutes/index.js'),
+  setMonth: require('./set_month/index.js'),
+  setQuarter: require('./set_quarter/index.js'),
+  setSeconds: require('./set_seconds/index.js'),
+  setYear: require('./set_year/index.js'),
+  startOfDay: require('./start_of_day/index.js'),
+  startOfHour: require('./start_of_hour/index.js'),
+  startOfISOWeek: require('./start_of_iso_week/index.js'),
+  startOfISOYear: require('./start_of_iso_year/index.js'),
+  startOfMinute: require('./start_of_minute/index.js'),
+  startOfMonth: require('./start_of_month/index.js'),
+  startOfQuarter: require('./start_of_quarter/index.js'),
+  startOfSecond: require('./start_of_second/index.js'),
+  startOfToday: require('./start_of_today/index.js'),
+  startOfTomorrow: require('./start_of_tomorrow/index.js'),
+  startOfWeek: require('./start_of_week/index.js'),
+  startOfYear: require('./start_of_year/index.js'),
+  startOfYesterday: require('./start_of_yesterday/index.js'),
+  subDays: require('./sub_days/index.js'),
+  subHours: require('./sub_hours/index.js'),
+  subISOYears: require('./sub_iso_years/index.js'),
+  subMilliseconds: require('./sub_milliseconds/index.js'),
+  subMinutes: require('./sub_minutes/index.js'),
+  subMonths: require('./sub_months/index.js'),
+  subQuarters: require('./sub_quarters/index.js'),
+  subSeconds: require('./sub_seconds/index.js'),
+  subWeeks: require('./sub_weeks/index.js'),
+  subYears: require('./sub_years/index.js')
+}
+
+},{"./add_days/index.js":"../node_modules/date-fns/add_days/index.js","./add_hours/index.js":"../node_modules/date-fns/add_hours/index.js","./add_iso_years/index.js":"../node_modules/date-fns/add_iso_years/index.js","./add_milliseconds/index.js":"../node_modules/date-fns/add_milliseconds/index.js","./add_minutes/index.js":"../node_modules/date-fns/add_minutes/index.js","./add_months/index.js":"../node_modules/date-fns/add_months/index.js","./add_quarters/index.js":"../node_modules/date-fns/add_quarters/index.js","./add_seconds/index.js":"../node_modules/date-fns/add_seconds/index.js","./add_weeks/index.js":"../node_modules/date-fns/add_weeks/index.js","./add_years/index.js":"../node_modules/date-fns/add_years/index.js","./are_ranges_overlapping/index.js":"../node_modules/date-fns/are_ranges_overlapping/index.js","./closest_index_to/index.js":"../node_modules/date-fns/closest_index_to/index.js","./closest_to/index.js":"../node_modules/date-fns/closest_to/index.js","./compare_asc/index.js":"../node_modules/date-fns/compare_asc/index.js","./compare_desc/index.js":"../node_modules/date-fns/compare_desc/index.js","./difference_in_calendar_days/index.js":"../node_modules/date-fns/difference_in_calendar_days/index.js","./difference_in_calendar_iso_weeks/index.js":"../node_modules/date-fns/difference_in_calendar_iso_weeks/index.js","./difference_in_calendar_iso_years/index.js":"../node_modules/date-fns/difference_in_calendar_iso_years/index.js","./difference_in_calendar_months/index.js":"../node_modules/date-fns/difference_in_calendar_months/index.js","./difference_in_calendar_quarters/index.js":"../node_modules/date-fns/difference_in_calendar_quarters/index.js","./difference_in_calendar_weeks/index.js":"../node_modules/date-fns/difference_in_calendar_weeks/index.js","./difference_in_calendar_years/index.js":"../node_modules/date-fns/difference_in_calendar_years/index.js","./difference_in_days/index.js":"../node_modules/date-fns/difference_in_days/index.js","./difference_in_hours/index.js":"../node_modules/date-fns/difference_in_hours/index.js","./difference_in_iso_years/index.js":"../node_modules/date-fns/difference_in_iso_years/index.js","./difference_in_milliseconds/index.js":"../node_modules/date-fns/difference_in_milliseconds/index.js","./difference_in_minutes/index.js":"../node_modules/date-fns/difference_in_minutes/index.js","./difference_in_months/index.js":"../node_modules/date-fns/difference_in_months/index.js","./difference_in_quarters/index.js":"../node_modules/date-fns/difference_in_quarters/index.js","./difference_in_seconds/index.js":"../node_modules/date-fns/difference_in_seconds/index.js","./difference_in_weeks/index.js":"../node_modules/date-fns/difference_in_weeks/index.js","./difference_in_years/index.js":"../node_modules/date-fns/difference_in_years/index.js","./distance_in_words/index.js":"../node_modules/date-fns/distance_in_words/index.js","./distance_in_words_strict/index.js":"../node_modules/date-fns/distance_in_words_strict/index.js","./distance_in_words_to_now/index.js":"../node_modules/date-fns/distance_in_words_to_now/index.js","./each_day/index.js":"../node_modules/date-fns/each_day/index.js","./end_of_day/index.js":"../node_modules/date-fns/end_of_day/index.js","./end_of_hour/index.js":"../node_modules/date-fns/end_of_hour/index.js","./end_of_iso_week/index.js":"../node_modules/date-fns/end_of_iso_week/index.js","./end_of_iso_year/index.js":"../node_modules/date-fns/end_of_iso_year/index.js","./end_of_minute/index.js":"../node_modules/date-fns/end_of_minute/index.js","./end_of_month/index.js":"../node_modules/date-fns/end_of_month/index.js","./end_of_quarter/index.js":"../node_modules/date-fns/end_of_quarter/index.js","./end_of_second/index.js":"../node_modules/date-fns/end_of_second/index.js","./end_of_today/index.js":"../node_modules/date-fns/end_of_today/index.js","./end_of_tomorrow/index.js":"../node_modules/date-fns/end_of_tomorrow/index.js","./end_of_week/index.js":"../node_modules/date-fns/end_of_week/index.js","./end_of_year/index.js":"../node_modules/date-fns/end_of_year/index.js","./end_of_yesterday/index.js":"../node_modules/date-fns/end_of_yesterday/index.js","./format/index.js":"../node_modules/date-fns/format/index.js","./get_date/index.js":"../node_modules/date-fns/get_date/index.js","./get_day/index.js":"../node_modules/date-fns/get_day/index.js","./get_day_of_year/index.js":"../node_modules/date-fns/get_day_of_year/index.js","./get_days_in_month/index.js":"../node_modules/date-fns/get_days_in_month/index.js","./get_days_in_year/index.js":"../node_modules/date-fns/get_days_in_year/index.js","./get_hours/index.js":"../node_modules/date-fns/get_hours/index.js","./get_iso_day/index.js":"../node_modules/date-fns/get_iso_day/index.js","./get_iso_week/index.js":"../node_modules/date-fns/get_iso_week/index.js","./get_iso_weeks_in_year/index.js":"../node_modules/date-fns/get_iso_weeks_in_year/index.js","./get_iso_year/index.js":"../node_modules/date-fns/get_iso_year/index.js","./get_milliseconds/index.js":"../node_modules/date-fns/get_milliseconds/index.js","./get_minutes/index.js":"../node_modules/date-fns/get_minutes/index.js","./get_month/index.js":"../node_modules/date-fns/get_month/index.js","./get_overlapping_days_in_ranges/index.js":"../node_modules/date-fns/get_overlapping_days_in_ranges/index.js","./get_quarter/index.js":"../node_modules/date-fns/get_quarter/index.js","./get_seconds/index.js":"../node_modules/date-fns/get_seconds/index.js","./get_time/index.js":"../node_modules/date-fns/get_time/index.js","./get_year/index.js":"../node_modules/date-fns/get_year/index.js","./is_after/index.js":"../node_modules/date-fns/is_after/index.js","./is_before/index.js":"../node_modules/date-fns/is_before/index.js","./is_date/index.js":"../node_modules/date-fns/is_date/index.js","./is_equal/index.js":"../node_modules/date-fns/is_equal/index.js","./is_first_day_of_month/index.js":"../node_modules/date-fns/is_first_day_of_month/index.js","./is_friday/index.js":"../node_modules/date-fns/is_friday/index.js","./is_future/index.js":"../node_modules/date-fns/is_future/index.js","./is_last_day_of_month/index.js":"../node_modules/date-fns/is_last_day_of_month/index.js","./is_leap_year/index.js":"../node_modules/date-fns/is_leap_year/index.js","./is_monday/index.js":"../node_modules/date-fns/is_monday/index.js","./is_past/index.js":"../node_modules/date-fns/is_past/index.js","./is_same_day/index.js":"../node_modules/date-fns/is_same_day/index.js","./is_same_hour/index.js":"../node_modules/date-fns/is_same_hour/index.js","./is_same_iso_week/index.js":"../node_modules/date-fns/is_same_iso_week/index.js","./is_same_iso_year/index.js":"../node_modules/date-fns/is_same_iso_year/index.js","./is_same_minute/index.js":"../node_modules/date-fns/is_same_minute/index.js","./is_same_month/index.js":"../node_modules/date-fns/is_same_month/index.js","./is_same_quarter/index.js":"../node_modules/date-fns/is_same_quarter/index.js","./is_same_second/index.js":"../node_modules/date-fns/is_same_second/index.js","./is_same_week/index.js":"../node_modules/date-fns/is_same_week/index.js","./is_same_year/index.js":"../node_modules/date-fns/is_same_year/index.js","./is_saturday/index.js":"../node_modules/date-fns/is_saturday/index.js","./is_sunday/index.js":"../node_modules/date-fns/is_sunday/index.js","./is_this_hour/index.js":"../node_modules/date-fns/is_this_hour/index.js","./is_this_iso_week/index.js":"../node_modules/date-fns/is_this_iso_week/index.js","./is_this_iso_year/index.js":"../node_modules/date-fns/is_this_iso_year/index.js","./is_this_minute/index.js":"../node_modules/date-fns/is_this_minute/index.js","./is_this_month/index.js":"../node_modules/date-fns/is_this_month/index.js","./is_this_quarter/index.js":"../node_modules/date-fns/is_this_quarter/index.js","./is_this_second/index.js":"../node_modules/date-fns/is_this_second/index.js","./is_this_week/index.js":"../node_modules/date-fns/is_this_week/index.js","./is_this_year/index.js":"../node_modules/date-fns/is_this_year/index.js","./is_thursday/index.js":"../node_modules/date-fns/is_thursday/index.js","./is_today/index.js":"../node_modules/date-fns/is_today/index.js","./is_tomorrow/index.js":"../node_modules/date-fns/is_tomorrow/index.js","./is_tuesday/index.js":"../node_modules/date-fns/is_tuesday/index.js","./is_valid/index.js":"../node_modules/date-fns/is_valid/index.js","./is_wednesday/index.js":"../node_modules/date-fns/is_wednesday/index.js","./is_weekend/index.js":"../node_modules/date-fns/is_weekend/index.js","./is_within_range/index.js":"../node_modules/date-fns/is_within_range/index.js","./is_yesterday/index.js":"../node_modules/date-fns/is_yesterday/index.js","./last_day_of_iso_week/index.js":"../node_modules/date-fns/last_day_of_iso_week/index.js","./last_day_of_iso_year/index.js":"../node_modules/date-fns/last_day_of_iso_year/index.js","./last_day_of_month/index.js":"../node_modules/date-fns/last_day_of_month/index.js","./last_day_of_quarter/index.js":"../node_modules/date-fns/last_day_of_quarter/index.js","./last_day_of_week/index.js":"../node_modules/date-fns/last_day_of_week/index.js","./last_day_of_year/index.js":"../node_modules/date-fns/last_day_of_year/index.js","./max/index.js":"../node_modules/date-fns/max/index.js","./min/index.js":"../node_modules/date-fns/min/index.js","./parse/index.js":"../node_modules/date-fns/parse/index.js","./set_date/index.js":"../node_modules/date-fns/set_date/index.js","./set_day/index.js":"../node_modules/date-fns/set_day/index.js","./set_day_of_year/index.js":"../node_modules/date-fns/set_day_of_year/index.js","./set_hours/index.js":"../node_modules/date-fns/set_hours/index.js","./set_iso_day/index.js":"../node_modules/date-fns/set_iso_day/index.js","./set_iso_week/index.js":"../node_modules/date-fns/set_iso_week/index.js","./set_iso_year/index.js":"../node_modules/date-fns/set_iso_year/index.js","./set_milliseconds/index.js":"../node_modules/date-fns/set_milliseconds/index.js","./set_minutes/index.js":"../node_modules/date-fns/set_minutes/index.js","./set_month/index.js":"../node_modules/date-fns/set_month/index.js","./set_quarter/index.js":"../node_modules/date-fns/set_quarter/index.js","./set_seconds/index.js":"../node_modules/date-fns/set_seconds/index.js","./set_year/index.js":"../node_modules/date-fns/set_year/index.js","./start_of_day/index.js":"../node_modules/date-fns/start_of_day/index.js","./start_of_hour/index.js":"../node_modules/date-fns/start_of_hour/index.js","./start_of_iso_week/index.js":"../node_modules/date-fns/start_of_iso_week/index.js","./start_of_iso_year/index.js":"../node_modules/date-fns/start_of_iso_year/index.js","./start_of_minute/index.js":"../node_modules/date-fns/start_of_minute/index.js","./start_of_month/index.js":"../node_modules/date-fns/start_of_month/index.js","./start_of_quarter/index.js":"../node_modules/date-fns/start_of_quarter/index.js","./start_of_second/index.js":"../node_modules/date-fns/start_of_second/index.js","./start_of_today/index.js":"../node_modules/date-fns/start_of_today/index.js","./start_of_tomorrow/index.js":"../node_modules/date-fns/start_of_tomorrow/index.js","./start_of_week/index.js":"../node_modules/date-fns/start_of_week/index.js","./start_of_year/index.js":"../node_modules/date-fns/start_of_year/index.js","./start_of_yesterday/index.js":"../node_modules/date-fns/start_of_yesterday/index.js","./sub_days/index.js":"../node_modules/date-fns/sub_days/index.js","./sub_hours/index.js":"../node_modules/date-fns/sub_hours/index.js","./sub_iso_years/index.js":"../node_modules/date-fns/sub_iso_years/index.js","./sub_milliseconds/index.js":"../node_modules/date-fns/sub_milliseconds/index.js","./sub_minutes/index.js":"../node_modules/date-fns/sub_minutes/index.js","./sub_months/index.js":"../node_modules/date-fns/sub_months/index.js","./sub_quarters/index.js":"../node_modules/date-fns/sub_quarters/index.js","./sub_seconds/index.js":"../node_modules/date-fns/sub_seconds/index.js","./sub_weeks/index.js":"../node_modules/date-fns/sub_weeks/index.js","./sub_years/index.js":"../node_modules/date-fns/sub_years/index.js"}],"components/Note.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -39164,17 +68341,161 @@ exports.default = void 0;
 
 var _react = _interopRequireDefault(require("react"));
 
-var _Button = _interopRequireDefault(require("../components/Button"));
+var _reactMarkdown = _interopRequireDefault(require("react-markdown"));
+
+var _dateFns = require("date-fns");
+
+var _styledComponents = _interopRequireDefault(require("styled-components"));
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
+var StyledNote = _styledComponents.default.article.withConfig({
+  displayName: "Note__StyledNote",
+  componentId: "sc-13512g6-0"
+})(["max-width:800px;margin:0 auto;"]);
+
+var MetaData = _styledComponents.default.div.withConfig({
+  displayName: "Note__MetaData",
+  componentId: "sc-13512g6-1"
+})(["@media (min-width:500px){display:flex;align-items:top;}"]);
+
+var MetaInfo = _styledComponents.default.div.withConfig({
+  displayName: "Note__MetaInfo",
+  componentId: "sc-13512g6-2"
+})(["padding-right:1em;"]);
+
+var UserActions = _styledComponents.default.div.withConfig({
+  displayName: "Note__UserActions",
+  componentId: "sc-13512g6-3"
+})(["margin-left:auto;"]);
+
+var Note = function Note(_ref) {
+  var note = _ref.note;
+  return _react.default.createElement(StyledNote, null, _react.default.createElement(MetaData, null, _react.default.createElement(MetaInfo, null, _react.default.createElement("img", {
+    src: note.author.avatar,
+    alt: "{note.author.username} avatar",
+    height: "50px"
+  })), _react.default.createElement(MetaInfo, null, _react.default.createElement("em", null, "by"), " ", note.author.username, " ", _react.default.createElement("br", null), (0, _dateFns.format)(note.createdAt, 'MMMM Do YYYY')), _react.default.createElement(UserActions, null, _react.default.createElement("em", null, "Favorites"), " ", note.favoriteCount)), _react.default.createElement(_reactMarkdown.default, {
+    source: note.content
+  }));
+};
+
+var _default = Note;
+exports.default = _default;
+},{"react":"../node_modules/react/index.js","react-markdown":"../node_modules/react-markdown/lib/react-markdown.js","date-fns":"../node_modules/date-fns/index.js","styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js"}],"components/NoteFeed.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _react = _interopRequireDefault(require("react"));
+
+var _styledComponents = _interopRequireDefault(require("styled-components"));
+
+var _reactRouterDom = require("react-router-dom");
+
+var _Note = _interopRequireDefault(require("./Note"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var NoteWrapper = _styledComponents.default.div.withConfig({
+  displayName: "NoteFeed__NoteWrapper",
+  componentId: "sc-1vi1ihu-0"
+})(["max-width:800px;margin:0 auto;margin-bottom:2em;padding-bottom:2em;border-bottom:2em;border-bottom:1px solid #f5f4f0;"]);
+
+var NoteFeed = function NoteFeed(_ref) {
+  var notes = _ref.notes;
+  return _react.default.createElement("div", null, notes.map(function (note) {
+    return _react.default.createElement(NoteWrapper, {
+      key: note.id
+    }, _react.default.createElement(_Note.default, {
+      note: note
+    }), _react.default.createElement(_reactRouterDom.Link, {
+      to: "note/".concat(note.id)
+    }, "Permalink"));
+  }));
+};
+
+var _default = NoteFeed;
+exports.default = _default;
+},{"react":"../node_modules/react/index.js","styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","./Note":"components/Note.js"}],"pages/home.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _react = _interopRequireDefault(require("react"));
+
+var _client = require("@apollo/client");
+
+var _Button = _interopRequireDefault(require("../components/Button"));
+
+var _NoteFeed = _interopRequireDefault(require("../components/NoteFeed"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _nonIterableSpread(); }
+
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance"); }
+
+function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter); }
+
+function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = new Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } }
+
+function _templateObject() {
+  var data = _taggedTemplateLiteral(["\n    query NoteFeed($cursor: String) {\n        noteFeed(cursor: $cursor) {\n            cursor\n            hasNextPage\n            notes {\n                id\n                createdAt\n                content\n                favoriteCount\n                author {\n                    username\n                    id\n                    avatar\n                }\n            }\n        }\n    }\n"]);
+
+  _templateObject = function _templateObject() {
+    return data;
+  };
+
+  return data;
+}
+
+function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
+
+var GET_NOTES = (0, _client.gql)(_templateObject());
+
 var Home = function Home() {
-  return _react.default.createElement("div", null, _react.default.createElement("p", null, "This is the home page"), _react.default.createElement(_Button.default, null, "Click me!"));
+  var _useQuery = (0, _client.useQuery)(GET_NOTES),
+      data = _useQuery.data,
+      loading = _useQuery.loading,
+      error = _useQuery.error,
+      fetchMore = _useQuery.fetchMore;
+
+  if (loading) return _react.default.createElement("p", null, "Loading...");
+  if (error) return _react.default.createElement("p", null, "Error!");
+  return _react.default.createElement(_react.default.Fragment, null, console.log(data.noteFeed.hasNextPage), _react.default.createElement(_NoteFeed.default, {
+    notes: data.noteFeed.notes
+  }), data.noteFeed.hasNextPage && _react.default.createElement(_Button.default, {
+    onClick: function onClick() {
+      return fetchMore({
+        variables: {
+          cursor: data.noteFeed.cursor
+        },
+        updateQuery: function updateQuery(previousResult, _ref) {
+          var fetchMoreResult = _ref.fetchMoreResult;
+          return {
+            noteFeed: {
+              cursor: fetchMoreResult.noteFeed.cursor,
+              hasNextPage: fetchMoreResult.noteFeed.hasNextPage,
+              notes: [].concat(_toConsumableArray(previousResult.noteFeed.notes), _toConsumableArray(fetchMoreResult.noteFeed.notes)),
+              __typename: 'noteFeed'
+            }
+          };
+        }
+      });
+    }
+  }, "Load more"));
 };
 
 var _default = Home;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","../components/Button":"components/Button.js"}],"pages/mynotes.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/Button":"components/Button.js","../components/NoteFeed":"components/NoteFeed.js"}],"pages/mynotes.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -39220,7 +68541,54 @@ var Favorites = function Favorites() {
 
 var _default = Favorites;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js"}],"pages/index.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js"}],"pages/note.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _react = _interopRequireDefault(require("react"));
+
+var _client = require("@apollo/client");
+
+var _Note = _interopRequireDefault(require("../components/Note"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _templateObject() {
+  var data = _taggedTemplateLiteral(["\n    query note($id: ID!) {\n        note(id: $id) {\n            id\n            createdAt\n            content\n            favoriteCount\n            author {\n                username\n                id\n                avatar\n            }\n        }\n    }\n"]);
+
+  _templateObject = function _templateObject() {
+    return data;
+  };
+
+  return data;
+}
+
+function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
+
+var GET_NOTE = (0, _client.gql)(_templateObject());
+
+var NotePage = function NotePage(props) {
+  var id = props.match.params.id;
+
+  var _userQuery = (0, _client.userQuery)(GET_NOTE),
+      loading = _userQuery.loading,
+      error = _userQuery.error,
+      data = _userQuery.data;
+
+  if (loading) return _react.default.createElement("p", null, "Loading...");
+  if (error) return _react.default.createElement("p", null, "Error! Note not found");
+  return _react.default.createElement(_Note.default, {
+    note: data.note
+  });
+};
+
+var _default = NotePage;
+exports.default = _default;
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/Note":"components/Note.js"}],"pages/index.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -39240,6 +68608,8 @@ var _mynotes = _interopRequireDefault(require("./mynotes"));
 
 var _favorites = _interopRequireDefault(require("./favorites"));
 
+var _note = _interopRequireDefault(require("./note"));
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 var Pages = function Pages() {
@@ -39253,17 +68623,22 @@ var Pages = function Pages() {
   }), _react.default.createElement(_reactRouterDom.Route, {
     path: "/favorites",
     component: _favorites.default
+  }), _react.default.createElement(_reactRouterDom.Route, {
+    path: "/note/:id",
+    component: _note.default
   })));
 };
 
 var _default = Pages;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","../components/Layout":"components/Layout.js","./home":"pages/home.js","./mynotes":"pages/mynotes.js","./favorites":"pages/favorites.js"}],"App.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","../components/Layout":"components/Layout.js","./home":"pages/home.js","./mynotes":"pages/mynotes.js","./favorites":"pages/favorites.js","./note":"pages/note.js"}],"App.js":[function(require,module,exports) {
 "use strict";
 
 var _react = _interopRequireDefault(require("react"));
 
 var _reactDom = _interopRequireDefault(require("react-dom"));
+
+var _client = require("@apollo/client");
 
 var _GlobalStyle = _interopRequireDefault(require("./components/GlobalStyle"));
 
@@ -39271,12 +68646,22 @@ var _pages = _interopRequireDefault(require("./pages"));
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
+var uri = "http://localhost:4000/api";
+var cache = new _client.InMemoryCache();
+var client = new _client.ApolloClient({
+  uri: uri,
+  cache: cache,
+  connectToDevTools: true
+});
+
 var App = function App() {
-  return _react.default.createElement("div", null, _react.default.createElement(_GlobalStyle.default, null), _react.default.createElement(_pages.default, null));
+  return _react.default.createElement(_client.ApolloProvider, {
+    client: client
+  }, _react.default.createElement(_GlobalStyle.default, null), _react.default.createElement(_pages.default, null));
 };
 
 _reactDom.default.render(_react.default.createElement(App, null), document.getElementById('root'));
-},{"react":"../node_modules/react/index.js","react-dom":"../node_modules/react-dom/index.js","./components/GlobalStyle":"components/GlobalStyle.js","./pages":"pages/index.js"}],"../node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","react-dom":"../node_modules/react-dom/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","./components/GlobalStyle":"components/GlobalStyle.js","./pages":"pages/index.js"}],"../node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
 var global = arguments[3];
 var OVERLAY_ID = '__parcel__error__overlay__';
 var OldModule = module.bundle.Module;
@@ -39304,7 +68689,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "41181" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "36059" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};

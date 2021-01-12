@@ -1,6 +1,6 @@
 module.exports = {
     notes: async (parent, args, { models }) => {
-        return await models.Note.find(),limit();
+        return await models.Note.find().limit();
     },
     note: async (parent, args, { models }) => {
         return await models.Note.findById(args.id);
