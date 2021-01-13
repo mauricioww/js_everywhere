@@ -46491,7 +46491,1440 @@ var _useApolloClient = require("./react/hooks/useApolloClient.js");
 var _RenderPromises = require("./react/ssr/RenderPromises.js");
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-},{"zen-observable":"../node_modules/zen-observable/index.js","./utilities/graphql/storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js","./utilities/graphql/getFromAST.js":"../node_modules/@apollo/client/utilities/graphql/getFromAST.js","./link/core/ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js","./link/core/execute.js":"../node_modules/@apollo/client/link/core/execute.js","./errors/ApolloError.js":"../node_modules/@apollo/client/errors/ApolloError.js","./core/networkStatus.js":"../node_modules/@apollo/client/core/networkStatus.js","./core/types.js":"../node_modules/@apollo/client/core/types.js","./core/ObservableQuery.js":"../node_modules/@apollo/client/core/ObservableQuery.js","./link/http/serializeFetchParameter.js":"../node_modules/@apollo/client/link/http/serializeFetchParameter.js","./link/http/selectURI.js":"../node_modules/@apollo/client/link/http/selectURI.js","./link/utils/throwServerError.js":"../node_modules/@apollo/client/link/utils/throwServerError.js","./link/http/parseAndCheckHttpResponse.js":"../node_modules/@apollo/client/link/http/parseAndCheckHttpResponse.js","./link/http/checkFetcher.js":"../node_modules/@apollo/client/link/http/checkFetcher.js","./link/http/selectHttpOptionsAndBody.js":"../node_modules/@apollo/client/link/http/selectHttpOptionsAndBody.js","./link/http/createSignalIfSupported.js":"../node_modules/@apollo/client/link/http/createSignalIfSupported.js","./link/utils/fromError.js":"../node_modules/@apollo/client/link/utils/fromError.js","./link/http/createHttpLink.js":"../node_modules/@apollo/client/link/http/createHttpLink.js","./link/http/HttpLink.js":"../node_modules/@apollo/client/link/http/HttpLink.js","./ApolloClient.js":"../node_modules/@apollo/client/ApolloClient.js","graphql-tag":"../node_modules/graphql-tag/src/index.js","./cache/core/cache.js":"../node_modules/@apollo/client/cache/core/cache.js","./cache/core/types/Cache.js":"../node_modules/@apollo/client/cache/core/types/Cache.js","./cache/inmemory/policies.js":"../node_modules/@apollo/client/cache/inmemory/policies.js","./cache/inmemory/inMemoryCache.js":"../node_modules/@apollo/client/cache/inmemory/inMemoryCache.js","./link/core/empty.js":"../node_modules/@apollo/client/link/core/empty.js","./link/core/from.js":"../node_modules/@apollo/client/link/core/from.js","./link/core/split.js":"../node_modules/@apollo/client/link/core/split.js","./link/core/concat.js":"../node_modules/@apollo/client/link/core/concat.js","./react/context/ApolloContext.js":"../node_modules/@apollo/client/react/context/ApolloContext.js","./react/context/ApolloProvider.js":"../node_modules/@apollo/client/react/context/ApolloProvider.js","./react/context/ApolloConsumer.js":"../node_modules/@apollo/client/react/context/ApolloConsumer.js","./react/parser/parser.js":"../node_modules/@apollo/client/react/parser/parser.js","./react/hooks/useQuery.js":"../node_modules/@apollo/client/react/hooks/useQuery.js","./react/hooks/useLazyQuery.js":"../node_modules/@apollo/client/react/hooks/useLazyQuery.js","./react/hooks/useMutation.js":"../node_modules/@apollo/client/react/hooks/useMutation.js","./react/hooks/useSubscription.js":"../node_modules/@apollo/client/react/hooks/useSubscription.js","./react/hooks/useApolloClient.js":"../node_modules/@apollo/client/react/hooks/useApolloClient.js","./react/ssr/RenderPromises.js":"../node_modules/@apollo/client/react/ssr/RenderPromises.js"}],"../node_modules/stylis/stylis.min.js":[function(require,module,exports) {
+},{"zen-observable":"../node_modules/zen-observable/index.js","./utilities/graphql/storeUtils.js":"../node_modules/@apollo/client/utilities/graphql/storeUtils.js","./utilities/graphql/getFromAST.js":"../node_modules/@apollo/client/utilities/graphql/getFromAST.js","./link/core/ApolloLink.js":"../node_modules/@apollo/client/link/core/ApolloLink.js","./link/core/execute.js":"../node_modules/@apollo/client/link/core/execute.js","./errors/ApolloError.js":"../node_modules/@apollo/client/errors/ApolloError.js","./core/networkStatus.js":"../node_modules/@apollo/client/core/networkStatus.js","./core/types.js":"../node_modules/@apollo/client/core/types.js","./core/ObservableQuery.js":"../node_modules/@apollo/client/core/ObservableQuery.js","./link/http/serializeFetchParameter.js":"../node_modules/@apollo/client/link/http/serializeFetchParameter.js","./link/http/selectURI.js":"../node_modules/@apollo/client/link/http/selectURI.js","./link/utils/throwServerError.js":"../node_modules/@apollo/client/link/utils/throwServerError.js","./link/http/parseAndCheckHttpResponse.js":"../node_modules/@apollo/client/link/http/parseAndCheckHttpResponse.js","./link/http/checkFetcher.js":"../node_modules/@apollo/client/link/http/checkFetcher.js","./link/http/selectHttpOptionsAndBody.js":"../node_modules/@apollo/client/link/http/selectHttpOptionsAndBody.js","./link/http/createSignalIfSupported.js":"../node_modules/@apollo/client/link/http/createSignalIfSupported.js","./link/utils/fromError.js":"../node_modules/@apollo/client/link/utils/fromError.js","./link/http/createHttpLink.js":"../node_modules/@apollo/client/link/http/createHttpLink.js","./link/http/HttpLink.js":"../node_modules/@apollo/client/link/http/HttpLink.js","./ApolloClient.js":"../node_modules/@apollo/client/ApolloClient.js","graphql-tag":"../node_modules/graphql-tag/src/index.js","./cache/core/cache.js":"../node_modules/@apollo/client/cache/core/cache.js","./cache/core/types/Cache.js":"../node_modules/@apollo/client/cache/core/types/Cache.js","./cache/inmemory/policies.js":"../node_modules/@apollo/client/cache/inmemory/policies.js","./cache/inmemory/inMemoryCache.js":"../node_modules/@apollo/client/cache/inmemory/inMemoryCache.js","./link/core/empty.js":"../node_modules/@apollo/client/link/core/empty.js","./link/core/from.js":"../node_modules/@apollo/client/link/core/from.js","./link/core/split.js":"../node_modules/@apollo/client/link/core/split.js","./link/core/concat.js":"../node_modules/@apollo/client/link/core/concat.js","./react/context/ApolloContext.js":"../node_modules/@apollo/client/react/context/ApolloContext.js","./react/context/ApolloProvider.js":"../node_modules/@apollo/client/react/context/ApolloProvider.js","./react/context/ApolloConsumer.js":"../node_modules/@apollo/client/react/context/ApolloConsumer.js","./react/parser/parser.js":"../node_modules/@apollo/client/react/parser/parser.js","./react/hooks/useQuery.js":"../node_modules/@apollo/client/react/hooks/useQuery.js","./react/hooks/useLazyQuery.js":"../node_modules/@apollo/client/react/hooks/useLazyQuery.js","./react/hooks/useMutation.js":"../node_modules/@apollo/client/react/hooks/useMutation.js","./react/hooks/useSubscription.js":"../node_modules/@apollo/client/react/hooks/useSubscription.js","./react/hooks/useApolloClient.js":"../node_modules/@apollo/client/react/hooks/useApolloClient.js","./react/ssr/RenderPromises.js":"../node_modules/@apollo/client/react/ssr/RenderPromises.js"}],"../node_modules/zen-observable-ts/lib/bundle.esm.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.Observable = exports.default = void 0;
+
+var _zenObservable = _interopRequireDefault(require("zen-observable"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var Observable = _zenObservable.default;
+exports.Observable = Observable;
+var _default = Observable;
+exports.default = _default;
+},{"zen-observable":"../node_modules/zen-observable/index.js"}],"../node_modules/apollo-utilities/lib/bundle.esm.js":[function(require,module,exports) {
+var process = require("process");
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.addTypenameToDocument = addTypenameToDocument;
+exports.argumentsObjectFromField = argumentsObjectFromField;
+exports.assign = assign;
+exports.buildQueryFromSelectionSet = buildQueryFromSelectionSet;
+exports.checkDocument = checkDocument;
+exports.cloneDeep = cloneDeep;
+exports.createFragmentMap = createFragmentMap;
+exports.getDefaultValues = getDefaultValues;
+exports.getDirectiveInfoFromField = getDirectiveInfoFromField;
+exports.getDirectiveNames = getDirectiveNames;
+exports.getDirectivesFromDocument = getDirectivesFromDocument;
+exports.getEnv = getEnv;
+exports.getFragmentDefinition = getFragmentDefinition;
+exports.getFragmentDefinitions = getFragmentDefinitions;
+exports.getFragmentQueryDocument = getFragmentQueryDocument;
+exports.getInclusionDirectives = getInclusionDirectives;
+exports.getMainDefinition = getMainDefinition;
+exports.getMutationDefinition = getMutationDefinition;
+exports.getOperationDefinition = getOperationDefinition;
+exports.getOperationDefinitionOrDie = getOperationDefinitionOrDie;
+exports.getOperationName = getOperationName;
+exports.getQueryDefinition = getQueryDefinition;
+exports.getStoreKeyName = getStoreKeyName;
+exports.graphQLResultHasError = graphQLResultHasError;
+exports.hasClientExports = hasClientExports;
+exports.hasDirectives = hasDirectives;
+exports.isDevelopment = isDevelopment;
+exports.isEnv = isEnv;
+exports.isField = isField;
+exports.isIdValue = isIdValue;
+exports.isInlineFragment = isInlineFragment;
+exports.isJsonValue = isJsonValue;
+exports.isNumberValue = isNumberValue;
+exports.isProduction = isProduction;
+exports.isScalarValue = isScalarValue;
+exports.isTest = isTest;
+exports.maybeDeepFreeze = maybeDeepFreeze;
+exports.mergeDeep = mergeDeep;
+exports.mergeDeepArray = mergeDeepArray;
+exports.removeArgumentsFromDocument = removeArgumentsFromDocument;
+exports.removeClientSetsFromDocument = removeClientSetsFromDocument;
+exports.removeConnectionDirectiveFromDocument = removeConnectionDirectiveFromDocument;
+exports.removeDirectivesFromDocument = removeDirectivesFromDocument;
+exports.removeFragmentSpreadFromDocument = removeFragmentSpreadFromDocument;
+exports.resultKeyNameFromField = resultKeyNameFromField;
+exports.shouldInclude = shouldInclude;
+exports.storeKeyNameFromField = storeKeyNameFromField;
+exports.stripSymbols = stripSymbols;
+exports.toIdValue = toIdValue;
+exports.tryFunctionOrLogError = tryFunctionOrLogError;
+exports.valueFromNode = valueFromNode;
+exports.valueToObjectRepresentation = valueToObjectRepresentation;
+exports.variablesInOperation = variablesInOperation;
+exports.warnOnceInDevelopment = warnOnceInDevelopment;
+Object.defineProperty(exports, "isEqual", {
+  enumerable: true,
+  get: function () {
+    return _equality.equal;
+  }
+});
+exports.canUseWeakMap = void 0;
+
+var _visitor = require("graphql/language/visitor");
+
+var _tsInvariant = require("ts-invariant");
+
+var _tslib = require("tslib");
+
+var _fastJsonStableStringify = _interopRequireDefault(require("fast-json-stable-stringify"));
+
+var _equality = require("@wry/equality");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function isScalarValue(value) {
+  return ['StringValue', 'BooleanValue', 'EnumValue'].indexOf(value.kind) > -1;
+}
+
+function isNumberValue(value) {
+  return ['IntValue', 'FloatValue'].indexOf(value.kind) > -1;
+}
+
+function isStringValue(value) {
+  return value.kind === 'StringValue';
+}
+
+function isBooleanValue(value) {
+  return value.kind === 'BooleanValue';
+}
+
+function isIntValue(value) {
+  return value.kind === 'IntValue';
+}
+
+function isFloatValue(value) {
+  return value.kind === 'FloatValue';
+}
+
+function isVariable(value) {
+  return value.kind === 'Variable';
+}
+
+function isObjectValue(value) {
+  return value.kind === 'ObjectValue';
+}
+
+function isListValue(value) {
+  return value.kind === 'ListValue';
+}
+
+function isEnumValue(value) {
+  return value.kind === 'EnumValue';
+}
+
+function isNullValue(value) {
+  return value.kind === 'NullValue';
+}
+
+function valueToObjectRepresentation(argObj, name, value, variables) {
+  if (isIntValue(value) || isFloatValue(value)) {
+    argObj[name.value] = Number(value.value);
+  } else if (isBooleanValue(value) || isStringValue(value)) {
+    argObj[name.value] = value.value;
+  } else if (isObjectValue(value)) {
+    var nestedArgObj_1 = {};
+    value.fields.map(function (obj) {
+      return valueToObjectRepresentation(nestedArgObj_1, obj.name, obj.value, variables);
+    });
+    argObj[name.value] = nestedArgObj_1;
+  } else if (isVariable(value)) {
+    var variableValue = (variables || {})[value.name.value];
+    argObj[name.value] = variableValue;
+  } else if (isListValue(value)) {
+    argObj[name.value] = value.values.map(function (listValue) {
+      var nestedArgArrayObj = {};
+      valueToObjectRepresentation(nestedArgArrayObj, name, listValue, variables);
+      return nestedArgArrayObj[name.value];
+    });
+  } else if (isEnumValue(value)) {
+    argObj[name.value] = value.value;
+  } else if (isNullValue(value)) {
+    argObj[name.value] = null;
+  } else {
+    throw "development" === "production" ? new _tsInvariant.InvariantError(17) : new _tsInvariant.InvariantError("The inline argument \"" + name.value + "\" of kind \"" + value.kind + "\"" + 'is not supported. Use variables instead of inline arguments to ' + 'overcome this limitation.');
+  }
+}
+
+function storeKeyNameFromField(field, variables) {
+  var directivesObj = null;
+
+  if (field.directives) {
+    directivesObj = {};
+    field.directives.forEach(function (directive) {
+      directivesObj[directive.name.value] = {};
+
+      if (directive.arguments) {
+        directive.arguments.forEach(function (_a) {
+          var name = _a.name,
+              value = _a.value;
+          return valueToObjectRepresentation(directivesObj[directive.name.value], name, value, variables);
+        });
+      }
+    });
+  }
+
+  var argObj = null;
+
+  if (field.arguments && field.arguments.length) {
+    argObj = {};
+    field.arguments.forEach(function (_a) {
+      var name = _a.name,
+          value = _a.value;
+      return valueToObjectRepresentation(argObj, name, value, variables);
+    });
+  }
+
+  return getStoreKeyName(field.name.value, argObj, directivesObj);
+}
+
+var KNOWN_DIRECTIVES = ['connection', 'include', 'skip', 'client', 'rest', 'export'];
+
+function getStoreKeyName(fieldName, args, directives) {
+  if (directives && directives['connection'] && directives['connection']['key']) {
+    if (directives['connection']['filter'] && directives['connection']['filter'].length > 0) {
+      var filterKeys = directives['connection']['filter'] ? directives['connection']['filter'] : [];
+      filterKeys.sort();
+      var queryArgs_1 = args;
+      var filteredArgs_1 = {};
+      filterKeys.forEach(function (key) {
+        filteredArgs_1[key] = queryArgs_1[key];
+      });
+      return directives['connection']['key'] + "(" + JSON.stringify(filteredArgs_1) + ")";
+    } else {
+      return directives['connection']['key'];
+    }
+  }
+
+  var completeFieldName = fieldName;
+
+  if (args) {
+    var stringifiedArgs = (0, _fastJsonStableStringify.default)(args);
+    completeFieldName += "(" + stringifiedArgs + ")";
+  }
+
+  if (directives) {
+    Object.keys(directives).forEach(function (key) {
+      if (KNOWN_DIRECTIVES.indexOf(key) !== -1) return;
+
+      if (directives[key] && Object.keys(directives[key]).length) {
+        completeFieldName += "@" + key + "(" + JSON.stringify(directives[key]) + ")";
+      } else {
+        completeFieldName += "@" + key;
+      }
+    });
+  }
+
+  return completeFieldName;
+}
+
+function argumentsObjectFromField(field, variables) {
+  if (field.arguments && field.arguments.length) {
+    var argObj_1 = {};
+    field.arguments.forEach(function (_a) {
+      var name = _a.name,
+          value = _a.value;
+      return valueToObjectRepresentation(argObj_1, name, value, variables);
+    });
+    return argObj_1;
+  }
+
+  return null;
+}
+
+function resultKeyNameFromField(field) {
+  return field.alias ? field.alias.value : field.name.value;
+}
+
+function isField(selection) {
+  return selection.kind === 'Field';
+}
+
+function isInlineFragment(selection) {
+  return selection.kind === 'InlineFragment';
+}
+
+function isIdValue(idObject) {
+  return idObject && idObject.type === 'id' && typeof idObject.generated === 'boolean';
+}
+
+function toIdValue(idConfig, generated) {
+  if (generated === void 0) {
+    generated = false;
+  }
+
+  return (0, _tslib.__assign)({
+    type: 'id',
+    generated: generated
+  }, typeof idConfig === 'string' ? {
+    id: idConfig,
+    typename: undefined
+  } : idConfig);
+}
+
+function isJsonValue(jsonObject) {
+  return jsonObject != null && typeof jsonObject === 'object' && jsonObject.type === 'json';
+}
+
+function defaultValueFromVariable(node) {
+  throw "development" === "production" ? new _tsInvariant.InvariantError(18) : new _tsInvariant.InvariantError("Variable nodes are not supported by valueFromNode");
+}
+
+function valueFromNode(node, onVariable) {
+  if (onVariable === void 0) {
+    onVariable = defaultValueFromVariable;
+  }
+
+  switch (node.kind) {
+    case 'Variable':
+      return onVariable(node);
+
+    case 'NullValue':
+      return null;
+
+    case 'IntValue':
+      return parseInt(node.value, 10);
+
+    case 'FloatValue':
+      return parseFloat(node.value);
+
+    case 'ListValue':
+      return node.values.map(function (v) {
+        return valueFromNode(v, onVariable);
+      });
+
+    case 'ObjectValue':
+      {
+        var value = {};
+
+        for (var _i = 0, _a = node.fields; _i < _a.length; _i++) {
+          var field = _a[_i];
+          value[field.name.value] = valueFromNode(field.value, onVariable);
+        }
+
+        return value;
+      }
+
+    default:
+      return node.value;
+  }
+}
+
+function getDirectiveInfoFromField(field, variables) {
+  if (field.directives && field.directives.length) {
+    var directiveObj_1 = {};
+    field.directives.forEach(function (directive) {
+      directiveObj_1[directive.name.value] = argumentsObjectFromField(directive, variables);
+    });
+    return directiveObj_1;
+  }
+
+  return null;
+}
+
+function shouldInclude(selection, variables) {
+  if (variables === void 0) {
+    variables = {};
+  }
+
+  return getInclusionDirectives(selection.directives).every(function (_a) {
+    var directive = _a.directive,
+        ifArgument = _a.ifArgument;
+    var evaledValue = false;
+
+    if (ifArgument.value.kind === 'Variable') {
+      evaledValue = variables[ifArgument.value.name.value];
+      "development" === "production" ? (0, _tsInvariant.invariant)(evaledValue !== void 0, 1) : (0, _tsInvariant.invariant)(evaledValue !== void 0, "Invalid variable referenced in @" + directive.name.value + " directive.");
+    } else {
+      evaledValue = ifArgument.value.value;
+    }
+
+    return directive.name.value === 'skip' ? !evaledValue : evaledValue;
+  });
+}
+
+function getDirectiveNames(doc) {
+  var names = [];
+  (0, _visitor.visit)(doc, {
+    Directive: function (node) {
+      names.push(node.name.value);
+    }
+  });
+  return names;
+}
+
+function hasDirectives(names, doc) {
+  return getDirectiveNames(doc).some(function (name) {
+    return names.indexOf(name) > -1;
+  });
+}
+
+function hasClientExports(document) {
+  return document && hasDirectives(['client'], document) && hasDirectives(['export'], document);
+}
+
+function isInclusionDirective(_a) {
+  var value = _a.name.value;
+  return value === 'skip' || value === 'include';
+}
+
+function getInclusionDirectives(directives) {
+  return directives ? directives.filter(isInclusionDirective).map(function (directive) {
+    var directiveArguments = directive.arguments;
+    var directiveName = directive.name.value;
+    "development" === "production" ? (0, _tsInvariant.invariant)(directiveArguments && directiveArguments.length === 1, 2) : (0, _tsInvariant.invariant)(directiveArguments && directiveArguments.length === 1, "Incorrect number of arguments for the @" + directiveName + " directive.");
+    var ifArgument = directiveArguments[0];
+    "development" === "production" ? (0, _tsInvariant.invariant)(ifArgument.name && ifArgument.name.value === 'if', 3) : (0, _tsInvariant.invariant)(ifArgument.name && ifArgument.name.value === 'if', "Invalid argument for the @" + directiveName + " directive.");
+    var ifValue = ifArgument.value;
+    "development" === "production" ? (0, _tsInvariant.invariant)(ifValue && (ifValue.kind === 'Variable' || ifValue.kind === 'BooleanValue'), 4) : (0, _tsInvariant.invariant)(ifValue && (ifValue.kind === 'Variable' || ifValue.kind === 'BooleanValue'), "Argument for the @" + directiveName + " directive must be a variable or a boolean value.");
+    return {
+      directive: directive,
+      ifArgument: ifArgument
+    };
+  }) : [];
+}
+
+function getFragmentQueryDocument(document, fragmentName) {
+  var actualFragmentName = fragmentName;
+  var fragments = [];
+  document.definitions.forEach(function (definition) {
+    if (definition.kind === 'OperationDefinition') {
+      throw "development" === "production" ? new _tsInvariant.InvariantError(5) : new _tsInvariant.InvariantError("Found a " + definition.operation + " operation" + (definition.name ? " named '" + definition.name.value + "'" : '') + ". " + 'No operations are allowed when using a fragment as a query. Only fragments are allowed.');
+    }
+
+    if (definition.kind === 'FragmentDefinition') {
+      fragments.push(definition);
+    }
+  });
+
+  if (typeof actualFragmentName === 'undefined') {
+    "development" === "production" ? (0, _tsInvariant.invariant)(fragments.length === 1, 6) : (0, _tsInvariant.invariant)(fragments.length === 1, "Found " + fragments.length + " fragments. `fragmentName` must be provided when there is not exactly 1 fragment.");
+    actualFragmentName = fragments[0].name.value;
+  }
+
+  var query = (0, _tslib.__assign)((0, _tslib.__assign)({}, document), {
+    definitions: (0, _tslib.__spreadArrays)([{
+      kind: 'OperationDefinition',
+      operation: 'query',
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [{
+          kind: 'FragmentSpread',
+          name: {
+            kind: 'Name',
+            value: actualFragmentName
+          }
+        }]
+      }
+    }], document.definitions)
+  });
+  return query;
+}
+
+function assign(target) {
+  var sources = [];
+
+  for (var _i = 1; _i < arguments.length; _i++) {
+    sources[_i - 1] = arguments[_i];
+  }
+
+  sources.forEach(function (source) {
+    if (typeof source === 'undefined' || source === null) {
+      return;
+    }
+
+    Object.keys(source).forEach(function (key) {
+      target[key] = source[key];
+    });
+  });
+  return target;
+}
+
+function getMutationDefinition(doc) {
+  checkDocument(doc);
+  var mutationDef = doc.definitions.filter(function (definition) {
+    return definition.kind === 'OperationDefinition' && definition.operation === 'mutation';
+  })[0];
+  "development" === "production" ? (0, _tsInvariant.invariant)(mutationDef, 7) : (0, _tsInvariant.invariant)(mutationDef, 'Must contain a mutation definition.');
+  return mutationDef;
+}
+
+function checkDocument(doc) {
+  "development" === "production" ? (0, _tsInvariant.invariant)(doc && doc.kind === 'Document', 8) : (0, _tsInvariant.invariant)(doc && doc.kind === 'Document', "Expecting a parsed GraphQL document. Perhaps you need to wrap the query string in a \"gql\" tag? http://docs.apollostack.com/apollo-client/core.html#gql");
+  var operations = doc.definitions.filter(function (d) {
+    return d.kind !== 'FragmentDefinition';
+  }).map(function (definition) {
+    if (definition.kind !== 'OperationDefinition') {
+      throw "development" === "production" ? new _tsInvariant.InvariantError(9) : new _tsInvariant.InvariantError("Schema type definitions not allowed in queries. Found: \"" + definition.kind + "\"");
+    }
+
+    return definition;
+  });
+  "development" === "production" ? (0, _tsInvariant.invariant)(operations.length <= 1, 10) : (0, _tsInvariant.invariant)(operations.length <= 1, "Ambiguous GraphQL document: contains " + operations.length + " operations");
+  return doc;
+}
+
+function getOperationDefinition(doc) {
+  checkDocument(doc);
+  return doc.definitions.filter(function (definition) {
+    return definition.kind === 'OperationDefinition';
+  })[0];
+}
+
+function getOperationDefinitionOrDie(document) {
+  var def = getOperationDefinition(document);
+  "development" === "production" ? (0, _tsInvariant.invariant)(def, 11) : (0, _tsInvariant.invariant)(def, "GraphQL document is missing an operation");
+  return def;
+}
+
+function getOperationName(doc) {
+  return doc.definitions.filter(function (definition) {
+    return definition.kind === 'OperationDefinition' && definition.name;
+  }).map(function (x) {
+    return x.name.value;
+  })[0] || null;
+}
+
+function getFragmentDefinitions(doc) {
+  return doc.definitions.filter(function (definition) {
+    return definition.kind === 'FragmentDefinition';
+  });
+}
+
+function getQueryDefinition(doc) {
+  var queryDef = getOperationDefinition(doc);
+  "development" === "production" ? (0, _tsInvariant.invariant)(queryDef && queryDef.operation === 'query', 12) : (0, _tsInvariant.invariant)(queryDef && queryDef.operation === 'query', 'Must contain a query definition.');
+  return queryDef;
+}
+
+function getFragmentDefinition(doc) {
+  "development" === "production" ? (0, _tsInvariant.invariant)(doc.kind === 'Document', 13) : (0, _tsInvariant.invariant)(doc.kind === 'Document', "Expecting a parsed GraphQL document. Perhaps you need to wrap the query string in a \"gql\" tag? http://docs.apollostack.com/apollo-client/core.html#gql");
+  "development" === "production" ? (0, _tsInvariant.invariant)(doc.definitions.length <= 1, 14) : (0, _tsInvariant.invariant)(doc.definitions.length <= 1, 'Fragment must have exactly one definition.');
+  var fragmentDef = doc.definitions[0];
+  "development" === "production" ? (0, _tsInvariant.invariant)(fragmentDef.kind === 'FragmentDefinition', 15) : (0, _tsInvariant.invariant)(fragmentDef.kind === 'FragmentDefinition', 'Must be a fragment definition.');
+  return fragmentDef;
+}
+
+function getMainDefinition(queryDoc) {
+  checkDocument(queryDoc);
+  var fragmentDefinition;
+
+  for (var _i = 0, _a = queryDoc.definitions; _i < _a.length; _i++) {
+    var definition = _a[_i];
+
+    if (definition.kind === 'OperationDefinition') {
+      var operation = definition.operation;
+
+      if (operation === 'query' || operation === 'mutation' || operation === 'subscription') {
+        return definition;
+      }
+    }
+
+    if (definition.kind === 'FragmentDefinition' && !fragmentDefinition) {
+      fragmentDefinition = definition;
+    }
+  }
+
+  if (fragmentDefinition) {
+    return fragmentDefinition;
+  }
+
+  throw "development" === "production" ? new _tsInvariant.InvariantError(16) : new _tsInvariant.InvariantError('Expected a parsed GraphQL query with a query, mutation, subscription, or a fragment.');
+}
+
+function createFragmentMap(fragments) {
+  if (fragments === void 0) {
+    fragments = [];
+  }
+
+  var symTable = {};
+  fragments.forEach(function (fragment) {
+    symTable[fragment.name.value] = fragment;
+  });
+  return symTable;
+}
+
+function getDefaultValues(definition) {
+  if (definition && definition.variableDefinitions && definition.variableDefinitions.length) {
+    var defaultValues = definition.variableDefinitions.filter(function (_a) {
+      var defaultValue = _a.defaultValue;
+      return defaultValue;
+    }).map(function (_a) {
+      var variable = _a.variable,
+          defaultValue = _a.defaultValue;
+      var defaultValueObj = {};
+      valueToObjectRepresentation(defaultValueObj, variable.name, defaultValue);
+      return defaultValueObj;
+    });
+    return assign.apply(void 0, (0, _tslib.__spreadArrays)([{}], defaultValues));
+  }
+
+  return {};
+}
+
+function variablesInOperation(operation) {
+  var names = new Set();
+
+  if (operation.variableDefinitions) {
+    for (var _i = 0, _a = operation.variableDefinitions; _i < _a.length; _i++) {
+      var definition = _a[_i];
+      names.add(definition.variable.name.value);
+    }
+  }
+
+  return names;
+}
+
+function filterInPlace(array, test, context) {
+  var target = 0;
+  array.forEach(function (elem, i) {
+    if (test.call(this, elem, i, array)) {
+      array[target++] = elem;
+    }
+  }, context);
+  array.length = target;
+  return array;
+}
+
+var TYPENAME_FIELD = {
+  kind: 'Field',
+  name: {
+    kind: 'Name',
+    value: '__typename'
+  }
+};
+
+function isEmpty(op, fragments) {
+  return op.selectionSet.selections.every(function (selection) {
+    return selection.kind === 'FragmentSpread' && isEmpty(fragments[selection.name.value], fragments);
+  });
+}
+
+function nullIfDocIsEmpty(doc) {
+  return isEmpty(getOperationDefinition(doc) || getFragmentDefinition(doc), createFragmentMap(getFragmentDefinitions(doc))) ? null : doc;
+}
+
+function getDirectiveMatcher(directives) {
+  return function directiveMatcher(directive) {
+    return directives.some(function (dir) {
+      return dir.name && dir.name === directive.name.value || dir.test && dir.test(directive);
+    });
+  };
+}
+
+function removeDirectivesFromDocument(directives, doc) {
+  var variablesInUse = Object.create(null);
+  var variablesToRemove = [];
+  var fragmentSpreadsInUse = Object.create(null);
+  var fragmentSpreadsToRemove = [];
+  var modifiedDoc = nullIfDocIsEmpty((0, _visitor.visit)(doc, {
+    Variable: {
+      enter: function (node, _key, parent) {
+        if (parent.kind !== 'VariableDefinition') {
+          variablesInUse[node.name.value] = true;
+        }
+      }
+    },
+    Field: {
+      enter: function (node) {
+        if (directives && node.directives) {
+          var shouldRemoveField = directives.some(function (directive) {
+            return directive.remove;
+          });
+
+          if (shouldRemoveField && node.directives && node.directives.some(getDirectiveMatcher(directives))) {
+            if (node.arguments) {
+              node.arguments.forEach(function (arg) {
+                if (arg.value.kind === 'Variable') {
+                  variablesToRemove.push({
+                    name: arg.value.name.value
+                  });
+                }
+              });
+            }
+
+            if (node.selectionSet) {
+              getAllFragmentSpreadsFromSelectionSet(node.selectionSet).forEach(function (frag) {
+                fragmentSpreadsToRemove.push({
+                  name: frag.name.value
+                });
+              });
+            }
+
+            return null;
+          }
+        }
+      }
+    },
+    FragmentSpread: {
+      enter: function (node) {
+        fragmentSpreadsInUse[node.name.value] = true;
+      }
+    },
+    Directive: {
+      enter: function (node) {
+        if (getDirectiveMatcher(directives)(node)) {
+          return null;
+        }
+      }
+    }
+  }));
+
+  if (modifiedDoc && filterInPlace(variablesToRemove, function (v) {
+    return !variablesInUse[v.name];
+  }).length) {
+    modifiedDoc = removeArgumentsFromDocument(variablesToRemove, modifiedDoc);
+  }
+
+  if (modifiedDoc && filterInPlace(fragmentSpreadsToRemove, function (fs) {
+    return !fragmentSpreadsInUse[fs.name];
+  }).length) {
+    modifiedDoc = removeFragmentSpreadFromDocument(fragmentSpreadsToRemove, modifiedDoc);
+  }
+
+  return modifiedDoc;
+}
+
+function addTypenameToDocument(doc) {
+  return (0, _visitor.visit)(checkDocument(doc), {
+    SelectionSet: {
+      enter: function (node, _key, parent) {
+        if (parent && parent.kind === 'OperationDefinition') {
+          return;
+        }
+
+        var selections = node.selections;
+
+        if (!selections) {
+          return;
+        }
+
+        var skip = selections.some(function (selection) {
+          return isField(selection) && (selection.name.value === '__typename' || selection.name.value.lastIndexOf('__', 0) === 0);
+        });
+
+        if (skip) {
+          return;
+        }
+
+        var field = parent;
+
+        if (isField(field) && field.directives && field.directives.some(function (d) {
+          return d.name.value === 'export';
+        })) {
+          return;
+        }
+
+        return (0, _tslib.__assign)((0, _tslib.__assign)({}, node), {
+          selections: (0, _tslib.__spreadArrays)(selections, [TYPENAME_FIELD])
+        });
+      }
+    }
+  });
+}
+
+var connectionRemoveConfig = {
+  test: function (directive) {
+    var willRemove = directive.name.value === 'connection';
+
+    if (willRemove) {
+      if (!directive.arguments || !directive.arguments.some(function (arg) {
+        return arg.name.value === 'key';
+      })) {
+        "development" === "production" || _tsInvariant.invariant.warn('Removing an @connection directive even though it does not have a key. ' + 'You may want to use the key parameter to specify a store key.');
+      }
+    }
+
+    return willRemove;
+  }
+};
+
+function removeConnectionDirectiveFromDocument(doc) {
+  return removeDirectivesFromDocument([connectionRemoveConfig], checkDocument(doc));
+}
+
+function hasDirectivesInSelectionSet(directives, selectionSet, nestedCheck) {
+  if (nestedCheck === void 0) {
+    nestedCheck = true;
+  }
+
+  return selectionSet && selectionSet.selections && selectionSet.selections.some(function (selection) {
+    return hasDirectivesInSelection(directives, selection, nestedCheck);
+  });
+}
+
+function hasDirectivesInSelection(directives, selection, nestedCheck) {
+  if (nestedCheck === void 0) {
+    nestedCheck = true;
+  }
+
+  if (!isField(selection)) {
+    return true;
+  }
+
+  if (!selection.directives) {
+    return false;
+  }
+
+  return selection.directives.some(getDirectiveMatcher(directives)) || nestedCheck && hasDirectivesInSelectionSet(directives, selection.selectionSet, nestedCheck);
+}
+
+function getDirectivesFromDocument(directives, doc) {
+  checkDocument(doc);
+  var parentPath;
+  return nullIfDocIsEmpty((0, _visitor.visit)(doc, {
+    SelectionSet: {
+      enter: function (node, _key, _parent, path) {
+        var currentPath = path.join('-');
+
+        if (!parentPath || currentPath === parentPath || !currentPath.startsWith(parentPath)) {
+          if (node.selections) {
+            var selectionsWithDirectives = node.selections.filter(function (selection) {
+              return hasDirectivesInSelection(directives, selection);
+            });
+
+            if (hasDirectivesInSelectionSet(directives, node, false)) {
+              parentPath = currentPath;
+            }
+
+            return (0, _tslib.__assign)((0, _tslib.__assign)({}, node), {
+              selections: selectionsWithDirectives
+            });
+          } else {
+            return null;
+          }
+        }
+      }
+    }
+  }));
+}
+
+function getArgumentMatcher(config) {
+  return function argumentMatcher(argument) {
+    return config.some(function (aConfig) {
+      return argument.value && argument.value.kind === 'Variable' && argument.value.name && (aConfig.name === argument.value.name.value || aConfig.test && aConfig.test(argument));
+    });
+  };
+}
+
+function removeArgumentsFromDocument(config, doc) {
+  var argMatcher = getArgumentMatcher(config);
+  return nullIfDocIsEmpty((0, _visitor.visit)(doc, {
+    OperationDefinition: {
+      enter: function (node) {
+        return (0, _tslib.__assign)((0, _tslib.__assign)({}, node), {
+          variableDefinitions: node.variableDefinitions.filter(function (varDef) {
+            return !config.some(function (arg) {
+              return arg.name === varDef.variable.name.value;
+            });
+          })
+        });
+      }
+    },
+    Field: {
+      enter: function (node) {
+        var shouldRemoveField = config.some(function (argConfig) {
+          return argConfig.remove;
+        });
+
+        if (shouldRemoveField) {
+          var argMatchCount_1 = 0;
+          node.arguments.forEach(function (arg) {
+            if (argMatcher(arg)) {
+              argMatchCount_1 += 1;
+            }
+          });
+
+          if (argMatchCount_1 === 1) {
+            return null;
+          }
+        }
+      }
+    },
+    Argument: {
+      enter: function (node) {
+        if (argMatcher(node)) {
+          return null;
+        }
+      }
+    }
+  }));
+}
+
+function removeFragmentSpreadFromDocument(config, doc) {
+  function enter(node) {
+    if (config.some(function (def) {
+      return def.name === node.name.value;
+    })) {
+      return null;
+    }
+  }
+
+  return nullIfDocIsEmpty((0, _visitor.visit)(doc, {
+    FragmentSpread: {
+      enter: enter
+    },
+    FragmentDefinition: {
+      enter: enter
+    }
+  }));
+}
+
+function getAllFragmentSpreadsFromSelectionSet(selectionSet) {
+  var allFragments = [];
+  selectionSet.selections.forEach(function (selection) {
+    if ((isField(selection) || isInlineFragment(selection)) && selection.selectionSet) {
+      getAllFragmentSpreadsFromSelectionSet(selection.selectionSet).forEach(function (frag) {
+        return allFragments.push(frag);
+      });
+    } else if (selection.kind === 'FragmentSpread') {
+      allFragments.push(selection);
+    }
+  });
+  return allFragments;
+}
+
+function buildQueryFromSelectionSet(document) {
+  var definition = getMainDefinition(document);
+  var definitionOperation = definition.operation;
+
+  if (definitionOperation === 'query') {
+    return document;
+  }
+
+  var modifiedDoc = (0, _visitor.visit)(document, {
+    OperationDefinition: {
+      enter: function (node) {
+        return (0, _tslib.__assign)((0, _tslib.__assign)({}, node), {
+          operation: 'query'
+        });
+      }
+    }
+  });
+  return modifiedDoc;
+}
+
+function removeClientSetsFromDocument(document) {
+  checkDocument(document);
+  var modifiedDoc = removeDirectivesFromDocument([{
+    test: function (directive) {
+      return directive.name.value === 'client';
+    },
+    remove: true
+  }], document);
+
+  if (modifiedDoc) {
+    modifiedDoc = (0, _visitor.visit)(modifiedDoc, {
+      FragmentDefinition: {
+        enter: function (node) {
+          if (node.selectionSet) {
+            var isTypenameOnly = node.selectionSet.selections.every(function (selection) {
+              return isField(selection) && selection.name.value === '__typename';
+            });
+
+            if (isTypenameOnly) {
+              return null;
+            }
+          }
+        }
+      }
+    });
+  }
+
+  return modifiedDoc;
+}
+
+var canUseWeakMap = typeof WeakMap === 'function' && !(typeof navigator === 'object' && navigator.product === 'ReactNative');
+exports.canUseWeakMap = canUseWeakMap;
+var toString = Object.prototype.toString;
+
+function cloneDeep(value) {
+  return cloneDeepHelper(value, new Map());
+}
+
+function cloneDeepHelper(val, seen) {
+  switch (toString.call(val)) {
+    case "[object Array]":
+      {
+        if (seen.has(val)) return seen.get(val);
+        var copy_1 = val.slice(0);
+        seen.set(val, copy_1);
+        copy_1.forEach(function (child, i) {
+          copy_1[i] = cloneDeepHelper(child, seen);
+        });
+        return copy_1;
+      }
+
+    case "[object Object]":
+      {
+        if (seen.has(val)) return seen.get(val);
+        var copy_2 = Object.create(Object.getPrototypeOf(val));
+        seen.set(val, copy_2);
+        Object.keys(val).forEach(function (key) {
+          copy_2[key] = cloneDeepHelper(val[key], seen);
+        });
+        return copy_2;
+      }
+
+    default:
+      return val;
+  }
+}
+
+function getEnv() {
+  if (typeof process !== 'undefined' && "development") {
+    return "development";
+  }
+
+  return 'development';
+}
+
+function isEnv(env) {
+  return getEnv() === env;
+}
+
+function isProduction() {
+  return isEnv('production') === true;
+}
+
+function isDevelopment() {
+  return isEnv('development') === true;
+}
+
+function isTest() {
+  return isEnv('test') === true;
+}
+
+function tryFunctionOrLogError(f) {
+  try {
+    return f();
+  } catch (e) {
+    if (console.error) {
+      console.error(e);
+    }
+  }
+}
+
+function graphQLResultHasError(result) {
+  return result.errors && result.errors.length;
+}
+
+function deepFreeze(o) {
+  Object.freeze(o);
+  Object.getOwnPropertyNames(o).forEach(function (prop) {
+    if (o[prop] !== null && (typeof o[prop] === 'object' || typeof o[prop] === 'function') && !Object.isFrozen(o[prop])) {
+      deepFreeze(o[prop]);
+    }
+  });
+  return o;
+}
+
+function maybeDeepFreeze(obj) {
+  if (isDevelopment() || isTest()) {
+    var symbolIsPolyfilled = typeof Symbol === 'function' && typeof Symbol('') === 'string';
+
+    if (!symbolIsPolyfilled) {
+      return deepFreeze(obj);
+    }
+  }
+
+  return obj;
+}
+
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+
+function mergeDeep() {
+  var sources = [];
+
+  for (var _i = 0; _i < arguments.length; _i++) {
+    sources[_i] = arguments[_i];
+  }
+
+  return mergeDeepArray(sources);
+}
+
+function mergeDeepArray(sources) {
+  var target = sources[0] || {};
+  var count = sources.length;
+
+  if (count > 1) {
+    var pastCopies = [];
+    target = shallowCopyForMerge(target, pastCopies);
+
+    for (var i = 1; i < count; ++i) {
+      target = mergeHelper(target, sources[i], pastCopies);
+    }
+  }
+
+  return target;
+}
+
+function isObject(obj) {
+  return obj !== null && typeof obj === 'object';
+}
+
+function mergeHelper(target, source, pastCopies) {
+  if (isObject(source) && isObject(target)) {
+    if (Object.isExtensible && !Object.isExtensible(target)) {
+      target = shallowCopyForMerge(target, pastCopies);
+    }
+
+    Object.keys(source).forEach(function (sourceKey) {
+      var sourceValue = source[sourceKey];
+
+      if (hasOwnProperty.call(target, sourceKey)) {
+        var targetValue = target[sourceKey];
+
+        if (sourceValue !== targetValue) {
+          target[sourceKey] = mergeHelper(shallowCopyForMerge(targetValue, pastCopies), sourceValue, pastCopies);
+        }
+      } else {
+        target[sourceKey] = sourceValue;
+      }
+    });
+    return target;
+  }
+
+  return source;
+}
+
+function shallowCopyForMerge(value, pastCopies) {
+  if (value !== null && typeof value === 'object' && pastCopies.indexOf(value) < 0) {
+    if (Array.isArray(value)) {
+      value = value.slice(0);
+    } else {
+      value = (0, _tslib.__assign)({
+        __proto__: Object.getPrototypeOf(value)
+      }, value);
+    }
+
+    pastCopies.push(value);
+  }
+
+  return value;
+}
+
+var haveWarned = Object.create({});
+
+function warnOnceInDevelopment(msg, type) {
+  if (type === void 0) {
+    type = 'warn';
+  }
+
+  if (!isProduction() && !haveWarned[msg]) {
+    if (!isTest()) {
+      haveWarned[msg] = true;
+    }
+
+    if (type === 'error') {
+      console.error(msg);
+    } else {
+      console.warn(msg);
+    }
+  }
+}
+
+function stripSymbols(data) {
+  return JSON.parse(JSON.stringify(data));
+}
+},{"graphql/language/visitor":"../node_modules/graphql/language/visitor.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","tslib":"../node_modules/tslib/tslib.es6.js","fast-json-stable-stringify":"../node_modules/fast-json-stable-stringify/index.js","@wry/equality":"../node_modules/@wry/equality/lib/equality.esm.js","process":"../node_modules/process/browser.js"}],"../node_modules/apollo-link/lib/bundle.esm.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.createOperation = createOperation;
+exports.empty = empty;
+exports.execute = execute;
+exports.from = from;
+exports.fromError = fromError;
+exports.fromPromise = fromPromise;
+exports.split = split;
+exports.toPromise = toPromise;
+Object.defineProperty(exports, "Observable", {
+  enumerable: true,
+  get: function () {
+    return _zenObservableTs.default;
+  }
+});
+Object.defineProperty(exports, "getOperationName", {
+  enumerable: true,
+  get: function () {
+    return _apolloUtilities.getOperationName;
+  }
+});
+exports.makePromise = exports.concat = exports.ApolloLink = void 0;
+
+var _zenObservableTs = _interopRequireDefault(require("zen-observable-ts"));
+
+var _tsInvariant = require("ts-invariant");
+
+var _tslib = require("tslib");
+
+var _apolloUtilities = require("apollo-utilities");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function validateOperation(operation) {
+  var OPERATION_FIELDS = ['query', 'operationName', 'variables', 'extensions', 'context'];
+
+  for (var _i = 0, _a = Object.keys(operation); _i < _a.length; _i++) {
+    var key = _a[_i];
+
+    if (OPERATION_FIELDS.indexOf(key) < 0) {
+      throw "development" === "production" ? new _tsInvariant.InvariantError(2) : new _tsInvariant.InvariantError("illegal argument: " + key);
+    }
+  }
+
+  return operation;
+}
+
+var LinkError = function (_super) {
+  (0, _tslib.__extends)(LinkError, _super);
+
+  function LinkError(message, link) {
+    var _this = _super.call(this, message) || this;
+
+    _this.link = link;
+    return _this;
+  }
+
+  return LinkError;
+}(Error);
+
+function isTerminating(link) {
+  return link.request.length <= 1;
+}
+
+function toPromise(observable) {
+  var completed = false;
+  return new Promise(function (resolve, reject) {
+    observable.subscribe({
+      next: function (data) {
+        if (completed) {
+          "development" === "production" || _tsInvariant.invariant.warn("Promise Wrapper does not support multiple results from Observable");
+        } else {
+          completed = true;
+          resolve(data);
+        }
+      },
+      error: reject
+    });
+  });
+}
+
+var makePromise = toPromise;
+exports.makePromise = makePromise;
+
+function fromPromise(promise) {
+  return new _zenObservableTs.default(function (observer) {
+    promise.then(function (value) {
+      observer.next(value);
+      observer.complete();
+    }).catch(observer.error.bind(observer));
+  });
+}
+
+function fromError(errorValue) {
+  return new _zenObservableTs.default(function (observer) {
+    observer.error(errorValue);
+  });
+}
+
+function transformOperation(operation) {
+  var transformedOperation = {
+    variables: operation.variables || {},
+    extensions: operation.extensions || {},
+    operationName: operation.operationName,
+    query: operation.query
+  };
+
+  if (!transformedOperation.operationName) {
+    transformedOperation.operationName = typeof transformedOperation.query !== 'string' ? (0, _apolloUtilities.getOperationName)(transformedOperation.query) : '';
+  }
+
+  return transformedOperation;
+}
+
+function createOperation(starting, operation) {
+  var context = (0, _tslib.__assign)({}, starting);
+
+  var setContext = function (next) {
+    if (typeof next === 'function') {
+      context = (0, _tslib.__assign)({}, context, next(context));
+    } else {
+      context = (0, _tslib.__assign)({}, context, next);
+    }
+  };
+
+  var getContext = function () {
+    return (0, _tslib.__assign)({}, context);
+  };
+
+  Object.defineProperty(operation, 'setContext', {
+    enumerable: false,
+    value: setContext
+  });
+  Object.defineProperty(operation, 'getContext', {
+    enumerable: false,
+    value: getContext
+  });
+  Object.defineProperty(operation, 'toKey', {
+    enumerable: false,
+    value: function () {
+      return getKey(operation);
+    }
+  });
+  return operation;
+}
+
+function getKey(operation) {
+  var query = operation.query,
+      variables = operation.variables,
+      operationName = operation.operationName;
+  return JSON.stringify([operationName, query, variables]);
+}
+
+function passthrough(op, forward) {
+  return forward ? forward(op) : _zenObservableTs.default.of();
+}
+
+function toLink(handler) {
+  return typeof handler === 'function' ? new ApolloLink(handler) : handler;
+}
+
+function empty() {
+  return new ApolloLink(function () {
+    return _zenObservableTs.default.of();
+  });
+}
+
+function from(links) {
+  if (links.length === 0) return empty();
+  return links.map(toLink).reduce(function (x, y) {
+    return x.concat(y);
+  });
+}
+
+function split(test, left, right) {
+  var leftLink = toLink(left);
+  var rightLink = toLink(right || new ApolloLink(passthrough));
+
+  if (isTerminating(leftLink) && isTerminating(rightLink)) {
+    return new ApolloLink(function (operation) {
+      return test(operation) ? leftLink.request(operation) || _zenObservableTs.default.of() : rightLink.request(operation) || _zenObservableTs.default.of();
+    });
+  } else {
+    return new ApolloLink(function (operation, forward) {
+      return test(operation) ? leftLink.request(operation, forward) || _zenObservableTs.default.of() : rightLink.request(operation, forward) || _zenObservableTs.default.of();
+    });
+  }
+}
+
+var concat = function (first, second) {
+  var firstLink = toLink(first);
+
+  if (isTerminating(firstLink)) {
+    "development" === "production" || _tsInvariant.invariant.warn(new LinkError("You are calling concat on a terminating link, which will have no effect", firstLink));
+    return firstLink;
+  }
+
+  var nextLink = toLink(second);
+
+  if (isTerminating(nextLink)) {
+    return new ApolloLink(function (operation) {
+      return firstLink.request(operation, function (op) {
+        return nextLink.request(op) || _zenObservableTs.default.of();
+      }) || _zenObservableTs.default.of();
+    });
+  } else {
+    return new ApolloLink(function (operation, forward) {
+      return firstLink.request(operation, function (op) {
+        return nextLink.request(op, forward) || _zenObservableTs.default.of();
+      }) || _zenObservableTs.default.of();
+    });
+  }
+};
+
+exports.concat = concat;
+
+var ApolloLink = function () {
+  function ApolloLink(request) {
+    if (request) this.request = request;
+  }
+
+  ApolloLink.prototype.split = function (test, left, right) {
+    return this.concat(split(test, left, right || new ApolloLink(passthrough)));
+  };
+
+  ApolloLink.prototype.concat = function (next) {
+    return concat(this, next);
+  };
+
+  ApolloLink.prototype.request = function (operation, forward) {
+    throw "development" === "production" ? new _tsInvariant.InvariantError(1) : new _tsInvariant.InvariantError('request is not implemented');
+  };
+
+  ApolloLink.empty = empty;
+  ApolloLink.from = from;
+  ApolloLink.split = split;
+  ApolloLink.execute = execute;
+  return ApolloLink;
+}();
+
+exports.ApolloLink = ApolloLink;
+
+function execute(link, operation) {
+  return link.request(createOperation(operation.context, transformOperation(validateOperation(operation)))) || _zenObservableTs.default.of();
+}
+},{"zen-observable-ts":"../node_modules/zen-observable-ts/lib/bundle.esm.js","ts-invariant":"../node_modules/ts-invariant/lib/invariant.esm.js","tslib":"../node_modules/tslib/tslib.es6.js","apollo-utilities":"../node_modules/apollo-utilities/lib/bundle.esm.js"}],"../node_modules/apollo-link-context/lib/bundle.esm.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.setContext = setContext;
+
+var _tslib = require("tslib");
+
+var _apolloLink = require("apollo-link");
+
+function setContext(setter) {
+  return new _apolloLink.ApolloLink(function (operation, forward) {
+    var request = (0, _tslib.__rest)(operation, []);
+    return new _apolloLink.Observable(function (observer) {
+      var handle;
+      Promise.resolve(request).then(function (req) {
+        return setter(req, operation.getContext());
+      }).then(operation.setContext).then(function () {
+        handle = forward(operation).subscribe({
+          next: observer.next.bind(observer),
+          error: observer.error.bind(observer),
+          complete: observer.complete.bind(observer)
+        });
+      }).catch(observer.error.bind(observer));
+      return function () {
+        if (handle) handle.unsubscribe();
+      };
+    });
+  });
+}
+},{"tslib":"../node_modules/tslib/tslib.es6.js","apollo-link":"../node_modules/apollo-link/lib/bundle.esm.js"}],"../node_modules/stylis/stylis.min.js":[function(require,module,exports) {
 var define;
 !function(e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e(null):"function"==typeof define&&define.amd?define(e(null)):window.stylis=e(null)}(function e(a){"use strict";var r=/^\0+/g,c=/[\0\r\f]/g,s=/: */g,t=/zoo|gra/,i=/([,: ])(transform)/g,f=/,+\s*(?![^(]*[)])/g,n=/ +\s*(?![^(]*[)])/g,l=/ *[\0] */g,o=/,\r+?/g,h=/([\t\r\n ])*\f?&/g,u=/:global\(((?:[^\(\)\[\]]*|\[.*\]|\([^\(\)]*\))*)\)/g,d=/\W+/g,b=/@(k\w+)\s*(\S*)\s*/,p=/::(place)/g,k=/:(read-only)/g,g=/\s+(?=[{\];=:>])/g,A=/([[}=:>])\s+/g,C=/(\{[^{]+?);(?=\})/g,w=/\s{2,}/g,v=/([^\(])(:+) */g,m=/[svh]\w+-[tblr]{2}/,x=/\(\s*(.*)\s*\)/g,$=/([\s\S]*?);/g,y=/-self|flex-/g,O=/[^]*?(:[rp][el]a[\w-]+)[^]*/,j=/stretch|:\s*\w+\-(?:conte|avail)/,z=/([^-])(image-set\()/,N="-webkit-",S="-moz-",F="-ms-",W=59,q=125,B=123,D=40,E=41,G=91,H=93,I=10,J=13,K=9,L=64,M=32,P=38,Q=45,R=95,T=42,U=44,V=58,X=39,Y=34,Z=47,_=62,ee=43,ae=126,re=0,ce=12,se=11,te=107,ie=109,fe=115,ne=112,le=111,oe=105,he=99,ue=100,de=112,be=1,pe=1,ke=0,ge=1,Ae=1,Ce=1,we=0,ve=0,me=0,xe=[],$e=[],ye=0,Oe=null,je=-2,ze=-1,Ne=0,Se=1,Fe=2,We=3,qe=0,Be=1,De="",Ee="",Ge="";function He(e,a,s,t,i){for(var f,n,o=0,h=0,u=0,d=0,g=0,A=0,C=0,w=0,m=0,$=0,y=0,O=0,j=0,z=0,R=0,we=0,$e=0,Oe=0,je=0,ze=s.length,Je=ze-1,Re="",Te="",Ue="",Ve="",Xe="",Ye="";R<ze;){if(C=s.charCodeAt(R),R===Je)if(h+d+u+o!==0){if(0!==h)C=h===Z?I:Z;d=u=o=0,ze++,Je++}if(h+d+u+o===0){if(R===Je){if(we>0)Te=Te.replace(c,"");if(Te.trim().length>0){switch(C){case M:case K:case W:case J:case I:break;default:Te+=s.charAt(R)}C=W}}if(1===$e)switch(C){case B:case q:case W:case Y:case X:case D:case E:case U:$e=0;case K:case J:case I:case M:break;default:for($e=0,je=R,g=C,R--,C=W;je<ze;)switch(s.charCodeAt(je++)){case I:case J:case W:++R,C=g,je=ze;break;case V:if(we>0)++R,C=g;case B:je=ze}}switch(C){case B:for(g=(Te=Te.trim()).charCodeAt(0),y=1,je=++R;R<ze;){switch(C=s.charCodeAt(R)){case B:y++;break;case q:y--;break;case Z:switch(A=s.charCodeAt(R+1)){case T:case Z:R=Qe(A,R,Je,s)}break;case G:C++;case D:C++;case Y:case X:for(;R++<Je&&s.charCodeAt(R)!==C;);}if(0===y)break;R++}if(Ue=s.substring(je,R),g===re)g=(Te=Te.replace(r,"").trim()).charCodeAt(0);switch(g){case L:if(we>0)Te=Te.replace(c,"");switch(A=Te.charCodeAt(1)){case ue:case ie:case fe:case Q:f=a;break;default:f=xe}if(je=(Ue=He(a,f,Ue,A,i+1)).length,me>0&&0===je)je=Te.length;if(ye>0)if(f=Ie(xe,Te,Oe),n=Pe(We,Ue,f,a,pe,be,je,A,i,t),Te=f.join(""),void 0!==n)if(0===(je=(Ue=n.trim()).length))A=0,Ue="";if(je>0)switch(A){case fe:Te=Te.replace(x,Me);case ue:case ie:case Q:Ue=Te+"{"+Ue+"}";break;case te:if(Ue=(Te=Te.replace(b,"$1 $2"+(Be>0?De:"")))+"{"+Ue+"}",1===Ae||2===Ae&&Le("@"+Ue,3))Ue="@"+N+Ue+"@"+Ue;else Ue="@"+Ue;break;default:if(Ue=Te+Ue,t===de)Ve+=Ue,Ue=""}else Ue="";break;default:Ue=He(a,Ie(a,Te,Oe),Ue,t,i+1)}Xe+=Ue,O=0,$e=0,z=0,we=0,Oe=0,j=0,Te="",Ue="",C=s.charCodeAt(++R);break;case q:case W:if((je=(Te=(we>0?Te.replace(c,""):Te).trim()).length)>1){if(0===z)if((g=Te.charCodeAt(0))===Q||g>96&&g<123)je=(Te=Te.replace(" ",":")).length;if(ye>0)if(void 0!==(n=Pe(Se,Te,a,e,pe,be,Ve.length,t,i,t)))if(0===(je=(Te=n.trim()).length))Te="\0\0";switch(g=Te.charCodeAt(0),A=Te.charCodeAt(1),g){case re:break;case L:if(A===oe||A===he){Ye+=Te+s.charAt(R);break}default:if(Te.charCodeAt(je-1)===V)break;Ve+=Ke(Te,g,A,Te.charCodeAt(2))}}O=0,$e=0,z=0,we=0,Oe=0,Te="",C=s.charCodeAt(++R)}}switch(C){case J:case I:if(h+d+u+o+ve===0)switch($){case E:case X:case Y:case L:case ae:case _:case T:case ee:case Z:case Q:case V:case U:case W:case B:case q:break;default:if(z>0)$e=1}if(h===Z)h=0;else if(ge+O===0&&t!==te&&Te.length>0)we=1,Te+="\0";if(ye*qe>0)Pe(Ne,Te,a,e,pe,be,Ve.length,t,i,t);be=1,pe++;break;case W:case q:if(h+d+u+o===0){be++;break}default:switch(be++,Re=s.charAt(R),C){case K:case M:if(d+o+h===0)switch(w){case U:case V:case K:case M:Re="";break;default:if(C!==M)Re=" "}break;case re:Re="\\0";break;case ce:Re="\\f";break;case se:Re="\\v";break;case P:if(d+h+o===0&&ge>0)Oe=1,we=1,Re="\f"+Re;break;case 108:if(d+h+o+ke===0&&z>0)switch(R-z){case 2:if(w===ne&&s.charCodeAt(R-3)===V)ke=w;case 8:if(m===le)ke=m}break;case V:if(d+h+o===0)z=R;break;case U:if(h+u+d+o===0)we=1,Re+="\r";break;case Y:case X:if(0===h)d=d===C?0:0===d?C:d;break;case G:if(d+h+u===0)o++;break;case H:if(d+h+u===0)o--;break;case E:if(d+h+o===0)u--;break;case D:if(d+h+o===0){if(0===O)switch(2*w+3*m){case 533:break;default:y=0,O=1}u++}break;case L:if(h+u+d+o+z+j===0)j=1;break;case T:case Z:if(d+o+u>0)break;switch(h){case 0:switch(2*C+3*s.charCodeAt(R+1)){case 235:h=Z;break;case 220:je=R,h=T}break;case T:if(C===Z&&w===T&&je+2!==R){if(33===s.charCodeAt(je+2))Ve+=s.substring(je,R+1);Re="",h=0}}}if(0===h){if(ge+d+o+j===0&&t!==te&&C!==W)switch(C){case U:case ae:case _:case ee:case E:case D:if(0===O){switch(w){case K:case M:case I:case J:Re+="\0";break;default:Re="\0"+Re+(C===U?"":"\0")}we=1}else switch(C){case D:if(z+7===R&&108===w)z=0;O=++y;break;case E:if(0==(O=--y))we=1,Re+="\0"}break;case K:case M:switch(w){case re:case B:case q:case W:case U:case ce:case K:case M:case I:case J:break;default:if(0===O)we=1,Re+="\0"}}if(Te+=Re,C!==M&&C!==K)$=C}}m=w,w=C,R++}if(je=Ve.length,me>0)if(0===je&&0===Xe.length&&0===a[0].length==false)if(t!==ie||1===a.length&&(ge>0?Ee:Ge)===a[0])je=a.join(",").length+2;if(je>0){if(f=0===ge&&t!==te?function(e){for(var a,r,s=0,t=e.length,i=Array(t);s<t;++s){for(var f=e[s].split(l),n="",o=0,h=0,u=0,d=0,b=f.length;o<b;++o){if(0===(h=(r=f[o]).length)&&b>1)continue;if(u=n.charCodeAt(n.length-1),d=r.charCodeAt(0),a="",0!==o)switch(u){case T:case ae:case _:case ee:case M:case D:break;default:a=" "}switch(d){case P:r=a+Ee;case ae:case _:case ee:case M:case E:case D:break;case G:r=a+r+Ee;break;case V:switch(2*r.charCodeAt(1)+3*r.charCodeAt(2)){case 530:if(Ce>0){r=a+r.substring(8,h-1);break}default:if(o<1||f[o-1].length<1)r=a+Ee+r}break;case U:a="";default:if(h>1&&r.indexOf(":")>0)r=a+r.replace(v,"$1"+Ee+"$2");else r=a+r+Ee}n+=r}i[s]=n.replace(c,"").trim()}return i}(a):a,ye>0)if(void 0!==(n=Pe(Fe,Ve,f,e,pe,be,je,t,i,t))&&0===(Ve=n).length)return Ye+Ve+Xe;if(Ve=f.join(",")+"{"+Ve+"}",Ae*ke!=0){if(2===Ae&&!Le(Ve,2))ke=0;switch(ke){case le:Ve=Ve.replace(k,":"+S+"$1")+Ve;break;case ne:Ve=Ve.replace(p,"::"+N+"input-$1")+Ve.replace(p,"::"+S+"$1")+Ve.replace(p,":"+F+"input-$1")+Ve}ke=0}}return Ye+Ve+Xe}function Ie(e,a,r){var c=a.trim().split(o),s=c,t=c.length,i=e.length;switch(i){case 0:case 1:for(var f=0,n=0===i?"":e[0]+" ";f<t;++f)s[f]=Je(n,s[f],r,i).trim();break;default:f=0;var l=0;for(s=[];f<t;++f)for(var h=0;h<i;++h)s[l++]=Je(e[h]+" ",c[f],r,i).trim()}return s}function Je(e,a,r,c){var s=a,t=s.charCodeAt(0);if(t<33)t=(s=s.trim()).charCodeAt(0);switch(t){case P:switch(ge+c){case 0:case 1:if(0===e.trim().length)break;default:return s.replace(h,"$1"+e.trim())}break;case V:switch(s.charCodeAt(1)){case 103:if(Ce>0&&ge>0)return s.replace(u,"$1").replace(h,"$1"+Ge);break;default:return e.trim()+s.replace(h,"$1"+e.trim())}default:if(r*ge>0&&s.indexOf("\f")>0)return s.replace(h,(e.charCodeAt(0)===V?"":"$1")+e.trim())}return e+s}function Ke(e,a,r,c){var l,o=0,h=e+";",u=2*a+3*r+4*c;if(944===u)return function(e){var a=e.length,r=e.indexOf(":",9)+1,c=e.substring(0,r).trim(),s=e.substring(r,a-1).trim();switch(e.charCodeAt(9)*Be){case 0:break;case Q:if(110!==e.charCodeAt(10))break;default:for(var t=s.split((s="",f)),i=0,r=0,a=t.length;i<a;r=0,++i){for(var l=t[i],o=l.split(n);l=o[r];){var h=l.charCodeAt(0);if(1===Be&&(h>L&&h<90||h>96&&h<123||h===R||h===Q&&l.charCodeAt(1)!==Q))switch(isNaN(parseFloat(l))+(-1!==l.indexOf("("))){case 1:switch(l){case"infinite":case"alternate":case"backwards":case"running":case"normal":case"forwards":case"both":case"none":case"linear":case"ease":case"ease-in":case"ease-out":case"ease-in-out":case"paused":case"reverse":case"alternate-reverse":case"inherit":case"initial":case"unset":case"step-start":case"step-end":break;default:l+=De}}o[r++]=l}s+=(0===i?"":",")+o.join(" ")}}if(s=c+s+";",1===Ae||2===Ae&&Le(s,1))return N+s+s;return s}(h);else if(0===Ae||2===Ae&&!Le(h,1))return h;switch(u){case 1015:return 97===h.charCodeAt(10)?N+h+h:h;case 951:return 116===h.charCodeAt(3)?N+h+h:h;case 963:return 110===h.charCodeAt(5)?N+h+h:h;case 1009:if(100!==h.charCodeAt(4))break;case 969:case 942:return N+h+h;case 978:return N+h+S+h+h;case 1019:case 983:return N+h+S+h+F+h+h;case 883:if(h.charCodeAt(8)===Q)return N+h+h;if(h.indexOf("image-set(",11)>0)return h.replace(z,"$1"+N+"$2")+h;return h;case 932:if(h.charCodeAt(4)===Q)switch(h.charCodeAt(5)){case 103:return N+"box-"+h.replace("-grow","")+N+h+F+h.replace("grow","positive")+h;case 115:return N+h+F+h.replace("shrink","negative")+h;case 98:return N+h+F+h.replace("basis","preferred-size")+h}return N+h+F+h+h;case 964:return N+h+F+"flex-"+h+h;case 1023:if(99!==h.charCodeAt(8))break;return l=h.substring(h.indexOf(":",15)).replace("flex-","").replace("space-between","justify"),N+"box-pack"+l+N+h+F+"flex-pack"+l+h;case 1005:return t.test(h)?h.replace(s,":"+N)+h.replace(s,":"+S)+h:h;case 1e3:switch(o=(l=h.substring(13).trim()).indexOf("-")+1,l.charCodeAt(0)+l.charCodeAt(o)){case 226:l=h.replace(m,"tb");break;case 232:l=h.replace(m,"tb-rl");break;case 220:l=h.replace(m,"lr");break;default:return h}return N+h+F+l+h;case 1017:if(-1===h.indexOf("sticky",9))return h;case 975:switch(o=(h=e).length-10,u=(l=(33===h.charCodeAt(o)?h.substring(0,o):h).substring(e.indexOf(":",7)+1).trim()).charCodeAt(0)+(0|l.charCodeAt(7))){case 203:if(l.charCodeAt(8)<111)break;case 115:h=h.replace(l,N+l)+";"+h;break;case 207:case 102:h=h.replace(l,N+(u>102?"inline-":"")+"box")+";"+h.replace(l,N+l)+";"+h.replace(l,F+l+"box")+";"+h}return h+";";case 938:if(h.charCodeAt(5)===Q)switch(h.charCodeAt(6)){case 105:return l=h.replace("-items",""),N+h+N+"box-"+l+F+"flex-"+l+h;case 115:return N+h+F+"flex-item-"+h.replace(y,"")+h;default:return N+h+F+"flex-line-pack"+h.replace("align-content","").replace(y,"")+h}break;case 973:case 989:if(h.charCodeAt(3)!==Q||122===h.charCodeAt(4))break;case 931:case 953:if(true===j.test(e))if(115===(l=e.substring(e.indexOf(":")+1)).charCodeAt(0))return Ke(e.replace("stretch","fill-available"),a,r,c).replace(":fill-available",":stretch");else return h.replace(l,N+l)+h.replace(l,S+l.replace("fill-",""))+h;break;case 962:if(h=N+h+(102===h.charCodeAt(5)?F+h:"")+h,r+c===211&&105===h.charCodeAt(13)&&h.indexOf("transform",10)>0)return h.substring(0,h.indexOf(";",27)+1).replace(i,"$1"+N+"$2")+h}return h}function Le(e,a){var r=e.indexOf(1===a?":":"{"),c=e.substring(0,3!==a?r:10),s=e.substring(r+1,e.length-1);return Oe(2!==a?c:c.replace(O,"$1"),s,a)}function Me(e,a){var r=Ke(a,a.charCodeAt(0),a.charCodeAt(1),a.charCodeAt(2));return r!==a+";"?r.replace($," or ($1)").substring(4):"("+a+")"}function Pe(e,a,r,c,s,t,i,f,n,l){for(var o,h=0,u=a;h<ye;++h)switch(o=$e[h].call(Te,e,u,r,c,s,t,i,f,n,l)){case void 0:case false:case true:case null:break;default:u=o}if(u!==a)return u}function Qe(e,a,r,c){for(var s=a+1;s<r;++s)switch(c.charCodeAt(s)){case Z:if(e===T)if(c.charCodeAt(s-1)===T&&a+2!==s)return s+1;break;case I:if(e===Z)return s+1}return s}function Re(e){for(var a in e){var r=e[a];switch(a){case"keyframe":Be=0|r;break;case"global":Ce=0|r;break;case"cascade":ge=0|r;break;case"compress":we=0|r;break;case"semicolon":ve=0|r;break;case"preserve":me=0|r;break;case"prefix":if(Oe=null,!r)Ae=0;else if("function"!=typeof r)Ae=1;else Ae=2,Oe=r}}return Re}function Te(a,r){if(void 0!==this&&this.constructor===Te)return e(a);var s=a,t=s.charCodeAt(0);if(t<33)t=(s=s.trim()).charCodeAt(0);if(Be>0)De=s.replace(d,t===G?"":"-");if(t=1,1===ge)Ge=s;else Ee=s;var i,f=[Ge];if(ye>0)if(void 0!==(i=Pe(ze,r,f,f,pe,be,0,0,0,0))&&"string"==typeof i)r=i;var n=He(xe,f,r,0,0);if(ye>0)if(void 0!==(i=Pe(je,n,f,f,pe,be,n.length,0,0,0))&&"string"!=typeof(n=i))t=0;return De="",Ge="",Ee="",ke=0,pe=1,be=1,we*t==0?n:n.replace(c,"").replace(g,"").replace(A,"$1").replace(C,"$1").replace(w," ")}if(Te.use=function e(a){switch(a){case void 0:case null:ye=$e.length=0;break;default:if("function"==typeof a)$e[ye++]=a;else if("object"==typeof a)for(var r=0,c=a.length;r<c;++r)e(a[r]);else qe=0|!!a}return e},Te.set=Re,void 0!==a)Re(a);return Te});
 
@@ -53578,7 +55011,26 @@ if ("development" !== "production") {
 }
 },{"react-router":"../node_modules/react-router/esm/react-router.js","@babel/runtime/helpers/esm/inheritsLoose":"../node_modules/@babel/runtime/helpers/esm/inheritsLoose.js","react":"../node_modules/react/index.js","history":"../node_modules/history/esm/history.js","prop-types":"../node_modules/prop-types/index.js","tiny-warning":"../node_modules/tiny-warning/dist/tiny-warning.esm.js","@babel/runtime/helpers/esm/extends":"../node_modules/@babel/runtime/helpers/esm/extends.js","@babel/runtime/helpers/esm/objectWithoutPropertiesLoose":"../node_modules/@babel/runtime/helpers/esm/objectWithoutPropertiesLoose.js","tiny-invariant":"../node_modules/tiny-invariant/dist/tiny-invariant.esm.js"}],"img/logo.svg":[function(require,module,exports) {
 module.exports = "/logo.f1d8a4c6.svg";
-},{}],"components/Header.js":[function(require,module,exports) {
+},{}],"components/ButtonAsLink.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _styledComponents = _interopRequireDefault(require("styled-components"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var ButtonAsLink = _styledComponents.default.button.withConfig({
+  displayName: "ButtonAsLink",
+  componentId: "kkt2qh-0"
+})(["background;none;color:#0077cc;border:none;padding:0;font:inherit;text-decoration:underline;cursor:pointer;:hover,:active{color:#004499;}"]);
+
+var _default = ButtonAsLink;
+exports.default = _default;
+},{"styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js"}],"components/Header.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -53590,9 +55042,29 @@ var _react = _interopRequireDefault(require("react"));
 
 var _styledComponents = _interopRequireDefault(require("styled-components"));
 
+var _client = require("@apollo/client");
+
+var _reactRouterDom = require("react-router-dom");
+
 var _logo = _interopRequireDefault(require("../img/logo.svg"));
 
+var _ButtonAsLink = _interopRequireDefault(require("./ButtonAsLink"));
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _templateObject() {
+  var data = _taggedTemplateLiteral(["\n    {\n        isLoggedIn @client\n    }\n"]);
+
+  _templateObject = function _templateObject() {
+    return data;
+  };
+
+  return data;
+}
+
+function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
+
+var IS_LOGGED_IN = (0, _client.gql)(_templateObject());
 
 var HeaderBar = _styledComponents.default.header.withConfig({
   displayName: "Header__HeaderBar",
@@ -53604,17 +55076,42 @@ var LogoText = _styledComponents.default.h1.withConfig({
   componentId: "h5lhbt-1"
 })(["margin:0;padding:0;display:inline;"]);
 
+var UserState = _styledComponents.default.div.withConfig({
+  displayName: "Header__UserState",
+  componentId: "h5lhbt-2"
+})(["margin-left:auto;"]);
+
 var Header = function Header() {
+  var _useQuery = (0, _client.useQuery)(IS_LOGGED_IN),
+      data = _useQuery.data,
+      client = _useQuery.client;
+
   return _react.default.createElement(HeaderBar, null, _react.default.createElement("img", {
     src: _logo.default,
     alt: "Notedly Logo",
     height: "40"
-  }), _react.default.createElement(LogoText, null, "Notedly"));
+  }), _react.default.createElement(LogoText, null, "Notedly"), _react.default.createElement(UserState, null, data.isLoggedIn ? _react.default.createElement(_ButtonAsLink.default, {
+    onClick: function onClick() {
+      localStorage.removeItem('token');
+      client.resetStore();
+      client.writeData({
+        data: {
+          isLoggedIn: false
+        }
+      });
+      props.history.push('/');
+    }
+  }, "Logout") : _react.default.createElement("p", null, _react.default.createElement(_reactRouterDom.Link, {
+    to: '/signin'
+  }, "Sign In"), " or ", ' ', _react.default.createElement(_reactRouterDom.Link, {
+    to: '/signup'
+  }, "Sign Up"))));
 };
 
-var _default = Header;
+var _default = (0, _reactRouterDom.withRouter)(Header);
+
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js","../img/logo.svg":"img/logo.svg"}],"components/Navigation.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js","@apollo/client":"../node_modules/@apollo/client/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","../img/logo.svg":"img/logo.svg","./ButtonAsLink":"components/ButtonAsLink.js"}],"components/Navigation.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -68588,7 +70085,7 @@ var NotePage = function NotePage(props) {
 
 var _default = NotePage;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/Note":"components/Note.js"}],"pages/signup.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/Note":"components/Note.js"}],"components/UserForm.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -68599,8 +70096,6 @@ exports.default = void 0;
 var _react = _interopRequireWildcard(require("react"));
 
 var _styledComponents = _interopRequireDefault(require("styled-components"));
-
-var _client = require("@apollo/client");
 
 var _Button = _interopRequireDefault(require("../components/Button"));
 
@@ -68613,6 +70108,96 @@ function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return 
 function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
 
 function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _nonIterableRest(); }
+
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance"); }
+
+function _iterableToArrayLimit(arr, i) { if (!(Symbol.iterator in Object(arr) || Object.prototype.toString.call(arr) === "[object Arguments]")) { return; } var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"] != null) _i["return"](); } finally { if (_d) throw _e; } } return _arr; }
+
+function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
+
+var Wrapper = _styledComponents.default.div.withConfig({
+  displayName: "UserForm__Wrapper",
+  componentId: "sc-11q4a2m-0"
+})(["border:1px solid #f5f4f0;max-width:500px;padding:1em;margin:0 auto;"]);
+
+var Form = _styledComponents.default.form.withConfig({
+  displayName: "UserForm__Form",
+  componentId: "sc-11q4a2m-1"
+})(["label,input{display:block;line-height:2em;}input{width:100%;margin-bottom:1em;}"]);
+
+var UserForm = function UserForm(props) {
+  var _useState = (0, _react.useState)(),
+      _useState2 = _slicedToArray(_useState, 2),
+      values = _useState2[0],
+      setValues = _useState2[1];
+
+  var onChange = function onChange(event) {
+    setValues(_extends({}, values, _defineProperty({}, event.target.name, event.target.value)));
+  };
+
+  return _react.default.createElement(Wrapper, null, props.formType === 'signup' ? _react.default.createElement("h2", null, "Sign Up") : _react.default.createElement("h2", null, "Sign In"), _react.default.createElement(Form, {
+    onSubmit: function onSubmit(e) {
+      e.preventDefault();
+      props.action({
+        variables: _extends({}, values)
+      });
+      console.log(values);
+    }
+  }, props.formType === 'signup' && _react.default.createElement(_react.default.Fragment, null, _react.default.createElement("label", {
+    htmlFor: "username"
+  }, "Username:"), _react.default.createElement("input", {
+    required: true,
+    type: "text",
+    id: "username",
+    name: "username",
+    placeholder: "Username",
+    onChange: onChange
+  })), _react.default.createElement("label", {
+    htmlFor: "email"
+  }, "Email:"), _react.default.createElement("input", {
+    required: true,
+    type: "email",
+    id: "email",
+    name: "email",
+    placeholder: "Email",
+    onChange: onChange
+  }), _react.default.createElement("label", {
+    htmlFor: "password"
+  }, "Password:"), _react.default.createElement("input", {
+    required: true,
+    type: "password",
+    id: "password",
+    name: "password",
+    placeholder: "Password",
+    onChange: onChange
+  }), _react.default.createElement(_Button.default, {
+    type: "submit"
+  }, "Submit")));
+};
+
+var _default = UserForm;
+exports.default = _default;
+},{"react":"../node_modules/react/index.js","styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js","../components/Button":"components/Button.js"}],"pages/signup.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _react = _interopRequireWildcard(require("react"));
+
+var _client = require("@apollo/client");
+
+var _UserForm = _interopRequireDefault(require("../components/UserForm"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function () { return cache; }; return cache; }
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
 
 function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _nonIterableRest(); }
 
@@ -68636,26 +70221,23 @@ function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(
 
 var SIGNUP_USER = (0, _client.gql)(_templateObject());
 
-var Wrapper = _styledComponents.default.div.withConfig({
-  displayName: "signup__Wrapper",
-  componentId: "sc-1m69ctr-0"
-})(["border:1px solid #f5f4f0;max-width:500px;padding:1em;margin:0 auto;"]);
-
-var Form = _styledComponents.default.form.withConfig({
-  displayName: "signup__Form",
-  componentId: "sc-1m69ctr-1"
-})(["label,input{display:block;line-height:2em;}input{width:100%;margin-bottom:1em;}"]);
-
 var SignUp = function SignUp(props) {
-  var _useState = (0, _react.useState)(),
-      _useState2 = _slicedToArray(_useState, 2),
-      values = _useState2[0],
-      setValues = _useState2[1];
+  (0, _react.useEffect)(function () {
+    document.title = 'Sign Up - Notedly';
+  });
+  var client = (0, _client.useApolloClient)();
 
   var _useMutation = (0, _client.useMutation)(SIGNUP_USER, {
     onCompleted: function onCompleted(data) {
-      console.log('SignUp completed?');
       console.log(data.signUp);
+      localStorage.setItem('token', data.signUp); // JWT added to browser storage
+
+      client.writeData({
+        data: {
+          isLoggedIn: true
+        }
+      });
+      props.history.push('/');
     }
   }),
       _useMutation2 = _slicedToArray(_useMutation, 2),
@@ -68664,55 +70246,15 @@ var SignUp = function SignUp(props) {
       loading = _useMutation2$.loading,
       error = _useMutation2$.error;
 
-  var onChange = function onChange(event) {
-    setValues(_extends({}, values, _defineProperty({}, event.target.name, event.target.value)));
-  };
-
-  (0, _react.useEffect)(function () {
-    document.title = 'Sign Up - Notedly';
-  });
-  return _react.default.createElement(Wrapper, null, _react.default.createElement("h2", null, "Sign Up"), _react.default.createElement(Form, {
-    onSubmit: function onSubmit(event) {
-      event.preventDefault();
-      SignUp({
-        variables: _extends({}, values)
-      }); // console.log(values);
-    }
-  }, _react.default.createElement("label", {
-    htmlFor: "username"
-  }, "Username:"), _react.default.createElement("input", {
-    required: true,
-    type: "text",
-    id: "username",
-    name: "username",
-    placeholder: "Username",
-    onChange: onChange
-  }), _react.default.createElement("label", {
-    htmlFor: "email"
-  }, "Email:"), _react.default.createElement("input", {
-    required: true,
-    type: "email",
-    id: "email",
-    name: "email",
-    placeholder: "Email",
-    onChange: onChange
-  }), _react.default.createElement("label", {
-    htmlFor: "password"
-  }, "Password:"), _react.default.createElement("input", {
-    required: true,
-    type: "password",
-    id: "password",
-    name: "password",
-    placeholder: "Password",
-    onChange: onChange
-  }), _react.default.createElement(_Button.default, {
-    type: "submit"
-  }, "Submit")));
+  return _react.default.createElement(_react.default.Fragment, null, _react.default.createElement(_UserForm.default, {
+    action: SignUp,
+    formType: "signup"
+  }, loading && _react.default.createElement("p", null, "Loading..."), error && _react.default.createElement("p", null, "Error creating an account!")));
 };
 
 var _default = SignUp;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/Button":"components/Button.js"}],"pages/index.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/UserForm":"components/UserForm.js"}],"pages/signin.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -68720,9 +70262,85 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = void 0;
 
-var _react = _interopRequireDefault(require("react"));
+var _react = _interopRequireWildcard(require("react"));
+
+var _client = require("@apollo/client");
+
+var _UserForm = _interopRequireDefault(require("../components/UserForm"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function () { return cache; }; return cache; }
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
+
+function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _nonIterableRest(); }
+
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance"); }
+
+function _iterableToArrayLimit(arr, i) { if (!(Symbol.iterator in Object(arr) || Object.prototype.toString.call(arr) === "[object Arguments]")) { return; } var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"] != null) _i["return"](); } finally { if (_d) throw _e; } } return _arr; }
+
+function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
+
+function _templateObject() {
+  var data = _taggedTemplateLiteral(["\n    mutation SignIn($email: String, $password: String!) {\n        signIn(email: $email, password: $password)\n    }\n"]);
+
+  _templateObject = function _templateObject() {
+    return data;
+  };
+
+  return data;
+}
+
+function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
+
+var SIGNIN_USER = (0, _client.gql)(_templateObject());
+
+var SignIn = function SignIn(props) {
+  (0, _react.useEffect)(function () {
+    document.title = 'Sign In - Notedly';
+  });
+  var client = (0, _client.useApolloClient)();
+
+  var _useMutation = (0, _client.useMutation)(SIGNIN_USER, {
+    onCompleted: function onCompleted(data) {
+      console.log(data.signIn);
+      localStorage.setItem('token', data.signIn);
+      client.writeData({
+        data: {
+          isLoggedIn: true
+        }
+      });
+      props.history.push('/');
+    }
+  }),
+      _useMutation2 = _slicedToArray(_useMutation, 2),
+      SignIn = _useMutation2[0],
+      _useMutation2$ = _useMutation2[1],
+      loading = _useMutation2$.loading,
+      error = _useMutation2$.error;
+
+  return _react.default.createElement(_react.default.Fragment, null, _react.default.createElement(_UserForm.default, {
+    action: SignIn,
+    formType: "signIn"
+  }, loading && _react.default.createElement("p", null, "Loading..."), error && _react.default.createElement("p", null, "Error sign in!")));
+};
+
+var _default = SignIn;
+exports.default = _default;
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/UserForm":"components/UserForm.js"}],"pages/index.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _react = _interopRequireWildcard(require("react"));
 
 var _reactRouterDom = require("react-router-dom");
+
+var _client = require("@apollo/client");
 
 var _Layout = _interopRequireDefault(require("../components/Layout"));
 
@@ -68736,17 +70354,41 @@ var _note = _interopRequireDefault(require("./note"));
 
 var _signup = _interopRequireDefault(require("./signup"));
 
+var _signin = _interopRequireDefault(require("./signin"));
+
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function () { return cache; }; return cache; }
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
+
+function _templateObject() {
+  var data = _taggedTemplateLiteral(["\n    {\n        isLoggedIn @client\n    }\n"]);
+
+  _templateObject = function _templateObject() {
+    return data;
+  };
+
+  return data;
+}
+
+function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
+
+function _objectWithoutProperties(obj, keys) { var target = {}; for (var i in obj) { if (keys.indexOf(i) >= 0) continue; if (!Object.prototype.hasOwnProperty.call(obj, i)) continue; target[i] = obj[i]; } return target; }
+
+var IS_LOGGED_IN = (0, _client.gql)(_templateObject());
 
 var Pages = function Pages() {
   return _react.default.createElement(_reactRouterDom.BrowserRouter, null, _react.default.createElement(_Layout.default, null, _react.default.createElement(_reactRouterDom.Route, {
     exact: true,
     path: "/",
     component: _home.default
-  }), _react.default.createElement(_reactRouterDom.Route, {
+  }), _react.default.createElement(PrivateRoute, {
     path: "/mynotes",
     component: _mynotes.default
-  }), _react.default.createElement(_reactRouterDom.Route, {
+  }), _react.default.createElement(PrivateRoute, {
     path: "/favorites",
     component: _favorites.default
   }), _react.default.createElement(_reactRouterDom.Route, {
@@ -68755,12 +70397,40 @@ var Pages = function Pages() {
   }), _react.default.createElement(_reactRouterDom.Route, {
     path: "/signup",
     component: _signup.default
+  }), _react.default.createElement(_reactRouterDom.Route, {
+    path: "/signin",
+    component: _signin.default
   })));
+};
+
+var PrivateRoute = function PrivateRoute(_ref) {
+  var Component = _ref.component,
+      rest = _objectWithoutProperties(_ref, ["component"]);
+
+  var _useQuery = (0, _client.useQuery)(IS_LOGGED_IN),
+      loading = _useQuery.loading,
+      data = _useQuery.data,
+      error = _useQuery.error;
+
+  if (loading) return _react.default.createElement("p", null, "Loading...");
+  if (error) return _react.default.createElement("p", null, "Error!");
+  return _react.default.createElement(_reactRouterDom.Route, _extends({}, rest, {
+    render: function render(props) {
+      return data.isLoggedIn === true ? _react.default.createElement(Component, props) : _react.default.createElement(_reactRouterDom.Redirect, {
+        to: {
+          pathname: '/signin',
+          state: {
+            from: props.location
+          }
+        }
+      });
+    }
+  }));
 };
 
 var _default = Pages;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","../components/Layout":"components/Layout.js","./home":"pages/home.js","./mynotes":"pages/mynotes.js","./favorites":"pages/favorites.js","./note":"pages/note.js","./signup":"pages/signup.js"}],"App.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/Layout":"components/Layout.js","./home":"pages/home.js","./mynotes":"pages/mynotes.js","./favorites":"pages/favorites.js","./note":"pages/note.js","./signup":"pages/signup.js","./signin":"pages/signin.js"}],"App.js":[function(require,module,exports) {
 "use strict";
 
 var _react = _interopRequireDefault(require("react"));
@@ -68769,18 +70439,46 @@ var _reactDom = _interopRequireDefault(require("react-dom"));
 
 var _client = require("@apollo/client");
 
+var _apolloLinkContext = require("apollo-link-context");
+
 var _GlobalStyle = _interopRequireDefault(require("./components/GlobalStyle"));
 
 var _pages = _interopRequireDefault(require("./pages"));
 
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 var uri = "http://localhost:4000/api";
+var httpLink = (0, _client.createHttpLink)({
+  uri: uri
+});
 var cache = new _client.InMemoryCache();
+var authLink = (0, _apolloLinkContext.setContext)(function (_, _ref) {
+  var headers = _ref.headers;
+  return {
+    headers: _extends({}, headers, {
+      authorization: localStorage.getItem('token') || ''
+    })
+  };
+});
 var client = new _client.ApolloClient({
+  link: authLink.concat(httpLink),
   uri: uri,
   cache: cache,
+  resolvers: {},
   connectToDevTools: true
+});
+var data = {
+  isLoggedIn: !!localStorage.getItem('token')
+};
+cache.writeData({
+  data: data
+});
+client.onResetStore(function () {
+  return cache.writeData({
+    data: data
+  });
 });
 
 var App = function App() {
@@ -68790,7 +70488,7 @@ var App = function App() {
 };
 
 _reactDom.default.render(_react.default.createElement(App, null), document.getElementById('root'));
-},{"react":"../node_modules/react/index.js","react-dom":"../node_modules/react-dom/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","./components/GlobalStyle":"components/GlobalStyle.js","./pages":"pages/index.js"}],"../node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","react-dom":"../node_modules/react-dom/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","apollo-link-context":"../node_modules/apollo-link-context/lib/bundle.esm.js","./components/GlobalStyle":"components/GlobalStyle.js","./pages":"pages/index.js"}],"../node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
 var global = arguments[3];
 var OVERLAY_ID = '__parcel__error__overlay__';
 var OldModule = module.bundle.Module;
@@ -68818,7 +70516,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "42933" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "37801" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
