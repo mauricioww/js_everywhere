@@ -40,9 +40,11 @@ module.exports = {
         if(!user) {
             throw new AuthenticationError('You must be signed in to update a note.');
         }
-        const note = models.Note.findById(id);
+        console.log(id);
+        const note = await models.Note.findById(id);
+        console.log(note.id);
         if(note && String(note.author) !== user.id) {
-            throw new ForbiddenError('You dont have permissions to delete the note');
+            throw new ForbiddenError('You dont have permissions to update the note');
         }
         return await models.Note.findOneAndUpdate(
             {

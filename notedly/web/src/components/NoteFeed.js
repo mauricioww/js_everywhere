@@ -16,14 +16,12 @@ const NoteWrapper = styled.div`
 const NoteFeed = ({ notes }) => {
     return (
         <div>
-            {
-                notes.map(note => (
-                    <NoteWrapper key={note.id}>
-                        <Note note={note}/>
-                        <Link to={`note/${note.id}`}>Permalink</Link>
-                    </NoteWrapper>
-                ))
-            }
+            {notes.map(note => (
+                <NoteWrapper key={note.id}>
+                    <Note note={note}/>
+                    <Link to={`note/${note.id}`}>Permalink</Link>
+                </NoteWrapper>
+            ))}
         </div>
     );
 };
