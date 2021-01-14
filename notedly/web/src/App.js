@@ -1,11 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-
 import { ApolloClient, 
         ApolloProvider, 
         InMemoryCache,
-        createHttpLink } 
-from '@apollo/client';
+        createHttpLink } from '@apollo/client';
 import  { setContext } from 'apollo-link-context';
 
 import GlobalStyle from './components/GlobalStyle'

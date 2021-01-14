@@ -1,5 +1,17 @@
 import { gql } from '@apollo/client';
 
+const SIGNIN_USER = gql`
+    mutation SignIn($email: String, $password: String!) {
+        signIn(email: $email, password: $password)
+    }
+`;
+
+const SIGNUP_USER = gql`
+    mutation SignUp($email: String!, $username: String!, $password: String!) {
+        signUp(email: $email, username: $username, password: $password)
+    }
+`;
+
 const EDIT_NOTE = gql`
     mutation UpdateNote($id: ID!, $content: String!) {
         updateNote(id: $id, content: $content) {
@@ -38,7 +50,26 @@ const NEW_NOTE = gql`
     }
 `;
 
+const DELETE_NOTE = gql`
+    mutation DeleteNote($id: ID!) {
+        deleteNote(id: $id) 
+    }
+`;
+
+const TOGGLE_FAVORITE = gql`
+    mutation ToggleFavorite($id: ID!) {
+        toggleFavorite(id: $id) {
+            id
+            favoriteCount
+        }
+    }
+`;
+
 export {
     EDIT_NOTE,
-    NEW_NOTE
+    NEW_NOTE,
+    SIGNIN_USER,
+    SIGNUP_USER,
+    DELETE_NOTE,
+    TOGGLE_FAVORITE
 };

@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Route, Redirect } from 'react-router-dom';
 import { useQuery, gql } from '@apollo/client';
 
 import Layout from '../components/Layout';
-
 import Home from './home';
 import MyNotes from './mynotes';
 import Favorites from './favorites';
@@ -12,12 +11,7 @@ import SignUp from './signup';
 import SignIn from './signin';
 import NewNote from './new'
 import EditNote from './edit';
-
-const IS_LOGGED_IN = gql`
-    {
-        isLoggedIn @client
-    }
-`; 
+import { IS_LOGGED_IN } from '../gql/query';
 
 const Pages = () => {
     return (

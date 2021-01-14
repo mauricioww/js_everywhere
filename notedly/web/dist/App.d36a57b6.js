@@ -55030,7 +55030,92 @@ var ButtonAsLink = _styledComponents.default.button.withConfig({
 
 var _default = ButtonAsLink;
 exports.default = _default;
-},{"styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js"}],"components/Header.js":[function(require,module,exports) {
+},{"styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js"}],"gql/query.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.IS_LOGGED_IN = exports.GET_ME = exports.GET_MY_FAVORITES = exports.GET_MY_NOTES = exports.GET_NOTE = exports.GET_NOTES = void 0;
+
+var _client = require("@apollo/client");
+
+function _templateObject6() {
+  var data = _taggedTemplateLiteral(["\n    query Me {\n        me {\n            id\n            favorites {\n                id\n            }\n        }\n    }\n"]);
+
+  _templateObject6 = function _templateObject6() {
+    return data;
+  };
+
+  return data;
+}
+
+function _templateObject5() {
+  var data = _taggedTemplateLiteral(["\n    query Me {\n        me {\n            id\n            username\n            favorites {\n                id\n                createdAt\n                content\n                favoriteCount\n                author {\n                    username\n                    id\n                    avatar\n                }\n            }\n        }\n    }\n"]);
+
+  _templateObject5 = function _templateObject5() {
+    return data;
+  };
+
+  return data;
+}
+
+function _templateObject4() {
+  var data = _taggedTemplateLiteral(["\n    query Me {\n        me {\n            id\n            username\n            notes {\n                id\n                content\n                createdAt\n                favoriteCount\n                author { \n                    username\n                    id\n                    avatar\n                }\n            }\n        }\n    }\n"]);
+
+  _templateObject4 = function _templateObject4() {
+    return data;
+  };
+
+  return data;
+}
+
+function _templateObject3() {
+  var data = _taggedTemplateLiteral(["\n    {\n        isLoggedIn @client\n    }\n"]);
+
+  _templateObject3 = function _templateObject3() {
+    return data;
+  };
+
+  return data;
+}
+
+function _templateObject2() {
+  var data = _taggedTemplateLiteral(["\n    query Note($id: ID!) {\n        note(id: $id) {\n            id\n            createdAt\n            content\n            favoriteCount\n            author {\n                username\n                id\n                avatar\n            }\n        }\n    }\n"]);
+
+  _templateObject2 = function _templateObject2() {
+    return data;
+  };
+
+  return data;
+}
+
+function _templateObject() {
+  var data = _taggedTemplateLiteral(["\n    query NoteFeed($cursor: String) {\n        noteFeed(cursor: $cursor) {\n            cursor\n            hasNextPage\n            notes {\n                id\n                createdAt\n                content\n                favoriteCount\n                author {\n                    username\n                    id\n                    avatar\n                }\n            }\n        }\n    }\n"]);
+
+  _templateObject = function _templateObject() {
+    return data;
+  };
+
+  return data;
+}
+
+function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
+
+var GET_NOTES = (0, _client.gql)(_templateObject());
+exports.GET_NOTES = GET_NOTES;
+var GET_NOTE = (0, _client.gql)(_templateObject2());
+exports.GET_NOTE = GET_NOTE;
+var IS_LOGGED_IN = (0, _client.gql)(_templateObject3()); // author field can be omitted
+
+exports.IS_LOGGED_IN = IS_LOGGED_IN;
+var GET_MY_NOTES = (0, _client.gql)(_templateObject4());
+exports.GET_MY_NOTES = GET_MY_NOTES;
+var GET_MY_FAVORITES = (0, _client.gql)(_templateObject5());
+exports.GET_MY_FAVORITES = GET_MY_FAVORITES;
+var GET_ME = (0, _client.gql)(_templateObject6());
+exports.GET_ME = GET_ME;
+},{"@apollo/client":"../node_modules/@apollo/client/index.js"}],"components/Header.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -55050,21 +55135,9 @@ var _logo = _interopRequireDefault(require("../img/logo.svg"));
 
 var _ButtonAsLink = _interopRequireDefault(require("./ButtonAsLink"));
 
+var _query = require("../gql/query");
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-function _templateObject() {
-  var data = _taggedTemplateLiteral(["\n    {\n        isLoggedIn @client\n    }\n"]);
-
-  _templateObject = function _templateObject() {
-    return data;
-  };
-
-  return data;
-}
-
-function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
-
-var IS_LOGGED_IN = (0, _client.gql)(_templateObject());
 
 var HeaderBar = _styledComponents.default.header.withConfig({
   displayName: "Header__HeaderBar",
@@ -55082,7 +55155,7 @@ var UserState = _styledComponents.default.div.withConfig({
 })(["margin-left:auto;"]);
 
 var Header = function Header() {
-  var _useQuery = (0, _client.useQuery)(IS_LOGGED_IN),
+  var _useQuery = (0, _client.useQuery)(_query.IS_LOGGED_IN),
       data = _useQuery.data,
       client = _useQuery.client;
 
@@ -55111,7 +55184,7 @@ var Header = function Header() {
 var _default = (0, _reactRouterDom.withRouter)(Header);
 
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js","@apollo/client":"../node_modules/@apollo/client/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","../img/logo.svg":"img/logo.svg","./ButtonAsLink":"components/ButtonAsLink.js"}],"components/Navigation.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js","@apollo/client":"../node_modules/@apollo/client/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","../img/logo.svg":"img/logo.svg","./ButtonAsLink":"components/ButtonAsLink.js","../gql/query":"gql/query.js"}],"components/Navigation.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -69830,18 +69903,18 @@ module.exports = {
   subYears: require('./sub_years/index.js')
 }
 
-},{"./add_days/index.js":"../node_modules/date-fns/add_days/index.js","./add_hours/index.js":"../node_modules/date-fns/add_hours/index.js","./add_iso_years/index.js":"../node_modules/date-fns/add_iso_years/index.js","./add_milliseconds/index.js":"../node_modules/date-fns/add_milliseconds/index.js","./add_minutes/index.js":"../node_modules/date-fns/add_minutes/index.js","./add_months/index.js":"../node_modules/date-fns/add_months/index.js","./add_quarters/index.js":"../node_modules/date-fns/add_quarters/index.js","./add_seconds/index.js":"../node_modules/date-fns/add_seconds/index.js","./add_weeks/index.js":"../node_modules/date-fns/add_weeks/index.js","./add_years/index.js":"../node_modules/date-fns/add_years/index.js","./are_ranges_overlapping/index.js":"../node_modules/date-fns/are_ranges_overlapping/index.js","./closest_index_to/index.js":"../node_modules/date-fns/closest_index_to/index.js","./closest_to/index.js":"../node_modules/date-fns/closest_to/index.js","./compare_asc/index.js":"../node_modules/date-fns/compare_asc/index.js","./compare_desc/index.js":"../node_modules/date-fns/compare_desc/index.js","./difference_in_calendar_days/index.js":"../node_modules/date-fns/difference_in_calendar_days/index.js","./difference_in_calendar_iso_weeks/index.js":"../node_modules/date-fns/difference_in_calendar_iso_weeks/index.js","./difference_in_calendar_iso_years/index.js":"../node_modules/date-fns/difference_in_calendar_iso_years/index.js","./difference_in_calendar_months/index.js":"../node_modules/date-fns/difference_in_calendar_months/index.js","./difference_in_calendar_quarters/index.js":"../node_modules/date-fns/difference_in_calendar_quarters/index.js","./difference_in_calendar_weeks/index.js":"../node_modules/date-fns/difference_in_calendar_weeks/index.js","./difference_in_calendar_years/index.js":"../node_modules/date-fns/difference_in_calendar_years/index.js","./difference_in_days/index.js":"../node_modules/date-fns/difference_in_days/index.js","./difference_in_hours/index.js":"../node_modules/date-fns/difference_in_hours/index.js","./difference_in_iso_years/index.js":"../node_modules/date-fns/difference_in_iso_years/index.js","./difference_in_milliseconds/index.js":"../node_modules/date-fns/difference_in_milliseconds/index.js","./difference_in_minutes/index.js":"../node_modules/date-fns/difference_in_minutes/index.js","./difference_in_months/index.js":"../node_modules/date-fns/difference_in_months/index.js","./difference_in_quarters/index.js":"../node_modules/date-fns/difference_in_quarters/index.js","./difference_in_seconds/index.js":"../node_modules/date-fns/difference_in_seconds/index.js","./difference_in_weeks/index.js":"../node_modules/date-fns/difference_in_weeks/index.js","./difference_in_years/index.js":"../node_modules/date-fns/difference_in_years/index.js","./distance_in_words/index.js":"../node_modules/date-fns/distance_in_words/index.js","./distance_in_words_strict/index.js":"../node_modules/date-fns/distance_in_words_strict/index.js","./distance_in_words_to_now/index.js":"../node_modules/date-fns/distance_in_words_to_now/index.js","./each_day/index.js":"../node_modules/date-fns/each_day/index.js","./end_of_day/index.js":"../node_modules/date-fns/end_of_day/index.js","./end_of_hour/index.js":"../node_modules/date-fns/end_of_hour/index.js","./end_of_iso_week/index.js":"../node_modules/date-fns/end_of_iso_week/index.js","./end_of_iso_year/index.js":"../node_modules/date-fns/end_of_iso_year/index.js","./end_of_minute/index.js":"../node_modules/date-fns/end_of_minute/index.js","./end_of_month/index.js":"../node_modules/date-fns/end_of_month/index.js","./end_of_quarter/index.js":"../node_modules/date-fns/end_of_quarter/index.js","./end_of_second/index.js":"../node_modules/date-fns/end_of_second/index.js","./end_of_today/index.js":"../node_modules/date-fns/end_of_today/index.js","./end_of_tomorrow/index.js":"../node_modules/date-fns/end_of_tomorrow/index.js","./end_of_week/index.js":"../node_modules/date-fns/end_of_week/index.js","./end_of_year/index.js":"../node_modules/date-fns/end_of_year/index.js","./end_of_yesterday/index.js":"../node_modules/date-fns/end_of_yesterday/index.js","./format/index.js":"../node_modules/date-fns/format/index.js","./get_date/index.js":"../node_modules/date-fns/get_date/index.js","./get_day/index.js":"../node_modules/date-fns/get_day/index.js","./get_day_of_year/index.js":"../node_modules/date-fns/get_day_of_year/index.js","./get_days_in_month/index.js":"../node_modules/date-fns/get_days_in_month/index.js","./get_days_in_year/index.js":"../node_modules/date-fns/get_days_in_year/index.js","./get_hours/index.js":"../node_modules/date-fns/get_hours/index.js","./get_iso_day/index.js":"../node_modules/date-fns/get_iso_day/index.js","./get_iso_week/index.js":"../node_modules/date-fns/get_iso_week/index.js","./get_iso_weeks_in_year/index.js":"../node_modules/date-fns/get_iso_weeks_in_year/index.js","./get_iso_year/index.js":"../node_modules/date-fns/get_iso_year/index.js","./get_milliseconds/index.js":"../node_modules/date-fns/get_milliseconds/index.js","./get_minutes/index.js":"../node_modules/date-fns/get_minutes/index.js","./get_month/index.js":"../node_modules/date-fns/get_month/index.js","./get_overlapping_days_in_ranges/index.js":"../node_modules/date-fns/get_overlapping_days_in_ranges/index.js","./get_quarter/index.js":"../node_modules/date-fns/get_quarter/index.js","./get_seconds/index.js":"../node_modules/date-fns/get_seconds/index.js","./get_time/index.js":"../node_modules/date-fns/get_time/index.js","./get_year/index.js":"../node_modules/date-fns/get_year/index.js","./is_after/index.js":"../node_modules/date-fns/is_after/index.js","./is_before/index.js":"../node_modules/date-fns/is_before/index.js","./is_date/index.js":"../node_modules/date-fns/is_date/index.js","./is_equal/index.js":"../node_modules/date-fns/is_equal/index.js","./is_first_day_of_month/index.js":"../node_modules/date-fns/is_first_day_of_month/index.js","./is_friday/index.js":"../node_modules/date-fns/is_friday/index.js","./is_future/index.js":"../node_modules/date-fns/is_future/index.js","./is_last_day_of_month/index.js":"../node_modules/date-fns/is_last_day_of_month/index.js","./is_leap_year/index.js":"../node_modules/date-fns/is_leap_year/index.js","./is_monday/index.js":"../node_modules/date-fns/is_monday/index.js","./is_past/index.js":"../node_modules/date-fns/is_past/index.js","./is_same_day/index.js":"../node_modules/date-fns/is_same_day/index.js","./is_same_hour/index.js":"../node_modules/date-fns/is_same_hour/index.js","./is_same_iso_week/index.js":"../node_modules/date-fns/is_same_iso_week/index.js","./is_same_iso_year/index.js":"../node_modules/date-fns/is_same_iso_year/index.js","./is_same_minute/index.js":"../node_modules/date-fns/is_same_minute/index.js","./is_same_month/index.js":"../node_modules/date-fns/is_same_month/index.js","./is_same_quarter/index.js":"../node_modules/date-fns/is_same_quarter/index.js","./is_same_second/index.js":"../node_modules/date-fns/is_same_second/index.js","./is_same_week/index.js":"../node_modules/date-fns/is_same_week/index.js","./is_same_year/index.js":"../node_modules/date-fns/is_same_year/index.js","./is_saturday/index.js":"../node_modules/date-fns/is_saturday/index.js","./is_sunday/index.js":"../node_modules/date-fns/is_sunday/index.js","./is_this_hour/index.js":"../node_modules/date-fns/is_this_hour/index.js","./is_this_iso_week/index.js":"../node_modules/date-fns/is_this_iso_week/index.js","./is_this_iso_year/index.js":"../node_modules/date-fns/is_this_iso_year/index.js","./is_this_minute/index.js":"../node_modules/date-fns/is_this_minute/index.js","./is_this_month/index.js":"../node_modules/date-fns/is_this_month/index.js","./is_this_quarter/index.js":"../node_modules/date-fns/is_this_quarter/index.js","./is_this_second/index.js":"../node_modules/date-fns/is_this_second/index.js","./is_this_week/index.js":"../node_modules/date-fns/is_this_week/index.js","./is_this_year/index.js":"../node_modules/date-fns/is_this_year/index.js","./is_thursday/index.js":"../node_modules/date-fns/is_thursday/index.js","./is_today/index.js":"../node_modules/date-fns/is_today/index.js","./is_tomorrow/index.js":"../node_modules/date-fns/is_tomorrow/index.js","./is_tuesday/index.js":"../node_modules/date-fns/is_tuesday/index.js","./is_valid/index.js":"../node_modules/date-fns/is_valid/index.js","./is_wednesday/index.js":"../node_modules/date-fns/is_wednesday/index.js","./is_weekend/index.js":"../node_modules/date-fns/is_weekend/index.js","./is_within_range/index.js":"../node_modules/date-fns/is_within_range/index.js","./is_yesterday/index.js":"../node_modules/date-fns/is_yesterday/index.js","./last_day_of_iso_week/index.js":"../node_modules/date-fns/last_day_of_iso_week/index.js","./last_day_of_iso_year/index.js":"../node_modules/date-fns/last_day_of_iso_year/index.js","./last_day_of_month/index.js":"../node_modules/date-fns/last_day_of_month/index.js","./last_day_of_quarter/index.js":"../node_modules/date-fns/last_day_of_quarter/index.js","./last_day_of_week/index.js":"../node_modules/date-fns/last_day_of_week/index.js","./last_day_of_year/index.js":"../node_modules/date-fns/last_day_of_year/index.js","./max/index.js":"../node_modules/date-fns/max/index.js","./min/index.js":"../node_modules/date-fns/min/index.js","./parse/index.js":"../node_modules/date-fns/parse/index.js","./set_date/index.js":"../node_modules/date-fns/set_date/index.js","./set_day/index.js":"../node_modules/date-fns/set_day/index.js","./set_day_of_year/index.js":"../node_modules/date-fns/set_day_of_year/index.js","./set_hours/index.js":"../node_modules/date-fns/set_hours/index.js","./set_iso_day/index.js":"../node_modules/date-fns/set_iso_day/index.js","./set_iso_week/index.js":"../node_modules/date-fns/set_iso_week/index.js","./set_iso_year/index.js":"../node_modules/date-fns/set_iso_year/index.js","./set_milliseconds/index.js":"../node_modules/date-fns/set_milliseconds/index.js","./set_minutes/index.js":"../node_modules/date-fns/set_minutes/index.js","./set_month/index.js":"../node_modules/date-fns/set_month/index.js","./set_quarter/index.js":"../node_modules/date-fns/set_quarter/index.js","./set_seconds/index.js":"../node_modules/date-fns/set_seconds/index.js","./set_year/index.js":"../node_modules/date-fns/set_year/index.js","./start_of_day/index.js":"../node_modules/date-fns/start_of_day/index.js","./start_of_hour/index.js":"../node_modules/date-fns/start_of_hour/index.js","./start_of_iso_week/index.js":"../node_modules/date-fns/start_of_iso_week/index.js","./start_of_iso_year/index.js":"../node_modules/date-fns/start_of_iso_year/index.js","./start_of_minute/index.js":"../node_modules/date-fns/start_of_minute/index.js","./start_of_month/index.js":"../node_modules/date-fns/start_of_month/index.js","./start_of_quarter/index.js":"../node_modules/date-fns/start_of_quarter/index.js","./start_of_second/index.js":"../node_modules/date-fns/start_of_second/index.js","./start_of_today/index.js":"../node_modules/date-fns/start_of_today/index.js","./start_of_tomorrow/index.js":"../node_modules/date-fns/start_of_tomorrow/index.js","./start_of_week/index.js":"../node_modules/date-fns/start_of_week/index.js","./start_of_year/index.js":"../node_modules/date-fns/start_of_year/index.js","./start_of_yesterday/index.js":"../node_modules/date-fns/start_of_yesterday/index.js","./sub_days/index.js":"../node_modules/date-fns/sub_days/index.js","./sub_hours/index.js":"../node_modules/date-fns/sub_hours/index.js","./sub_iso_years/index.js":"../node_modules/date-fns/sub_iso_years/index.js","./sub_milliseconds/index.js":"../node_modules/date-fns/sub_milliseconds/index.js","./sub_minutes/index.js":"../node_modules/date-fns/sub_minutes/index.js","./sub_months/index.js":"../node_modules/date-fns/sub_months/index.js","./sub_quarters/index.js":"../node_modules/date-fns/sub_quarters/index.js","./sub_seconds/index.js":"../node_modules/date-fns/sub_seconds/index.js","./sub_weeks/index.js":"../node_modules/date-fns/sub_weeks/index.js","./sub_years/index.js":"../node_modules/date-fns/sub_years/index.js"}],"gql/query.js":[function(require,module,exports) {
+},{"./add_days/index.js":"../node_modules/date-fns/add_days/index.js","./add_hours/index.js":"../node_modules/date-fns/add_hours/index.js","./add_iso_years/index.js":"../node_modules/date-fns/add_iso_years/index.js","./add_milliseconds/index.js":"../node_modules/date-fns/add_milliseconds/index.js","./add_minutes/index.js":"../node_modules/date-fns/add_minutes/index.js","./add_months/index.js":"../node_modules/date-fns/add_months/index.js","./add_quarters/index.js":"../node_modules/date-fns/add_quarters/index.js","./add_seconds/index.js":"../node_modules/date-fns/add_seconds/index.js","./add_weeks/index.js":"../node_modules/date-fns/add_weeks/index.js","./add_years/index.js":"../node_modules/date-fns/add_years/index.js","./are_ranges_overlapping/index.js":"../node_modules/date-fns/are_ranges_overlapping/index.js","./closest_index_to/index.js":"../node_modules/date-fns/closest_index_to/index.js","./closest_to/index.js":"../node_modules/date-fns/closest_to/index.js","./compare_asc/index.js":"../node_modules/date-fns/compare_asc/index.js","./compare_desc/index.js":"../node_modules/date-fns/compare_desc/index.js","./difference_in_calendar_days/index.js":"../node_modules/date-fns/difference_in_calendar_days/index.js","./difference_in_calendar_iso_weeks/index.js":"../node_modules/date-fns/difference_in_calendar_iso_weeks/index.js","./difference_in_calendar_iso_years/index.js":"../node_modules/date-fns/difference_in_calendar_iso_years/index.js","./difference_in_calendar_months/index.js":"../node_modules/date-fns/difference_in_calendar_months/index.js","./difference_in_calendar_quarters/index.js":"../node_modules/date-fns/difference_in_calendar_quarters/index.js","./difference_in_calendar_weeks/index.js":"../node_modules/date-fns/difference_in_calendar_weeks/index.js","./difference_in_calendar_years/index.js":"../node_modules/date-fns/difference_in_calendar_years/index.js","./difference_in_days/index.js":"../node_modules/date-fns/difference_in_days/index.js","./difference_in_hours/index.js":"../node_modules/date-fns/difference_in_hours/index.js","./difference_in_iso_years/index.js":"../node_modules/date-fns/difference_in_iso_years/index.js","./difference_in_milliseconds/index.js":"../node_modules/date-fns/difference_in_milliseconds/index.js","./difference_in_minutes/index.js":"../node_modules/date-fns/difference_in_minutes/index.js","./difference_in_months/index.js":"../node_modules/date-fns/difference_in_months/index.js","./difference_in_quarters/index.js":"../node_modules/date-fns/difference_in_quarters/index.js","./difference_in_seconds/index.js":"../node_modules/date-fns/difference_in_seconds/index.js","./difference_in_weeks/index.js":"../node_modules/date-fns/difference_in_weeks/index.js","./difference_in_years/index.js":"../node_modules/date-fns/difference_in_years/index.js","./distance_in_words/index.js":"../node_modules/date-fns/distance_in_words/index.js","./distance_in_words_strict/index.js":"../node_modules/date-fns/distance_in_words_strict/index.js","./distance_in_words_to_now/index.js":"../node_modules/date-fns/distance_in_words_to_now/index.js","./each_day/index.js":"../node_modules/date-fns/each_day/index.js","./end_of_day/index.js":"../node_modules/date-fns/end_of_day/index.js","./end_of_hour/index.js":"../node_modules/date-fns/end_of_hour/index.js","./end_of_iso_week/index.js":"../node_modules/date-fns/end_of_iso_week/index.js","./end_of_iso_year/index.js":"../node_modules/date-fns/end_of_iso_year/index.js","./end_of_minute/index.js":"../node_modules/date-fns/end_of_minute/index.js","./end_of_month/index.js":"../node_modules/date-fns/end_of_month/index.js","./end_of_quarter/index.js":"../node_modules/date-fns/end_of_quarter/index.js","./end_of_second/index.js":"../node_modules/date-fns/end_of_second/index.js","./end_of_today/index.js":"../node_modules/date-fns/end_of_today/index.js","./end_of_tomorrow/index.js":"../node_modules/date-fns/end_of_tomorrow/index.js","./end_of_week/index.js":"../node_modules/date-fns/end_of_week/index.js","./end_of_year/index.js":"../node_modules/date-fns/end_of_year/index.js","./end_of_yesterday/index.js":"../node_modules/date-fns/end_of_yesterday/index.js","./format/index.js":"../node_modules/date-fns/format/index.js","./get_date/index.js":"../node_modules/date-fns/get_date/index.js","./get_day/index.js":"../node_modules/date-fns/get_day/index.js","./get_day_of_year/index.js":"../node_modules/date-fns/get_day_of_year/index.js","./get_days_in_month/index.js":"../node_modules/date-fns/get_days_in_month/index.js","./get_days_in_year/index.js":"../node_modules/date-fns/get_days_in_year/index.js","./get_hours/index.js":"../node_modules/date-fns/get_hours/index.js","./get_iso_day/index.js":"../node_modules/date-fns/get_iso_day/index.js","./get_iso_week/index.js":"../node_modules/date-fns/get_iso_week/index.js","./get_iso_weeks_in_year/index.js":"../node_modules/date-fns/get_iso_weeks_in_year/index.js","./get_iso_year/index.js":"../node_modules/date-fns/get_iso_year/index.js","./get_milliseconds/index.js":"../node_modules/date-fns/get_milliseconds/index.js","./get_minutes/index.js":"../node_modules/date-fns/get_minutes/index.js","./get_month/index.js":"../node_modules/date-fns/get_month/index.js","./get_overlapping_days_in_ranges/index.js":"../node_modules/date-fns/get_overlapping_days_in_ranges/index.js","./get_quarter/index.js":"../node_modules/date-fns/get_quarter/index.js","./get_seconds/index.js":"../node_modules/date-fns/get_seconds/index.js","./get_time/index.js":"../node_modules/date-fns/get_time/index.js","./get_year/index.js":"../node_modules/date-fns/get_year/index.js","./is_after/index.js":"../node_modules/date-fns/is_after/index.js","./is_before/index.js":"../node_modules/date-fns/is_before/index.js","./is_date/index.js":"../node_modules/date-fns/is_date/index.js","./is_equal/index.js":"../node_modules/date-fns/is_equal/index.js","./is_first_day_of_month/index.js":"../node_modules/date-fns/is_first_day_of_month/index.js","./is_friday/index.js":"../node_modules/date-fns/is_friday/index.js","./is_future/index.js":"../node_modules/date-fns/is_future/index.js","./is_last_day_of_month/index.js":"../node_modules/date-fns/is_last_day_of_month/index.js","./is_leap_year/index.js":"../node_modules/date-fns/is_leap_year/index.js","./is_monday/index.js":"../node_modules/date-fns/is_monday/index.js","./is_past/index.js":"../node_modules/date-fns/is_past/index.js","./is_same_day/index.js":"../node_modules/date-fns/is_same_day/index.js","./is_same_hour/index.js":"../node_modules/date-fns/is_same_hour/index.js","./is_same_iso_week/index.js":"../node_modules/date-fns/is_same_iso_week/index.js","./is_same_iso_year/index.js":"../node_modules/date-fns/is_same_iso_year/index.js","./is_same_minute/index.js":"../node_modules/date-fns/is_same_minute/index.js","./is_same_month/index.js":"../node_modules/date-fns/is_same_month/index.js","./is_same_quarter/index.js":"../node_modules/date-fns/is_same_quarter/index.js","./is_same_second/index.js":"../node_modules/date-fns/is_same_second/index.js","./is_same_week/index.js":"../node_modules/date-fns/is_same_week/index.js","./is_same_year/index.js":"../node_modules/date-fns/is_same_year/index.js","./is_saturday/index.js":"../node_modules/date-fns/is_saturday/index.js","./is_sunday/index.js":"../node_modules/date-fns/is_sunday/index.js","./is_this_hour/index.js":"../node_modules/date-fns/is_this_hour/index.js","./is_this_iso_week/index.js":"../node_modules/date-fns/is_this_iso_week/index.js","./is_this_iso_year/index.js":"../node_modules/date-fns/is_this_iso_year/index.js","./is_this_minute/index.js":"../node_modules/date-fns/is_this_minute/index.js","./is_this_month/index.js":"../node_modules/date-fns/is_this_month/index.js","./is_this_quarter/index.js":"../node_modules/date-fns/is_this_quarter/index.js","./is_this_second/index.js":"../node_modules/date-fns/is_this_second/index.js","./is_this_week/index.js":"../node_modules/date-fns/is_this_week/index.js","./is_this_year/index.js":"../node_modules/date-fns/is_this_year/index.js","./is_thursday/index.js":"../node_modules/date-fns/is_thursday/index.js","./is_today/index.js":"../node_modules/date-fns/is_today/index.js","./is_tomorrow/index.js":"../node_modules/date-fns/is_tomorrow/index.js","./is_tuesday/index.js":"../node_modules/date-fns/is_tuesday/index.js","./is_valid/index.js":"../node_modules/date-fns/is_valid/index.js","./is_wednesday/index.js":"../node_modules/date-fns/is_wednesday/index.js","./is_weekend/index.js":"../node_modules/date-fns/is_weekend/index.js","./is_within_range/index.js":"../node_modules/date-fns/is_within_range/index.js","./is_yesterday/index.js":"../node_modules/date-fns/is_yesterday/index.js","./last_day_of_iso_week/index.js":"../node_modules/date-fns/last_day_of_iso_week/index.js","./last_day_of_iso_year/index.js":"../node_modules/date-fns/last_day_of_iso_year/index.js","./last_day_of_month/index.js":"../node_modules/date-fns/last_day_of_month/index.js","./last_day_of_quarter/index.js":"../node_modules/date-fns/last_day_of_quarter/index.js","./last_day_of_week/index.js":"../node_modules/date-fns/last_day_of_week/index.js","./last_day_of_year/index.js":"../node_modules/date-fns/last_day_of_year/index.js","./max/index.js":"../node_modules/date-fns/max/index.js","./min/index.js":"../node_modules/date-fns/min/index.js","./parse/index.js":"../node_modules/date-fns/parse/index.js","./set_date/index.js":"../node_modules/date-fns/set_date/index.js","./set_day/index.js":"../node_modules/date-fns/set_day/index.js","./set_day_of_year/index.js":"../node_modules/date-fns/set_day_of_year/index.js","./set_hours/index.js":"../node_modules/date-fns/set_hours/index.js","./set_iso_day/index.js":"../node_modules/date-fns/set_iso_day/index.js","./set_iso_week/index.js":"../node_modules/date-fns/set_iso_week/index.js","./set_iso_year/index.js":"../node_modules/date-fns/set_iso_year/index.js","./set_milliseconds/index.js":"../node_modules/date-fns/set_milliseconds/index.js","./set_minutes/index.js":"../node_modules/date-fns/set_minutes/index.js","./set_month/index.js":"../node_modules/date-fns/set_month/index.js","./set_quarter/index.js":"../node_modules/date-fns/set_quarter/index.js","./set_seconds/index.js":"../node_modules/date-fns/set_seconds/index.js","./set_year/index.js":"../node_modules/date-fns/set_year/index.js","./start_of_day/index.js":"../node_modules/date-fns/start_of_day/index.js","./start_of_hour/index.js":"../node_modules/date-fns/start_of_hour/index.js","./start_of_iso_week/index.js":"../node_modules/date-fns/start_of_iso_week/index.js","./start_of_iso_year/index.js":"../node_modules/date-fns/start_of_iso_year/index.js","./start_of_minute/index.js":"../node_modules/date-fns/start_of_minute/index.js","./start_of_month/index.js":"../node_modules/date-fns/start_of_month/index.js","./start_of_quarter/index.js":"../node_modules/date-fns/start_of_quarter/index.js","./start_of_second/index.js":"../node_modules/date-fns/start_of_second/index.js","./start_of_today/index.js":"../node_modules/date-fns/start_of_today/index.js","./start_of_tomorrow/index.js":"../node_modules/date-fns/start_of_tomorrow/index.js","./start_of_week/index.js":"../node_modules/date-fns/start_of_week/index.js","./start_of_year/index.js":"../node_modules/date-fns/start_of_year/index.js","./start_of_yesterday/index.js":"../node_modules/date-fns/start_of_yesterday/index.js","./sub_days/index.js":"../node_modules/date-fns/sub_days/index.js","./sub_hours/index.js":"../node_modules/date-fns/sub_hours/index.js","./sub_iso_years/index.js":"../node_modules/date-fns/sub_iso_years/index.js","./sub_milliseconds/index.js":"../node_modules/date-fns/sub_milliseconds/index.js","./sub_minutes/index.js":"../node_modules/date-fns/sub_minutes/index.js","./sub_months/index.js":"../node_modules/date-fns/sub_months/index.js","./sub_quarters/index.js":"../node_modules/date-fns/sub_quarters/index.js","./sub_seconds/index.js":"../node_modules/date-fns/sub_seconds/index.js","./sub_weeks/index.js":"../node_modules/date-fns/sub_weeks/index.js","./sub_years/index.js":"../node_modules/date-fns/sub_years/index.js"}],"gql/mutation.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.IS_LOGGED_IN = exports.GET_ME = exports.GET_MY_FAVORITES = exports.GET_MY_NOTES = exports.GET_NOTE = exports.GET_NOTES = void 0;
+exports.TOGGLE_FAVORITE = exports.DELETE_NOTE = exports.SIGNUP_USER = exports.SIGNIN_USER = exports.NEW_NOTE = exports.EDIT_NOTE = void 0;
 
 var _client = require("@apollo/client");
 
 function _templateObject6() {
-  var data = _taggedTemplateLiteral(["\n    query Me {\n        me {\n            id\n            favorites {\n                id\n            }\n        }\n    }\n"]);
+  var data = _taggedTemplateLiteral(["\n    mutation ToggleFavorite($id: ID!) {\n        toggleFavorite(id: $id) {\n            id\n            favoriteCount\n        }\n    }\n"]);
 
   _templateObject6 = function _templateObject6() {
     return data;
@@ -69851,7 +69924,7 @@ function _templateObject6() {
 }
 
 function _templateObject5() {
-  var data = _taggedTemplateLiteral(["\n    query Me {\n        me {\n            id\n            username\n            favorites {\n                id\n                createdAt\n                content\n                favoriteCount\n                author {\n                    username\n                    id\n                    avatar\n                }\n            }\n        }\n    }\n"]);
+  var data = _taggedTemplateLiteral(["\n    mutation DeleteNote($id: ID!) {\n        deleteNote(id: $id) \n    }\n"]);
 
   _templateObject5 = function _templateObject5() {
     return data;
@@ -69861,7 +69934,7 @@ function _templateObject5() {
 }
 
 function _templateObject4() {
-  var data = _taggedTemplateLiteral(["\n    query Me {\n        me {\n            id\n            username\n            notes {\n                id\n                content\n                createdAt\n                favoriteCount\n                author { \n                    username\n                    id\n                    avatar\n                }\n            }\n        }\n    }\n"]);
+  var data = _taggedTemplateLiteral(["\n    mutation NewNote($content: String!) {\n        newNote(content: $content) {\n            id\n            content\n            createdAt\n            favoriteCount\n            favoritedBy {\n                id\n                username\n            }\n            author {\n                username\n                id\n            }\n        }\n    }\n"]);
 
   _templateObject4 = function _templateObject4() {
     return data;
@@ -69871,7 +69944,7 @@ function _templateObject4() {
 }
 
 function _templateObject3() {
-  var data = _taggedTemplateLiteral(["\n    {\n        isLoggedIn @client\n    }\n"]);
+  var data = _taggedTemplateLiteral(["\n    mutation UpdateNote($id: ID!, $content: String!) {\n        updateNote(id: $id, content: $content) {\n            id\n            content\n            createdAt\n            favoriteCount\n            favoritedBy {\n                id\n                username\n            }\n            author {\n                id\n                username\n            }\n        }\n    }\n"]);
 
   _templateObject3 = function _templateObject3() {
     return data;
@@ -69881,7 +69954,7 @@ function _templateObject3() {
 }
 
 function _templateObject2() {
-  var data = _taggedTemplateLiteral(["\n    query Note($id: ID!) {\n        note(id: $id) {\n            id\n            createdAt\n            content\n            favoriteCount\n            author {\n                username\n                id\n                avatar\n            }\n        }\n    }\n"]);
+  var data = _taggedTemplateLiteral(["\n    mutation SignUp($email: String!, $username: String!, $password: String!) {\n        signUp(email: $email, username: $username, password: $password)\n    }\n"]);
 
   _templateObject2 = function _templateObject2() {
     return data;
@@ -69891,7 +69964,7 @@ function _templateObject2() {
 }
 
 function _templateObject() {
-  var data = _taggedTemplateLiteral(["\n    query NoteFeed($cursor: String) {\n        noteFeed(cursor: $cursor) {\n            cursor\n            hasNextPage\n            notes {\n                id\n                createdAt\n                content\n                favoriteCount\n                author {\n                    username\n                    id\n                    avatar\n                }\n            }\n        }\n    }\n"]);
+  var data = _taggedTemplateLiteral(["\n    mutation SignIn($email: String, $password: String!) {\n        signIn(email: $email, password: $password)\n    }\n"]);
 
   _templateObject = function _templateObject() {
     return data;
@@ -69902,20 +69975,19 @@ function _templateObject() {
 
 function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
 
-var GET_NOTES = (0, _client.gql)(_templateObject());
-exports.GET_NOTES = GET_NOTES;
-var GET_NOTE = (0, _client.gql)(_templateObject2());
-exports.GET_NOTE = GET_NOTE;
-var IS_LOGGED_IN = (0, _client.gql)(_templateObject3()); // author field can be omitted
-
-exports.IS_LOGGED_IN = IS_LOGGED_IN;
-var GET_MY_NOTES = (0, _client.gql)(_templateObject4());
-exports.GET_MY_NOTES = GET_MY_NOTES;
-var GET_MY_FAVORITES = (0, _client.gql)(_templateObject5());
-exports.GET_MY_FAVORITES = GET_MY_FAVORITES;
-var GET_ME = (0, _client.gql)(_templateObject6());
-exports.GET_ME = GET_ME;
-},{"@apollo/client":"../node_modules/@apollo/client/index.js"}],"components/NoteUser.js":[function(require,module,exports) {
+var SIGNIN_USER = (0, _client.gql)(_templateObject());
+exports.SIGNIN_USER = SIGNIN_USER;
+var SIGNUP_USER = (0, _client.gql)(_templateObject2());
+exports.SIGNUP_USER = SIGNUP_USER;
+var EDIT_NOTE = (0, _client.gql)(_templateObject3());
+exports.EDIT_NOTE = EDIT_NOTE;
+var NEW_NOTE = (0, _client.gql)(_templateObject4());
+exports.NEW_NOTE = NEW_NOTE;
+var DELETE_NOTE = (0, _client.gql)(_templateObject5());
+exports.DELETE_NOTE = DELETE_NOTE;
+var TOGGLE_FAVORITE = (0, _client.gql)(_templateObject6());
+exports.TOGGLE_FAVORITE = TOGGLE_FAVORITE;
+},{"@apollo/client":"../node_modules/@apollo/client/index.js"}],"components/DeleteNote.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -69929,6 +70001,138 @@ var _client = require("@apollo/client");
 
 var _reactRouterDom = require("react-router-dom");
 
+var _ButtonAsLink = _interopRequireDefault(require("./ButtonAsLink"));
+
+var _mutation = require("../gql/mutation");
+
+var _query = require("../gql/query");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _nonIterableRest(); }
+
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance"); }
+
+function _iterableToArrayLimit(arr, i) { if (!(Symbol.iterator in Object(arr) || Object.prototype.toString.call(arr) === "[object Arguments]")) { return; } var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"] != null) _i["return"](); } finally { if (_d) throw _e; } } return _arr; }
+
+function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
+
+var DeleteNote = function DeleteNote(props) {
+  var _useMutation = (0, _client.useMutation)(_mutation.DELETE_NOTE, {
+    variables: {
+      id: props.id
+    },
+    refetchQueries: [{
+      query: _query.GET_MY_NOTES
+    }, {
+      query: _query.GET_NOTES
+    }],
+    onCompleted: function onCompleted(data) {
+      props.history.push('/mynotes');
+    }
+  }),
+      _useMutation2 = _slicedToArray(_useMutation, 1),
+      DeleteNote = _useMutation2[0];
+
+  return _react.default.createElement(_ButtonAsLink.default, {
+    onClick: DeleteNote
+  }, "Delete Note");
+};
+
+var _default = (0, _reactRouterDom.withRouter)(DeleteNote);
+
+exports.default = _default;
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","./ButtonAsLink":"components/ButtonAsLink.js","../gql/mutation":"gql/mutation.js","../gql/query":"gql/query.js"}],"components/FavoriteNote.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _react = _interopRequireWildcard(require("react"));
+
+var _client = require("@apollo/client");
+
+var _ButtonAsLink = _interopRequireDefault(require("./ButtonAsLink"));
+
+var _mutation = require("../gql/mutation");
+
+var _query = require("../gql/query");
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function () { return cache; }; return cache; }
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
+
+function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _nonIterableRest(); }
+
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance"); }
+
+function _iterableToArrayLimit(arr, i) { if (!(Symbol.iterator in Object(arr) || Object.prototype.toString.call(arr) === "[object Arguments]")) { return; } var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"] != null) _i["return"](); } finally { if (_d) throw _e; } } return _arr; }
+
+function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
+
+var FavoriteNote = function FavoriteNote(props) {
+  var _useState = (0, _react.useState)(props.favoriteCount),
+      _useState2 = _slicedToArray(_useState, 2),
+      count = _useState2[0],
+      setCount = _useState2[1];
+
+  var _useState3 = (0, _react.useState)(props.me.favorites.filter(function (note) {
+    return note.id === props.noteId;
+  }).legnth > 0),
+      _useState4 = _slicedToArray(_useState3, 2),
+      favorited = _useState4[0],
+      setFavorited = _useState4[1];
+
+  var _useMutation = (0, _client.useMutation)(_mutation.TOGGLE_FAVORITE, {
+    variables: {
+      id: props.noteId
+    },
+    refetchQueries: [{
+      query: _query.GET_MY_FAVORITES
+    }]
+  }),
+      _useMutation2 = _slicedToArray(_useMutation, 1),
+      ToggleFavorite = _useMutation2[0];
+
+  return _react.default.createElement(_react.default.Fragment, null, favorited ? _react.default.createElement(_ButtonAsLink.default, {
+    onClick: function onClick() {
+      ToggleFavorite();
+      setFavorited(false);
+      setCount(count - 1);
+    }
+  }, "Remove Favorite") : _react.default.createElement(_ButtonAsLink.default, {
+    onClick: function onClick() {
+      ToggleFavorite();
+      setFavorited(true);
+      setCount(count + 1);
+    }
+  }, "Add Favorite"), ": ", count);
+};
+
+var _default = FavoriteNote;
+exports.default = _default;
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","./ButtonAsLink":"components/ButtonAsLink.js","../gql/mutation":"gql/mutation.js","../gql/query":"gql/query.js"}],"components/NoteUser.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _react = _interopRequireDefault(require("react"));
+
+var _client = require("@apollo/client");
+
+var _reactRouterDom = require("react-router-dom");
+
+var _DeleteNote = _interopRequireDefault(require("./DeleteNote"));
+
+var _FavoriteNote = _interopRequireDefault(require("./FavoriteNote"));
+
 var _query = require("../gql/query");
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
@@ -69941,14 +70145,20 @@ var NoteUser = function NoteUser(props) {
 
   if (loading) return _react.default.createElement("p", null, "Loading...");
   if (error) return _react.default.createElement("p", null, "Error!");
-  return _react.default.createElement(_react.default.Fragment, null, "Favorites: ", props.note.favoriteCount, _react.default.createElement("br", null), data.me.id === props.note.author.id && _react.default.createElement(_react.default.Fragment, null, _react.default.createElement(_reactRouterDom.Link, {
+  return _react.default.createElement(_react.default.Fragment, null, _react.default.createElement(_FavoriteNote.default, {
+    me: data.me,
+    noteId: props.note.id,
+    favoriteCount: props.note.favoriteCount
+  }), _react.default.createElement("br", null), data.me.id === props.note.author.id && _react.default.createElement(_react.default.Fragment, null, _react.default.createElement(_reactRouterDom.Link, {
     to: "/edit/".concat(props.note.id)
-  }, "Edit note")));
+  }, "Edit note"), " ", _react.default.createElement("br", null), _react.default.createElement(_DeleteNote.default, {
+    noteId: props.note.id
+  })));
 };
 
 var _default = NoteUser;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","../gql/query":"gql/query.js"}],"components/Note.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","./DeleteNote":"components/DeleteNote.js","./FavoriteNote":"components/FavoriteNote.js","../gql/query":"gql/query.js"}],"components/Note.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -70069,6 +70279,8 @@ var _Button = _interopRequireDefault(require("../components/Button"));
 
 var _NoteFeed = _interopRequireDefault(require("../components/NoteFeed"));
 
+var _query = require("../gql/query");
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _nonIterableSpread(); }
@@ -70079,22 +70291,8 @@ function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.
 
 function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = new Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } }
 
-function _templateObject() {
-  var data = _taggedTemplateLiteral(["\n    query NoteFeed($cursor: String) {\n        noteFeed(cursor: $cursor) {\n            cursor\n            hasNextPage\n            notes {\n                id\n                createdAt\n                content\n                favoriteCount\n                author {\n                    username\n                    id\n                    avatar\n                }\n            }\n        }\n    }\n"]);
-
-  _templateObject = function _templateObject() {
-    return data;
-  };
-
-  return data;
-}
-
-function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
-
-var GET_NOTES = (0, _client.gql)(_templateObject());
-
 var Home = function Home() {
-  var _useQuery = (0, _client.useQuery)(GET_NOTES),
+  var _useQuery = (0, _client.useQuery)(_query.GET_NOTES),
       data = _useQuery.data,
       loading = _useQuery.loading,
       error = _useQuery.error,
@@ -70128,7 +70326,7 @@ var Home = function Home() {
 
 var _default = Home;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/Button":"components/Button.js","../components/NoteFeed":"components/NoteFeed.js"}],"pages/mynotes.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/Button":"components/Button.js","../components/NoteFeed":"components/NoteFeed.js","../gql/query":"gql/query.js"}],"pages/mynotes.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -70367,6 +70565,8 @@ var _client = require("@apollo/client");
 
 var _UserForm = _interopRequireDefault(require("../components/UserForm"));
 
+var _mutation = require("../gql/mutation");
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function () { return cache; }; return cache; }
@@ -70381,27 +70581,13 @@ function _iterableToArrayLimit(arr, i) { if (!(Symbol.iterator in Object(arr) ||
 
 function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
 
-function _templateObject() {
-  var data = _taggedTemplateLiteral(["\n    mutation SignUp($email: String!, $username: String!, $password: String!) {\n        signUp(email: $email, username: $username, password: $password)\n    }\n"]);
-
-  _templateObject = function _templateObject() {
-    return data;
-  };
-
-  return data;
-}
-
-function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
-
-var SIGNUP_USER = (0, _client.gql)(_templateObject());
-
 var SignUp = function SignUp(props) {
   (0, _react.useEffect)(function () {
     document.title = 'Sign Up - Notedly';
   });
   var client = (0, _client.useApolloClient)();
 
-  var _useMutation = (0, _client.useMutation)(SIGNUP_USER, {
+  var _useMutation = (0, _client.useMutation)(_mutation.SIGNUP_USER, {
     onCompleted: function onCompleted(data) {
       console.log(data.signUp);
       localStorage.setItem('token', data.signUp); // JWT added to browser storage
@@ -70428,7 +70614,7 @@ var SignUp = function SignUp(props) {
 
 var _default = SignUp;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/UserForm":"components/UserForm.js"}],"pages/signin.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/UserForm":"components/UserForm.js","../gql/mutation":"gql/mutation.js"}],"pages/signin.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -70441,6 +70627,8 @@ var _react = _interopRequireWildcard(require("react"));
 var _client = require("@apollo/client");
 
 var _UserForm = _interopRequireDefault(require("../components/UserForm"));
+
+var _mutation = require("../gql/mutation");
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -70456,27 +70644,13 @@ function _iterableToArrayLimit(arr, i) { if (!(Symbol.iterator in Object(arr) ||
 
 function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
 
-function _templateObject() {
-  var data = _taggedTemplateLiteral(["\n    mutation SignIn($email: String, $password: String!) {\n        signIn(email: $email, password: $password)\n    }\n"]);
-
-  _templateObject = function _templateObject() {
-    return data;
-  };
-
-  return data;
-}
-
-function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
-
-var SIGNIN_USER = (0, _client.gql)(_templateObject());
-
 var SignIn = function SignIn(props) {
   (0, _react.useEffect)(function () {
     document.title = 'Sign In - Notedly';
   });
   var client = (0, _client.useApolloClient)();
 
-  var _useMutation = (0, _client.useMutation)(SIGNIN_USER, {
+  var _useMutation = (0, _client.useMutation)(_mutation.SIGNIN_USER, {
     onCompleted: function onCompleted(data) {
       console.log(data.signIn);
       localStorage.setItem('token', data.signIn);
@@ -70502,7 +70676,7 @@ var SignIn = function SignIn(props) {
 
 var _default = SignIn;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/UserForm":"components/UserForm.js"}],"components/NoteForm.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/UserForm":"components/UserForm.js","../gql/mutation":"gql/mutation.js"}],"components/NoteForm.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -70583,43 +70757,7 @@ var NoteForm = function NoteForm(props) {
 
 var _default = NoteForm;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js","./Button":"components/Button.js"}],"gql/mutation.js":[function(require,module,exports) {
-"use strict";
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.NEW_NOTE = exports.EDIT_NOTE = void 0;
-
-var _client = require("@apollo/client");
-
-function _templateObject2() {
-  var data = _taggedTemplateLiteral(["\n    mutation NewNote($content: String!) {\n        newNote(content: $content) {\n            id\n            content\n            createdAt\n            favoriteCount\n            favoritedBy {\n                id\n                username\n            }\n            author {\n                username\n                id\n            }\n        }\n    }\n"]);
-
-  _templateObject2 = function _templateObject2() {
-    return data;
-  };
-
-  return data;
-}
-
-function _templateObject() {
-  var data = _taggedTemplateLiteral(["\n    mutation UpdateNote($id: ID!, $content: String!) {\n        updateNote(id: $id, content: $content) {\n            id\n            content\n            createdAt\n            favoriteCount\n            favoritedBy {\n                id\n                username\n            }\n            author {\n                id\n                username\n            }\n        }\n    }\n"]);
-
-  _templateObject = function _templateObject() {
-    return data;
-  };
-
-  return data;
-}
-
-function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
-
-var EDIT_NOTE = (0, _client.gql)(_templateObject());
-exports.EDIT_NOTE = EDIT_NOTE;
-var NEW_NOTE = (0, _client.gql)(_templateObject2());
-exports.NEW_NOTE = NEW_NOTE;
-},{"@apollo/client":"../node_modules/@apollo/client/index.js"}],"pages/new.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","styled-components":"../node_modules/styled-components/dist/styled-components.browser.esm.js","./Button":"components/Button.js"}],"pages/new.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -70780,6 +70918,8 @@ var _new = _interopRequireDefault(require("./new"));
 
 var _edit = _interopRequireDefault(require("./edit"));
 
+var _query = require("../gql/query");
+
 var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
@@ -70788,21 +70928,7 @@ function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return 
 
 function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
 
-function _templateObject() {
-  var data = _taggedTemplateLiteral(["\n    {\n        isLoggedIn @client\n    }\n"]);
-
-  _templateObject = function _templateObject() {
-    return data;
-  };
-
-  return data;
-}
-
-function _taggedTemplateLiteral(strings, raw) { if (!raw) { raw = strings.slice(0); } return Object.freeze(Object.defineProperties(strings, { raw: { value: Object.freeze(raw) } })); }
-
 function _objectWithoutProperties(obj, keys) { var target = {}; for (var i in obj) { if (keys.indexOf(i) >= 0) continue; if (!Object.prototype.hasOwnProperty.call(obj, i)) continue; target[i] = obj[i]; } return target; }
-
-var IS_LOGGED_IN = (0, _client.gql)(_templateObject());
 
 var Pages = function Pages() {
   return _react.default.createElement(_reactRouterDom.BrowserRouter, null, _react.default.createElement(_Layout.default, null, _react.default.createElement(_reactRouterDom.Route, {
@@ -70837,7 +70963,7 @@ var PrivateRoute = function PrivateRoute(_ref) {
   var Component = _ref.component,
       rest = _objectWithoutProperties(_ref, ["component"]);
 
-  var _useQuery = (0, _client.useQuery)(IS_LOGGED_IN),
+  var _useQuery = (0, _client.useQuery)(_query.IS_LOGGED_IN),
       loading = _useQuery.loading,
       data = _useQuery.data,
       error = _useQuery.error;
@@ -70860,7 +70986,7 @@ var PrivateRoute = function PrivateRoute(_ref) {
 
 var _default = Pages;
 exports.default = _default;
-},{"react":"../node_modules/react/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/Layout":"components/Layout.js","./home":"pages/home.js","./mynotes":"pages/mynotes.js","./favorites":"pages/favorites.js","./note":"pages/note.js","./signup":"pages/signup.js","./signin":"pages/signin.js","./new":"pages/new.js","./edit":"pages/edit.js"}],"App.js":[function(require,module,exports) {
+},{"react":"../node_modules/react/index.js","react-router-dom":"../node_modules/react-router-dom/esm/react-router-dom.js","@apollo/client":"../node_modules/@apollo/client/index.js","../components/Layout":"components/Layout.js","./home":"pages/home.js","./mynotes":"pages/mynotes.js","./favorites":"pages/favorites.js","./note":"pages/note.js","./signup":"pages/signup.js","./signin":"pages/signin.js","./new":"pages/new.js","./edit":"pages/edit.js","../gql/query":"gql/query.js"}],"App.js":[function(require,module,exports) {
 "use strict";
 
 var _react = _interopRequireDefault(require("react"));
@@ -70946,7 +71072,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "43105" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "38109" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
