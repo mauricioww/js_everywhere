@@ -35,7 +35,7 @@ const TabNavigator = createBottomTabNavigator({
             )
         }
     },
-    MyNoteScree: {
+    MyNoteScreen: {
         screen: MyStack,
         navigationOptions: {
             tabBarLabel: 'My Notes',
