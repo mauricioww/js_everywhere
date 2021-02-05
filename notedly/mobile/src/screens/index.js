@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, View, ScrollView, Button } from 'react-native';
-import { createAppContainer } from 'react-navigation';
+import { createAppContainer, createSwitchNavigator } from 'react-navigation';
 import { createBottomTabNavigator } from 'react-navigation-tabs';
 import { createStackNavigator } from 'react-navigation-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -9,6 +9,10 @@ import Feed from './feed';
 import Favorites from './favorites';
 import MyNotes from './mynotes';
 import NoteScreen from './note';
+import AuthLoading from './authloading';
+import Settings from './settings';
+import SignIn from './signin';
+import SignUp from './signup';
 
 const FeedStack = createStackNavigator({
     Feed: Feed,
@@ -23,6 +27,15 @@ const MyStack = createStackNavigator({
 const FavStack = createStackNavigator({
     Favorites: Favorites,
     Note: NoteScreen
+});
+
+const AuthStack = createStackNavigator({
+    SignIn: SignIn,
+    SignUp: SignUp
+});
+
+const SettingsStack = createStackNavigator({
+    Settings: Settings
 });
 
 const TabNavigator = createBottomTabNavigator({
@@ -52,7 +65,27 @@ const TabNavigator = createBottomTabNavigator({
                 <MaterialCommunityIcons name="star" size={24} color={tintColor} />
             )
         }
+    },
+    Settings: {
+        screen: SettingsStack,
+        navigationOptions: {
+            tabBarLabel: 'Settings',
+            tabBarIcon: ({ tintColor }) => (
+                <MaterialCommunityIcons name="settings" size={24} color={tintColor} />
+            )
+        }
     }
 });
 
-export default createAppContainer(TabNavigator);
+const SwitchNavigator = createSwitchNavigator(
+    {
+        AuthLoading: AuthLoading,
+        Auth: AuthStack,
+        App: TabNavigator
+    },
+    {
+        initialRouteName: 'AuthLoading'
+    }
+)
+
+export default createAppContainer(SwitchNavigator);

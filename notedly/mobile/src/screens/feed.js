@@ -1,11 +1,12 @@
 import React from 'react';
 import { Text } from 'react-native';
-import { useQuery, gql} from '@apollo/client';
+import { useQuery, gql } from '@apollo/client';
 
 import NoteFeed from '../components/NoteFeed';
+import Loading from '../components/Loading';
 
 const GET_NOTES = gql`
-    query notes {
+    query Notes {
         notes {
             id
             createdAt
@@ -21,17 +22,18 @@ const GET_NOTES = gql`
 `;
 
 const Feed = props => {
-    // const { data, loading, error } = useQuery(GET_NOTES);
-    // if(loading) return <Text>Loading...</Text>;
-    // if(error) return <Text>Error laoding notes!</Text>;
-
-    // return <NoteFeed notes={data.notes} navigation={props.navigation}/>;
-
-    return <NoteFeed navigation={props.navigation}/>
+    const { loading, error, data } = useQuery(GET_NOTES);
+    if(loading) return <Loading/>;
+    if(error) return <Text>Bullshit!!!!</Text>;
+    return <NoteFeed notes={data.notes} navigation={props.navigation}/>;
 };
 
 Feed.navigationOptions = {
-    title: 'Feed'
+    title: 'Feed',
+    headerTitleStyle: {
+        textAlign: "center",
+        flex: 1
+    }
 };
 
 export default Feed;
